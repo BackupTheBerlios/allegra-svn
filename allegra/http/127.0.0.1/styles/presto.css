@@ -1,0 +1,230 @@
+/* 
+ * Copyright (C) 2005 Laurent A.V. Szyster
+ * 
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
+ * 
+ * http://www.gnu.org/copyleft/gpl.html
+ * 
+ * This library is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+ * USA
+ *
+ */
+
+@namespace url(http://www.w3.org/1999/xhtml); /* set default namespace to HTML */
+
+/* a few base HTML tag styles */
+
+body {
+	margin: 0;
+	border: 0;
+	padding: 0;
+	background-color: #FFFFFF;
+	}
+	
+a {
+	text-decoration: none;
+	}
+
+a:link {
+	color: #006699;
+	}
+
+a:visited {
+	color: #006699;
+	}
+
+a:active {
+	color: #006699;
+	}
+
+a:hover {
+	color: #6699CC;
+	text-decoration: underline;
+	}
+
+h1, h2, h3 {
+	margin: 0px;
+	padding: 0px;
+	font-weight: normal;
+	}
+
+form {
+	margin: 0px;
+	padding: 0px;
+	font-family: -moz-fixed;
+	}
+
+textarea, input {
+	font-family: -moz-fixed;
+	color: #000000;
+	background: #FFFFFF;
+	border: #BBBBBB solid 1px;
+	}
+
+textarea:focus, input:focus {
+	border: #6699CC solid 1px;
+	}
+
+input[type="submit"] {
+	font-family: -moz-fixed;
+	color: #FFFFFF;
+	background: #6699CC;
+	border: #6699CC solid 1px;
+	}
+
+input[type="submit"]:focus, input[type="submit"]:hover {
+	background: #006699;
+	border: #006699 solid 1px;
+	}
+
+div, span, table, thead, tbody, tfoot, tr, td {
+	margin: 0px;
+	padding: 0px;
+	}
+
+/* The Basic PRESTo styles */
+
+span[class="presto-str"] {
+	font-family: -moz-fixed;
+	white-space: -moz-pre-wrap;
+	}
+
+span[class="presto-repr"] {
+	font-family: -moz-fixed;
+	white-space: -moz-pre-wrap;
+	color: #000000;
+	}
+
+span[class="presto-unicode"] {
+	font-family: Serif;
+	color: #000000;
+	padding-left: 2px;
+	padding-right: 2px;
+	}
+
+div[class="presto-menu"] {
+	padding: 2px;
+	text-align: right;
+	font-family: -moz-fixed;
+	border-bottom: 1px solid #EEEEEE;
+	}
+  
+div[class="presto-top"] {
+	text-align: left;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	}
+
+div[class="presto-body"] {
+	text-align: left;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	}
+
+div[class="presto-box"] {
+	border: 1px solid #EEEEEE;
+	}
+
+table[class="presto-map"] {
+	margin: 0px;
+	padding: 0px;
+	}
+
+tr[class="presto-map-item"] {
+	margin: 0px;
+	padding: 0px;
+	}
+
+td[class="presto-map-key"] {
+	margin: 0px;
+	padding: 0px;
+	vertical-align: top;
+	background-color: #EEEEEE;
+	border: 1px solid #EEEEEE;
+	}
+
+td[class="presto-map-value"] {
+	margin: 0px;
+	padding: 0px;
+	vertical-align: top;
+	border: 1px solid #EEEEEE;
+	}
+
+/* presto lines, usually made of a label and one or more methods*/
+
+div[class="presto-line-head"] {
+	padding: 2px;
+	padding-left: 4px;
+	padding-right: 4px;
+	text-align: left;
+	font-family: -moz-fixed;
+	background: #EEEEEE;
+	color: grey;
+	}
+
+div[class="presto-line"] {
+	padding: 2px;
+	padding-left: 0px;
+	padding-right: 0px;
+	text-align: left;
+	font-family: -moz-fixed;
+	color: grey;
+	}
+
+span[class="presto-label"] {
+	padding: 2px;
+	padding-left: 4px;
+	padding-right: 4px;
+	text-align: left;
+	color: #000000;
+	}
+  
+a[class="presto-method"] {
+	padding: 2px;
+	padding-left: 4px;
+	padding-right: 4px;
+	}
+  
+/* Note about this implementation
+ *
+ * This is the "common" PRESTo CSS style. It provides a single place
+ * to theme the general Look & Feel of your web applications.
+ *
+ */
+ 
+/* PRESTo Prompt CSS Style */
+
+div[class="presto-prompt-menu"] {
+	padding: 2px;
+	text-align: right;
+	font-family: -moz-fixed;
+	border-bottom: 1px solid #FFFFFF;
+	background-color: #EFEFEF;
+	}
+  
+form[class="presto-prompt-form"] {
+	margin: 0px;
+	padding: 4px;
+	text-align: left;
+	font-family: -moz-fixed;
+	}
+
+div[class="presto-prompt-return"] {
+	padding: 4px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid #DDDDDD;
+	}
+
+ 
