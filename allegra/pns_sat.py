@@ -101,24 +101,37 @@ SAT_ARTICULATE_EN = (
         re.compile ('[(]|[)]|[[]|[]]|{|}|\\s+-+\\s+'),
         # quotes and a common web separator
         re.compile ('["&|]'), 
-        # then the language itself, most common verbs first
-        sat_articulators_re (('is', 'has')),
-        # adverbs
+        # Subordinating Conjunctions
         sat_articulators_re ((
-                'about', 'as',
-                'for', 'of', 'to', 'from', 'by', 
-                'in', 'into', 'on', 'onto', 'at', 
-                )),
-        # cunjunctions?
-        sat_articulators_re ((
-                'that', 'than', 
-                'if', 'then', 'else', 'and', 'or'
+                'after', 'although', 'as', 'as\\s+if', 'as\\s+long\\s+as',
+                'as\\s+though', 'because', 'before', 'even\\s+if', 
+                'even\\s+though', 'if', 'if\\s+only', 'in\\s+order\\s+ that', 
+                'now\\s+that', 'once', 'rather\\s+than', 'since', 'so\\s+that', 
+                'than', 'that', 'though', 'till', 'unless', 'until', 'when', 
+                'whenever', 'where', 'whereas', 'wherever', 'while', 
                 )), 
-        # articles
+        # Coordinating Conjunctions
+        sat_articulators_re ((
+                'and', 'but', 'or', 'yet', 'for', 'nor', 'so',
+                )),
+        # Correlative Conjunctions
+        sat_articulators_re ((
+                'both', 'not\\s+only', 'but\\s+also', 'either', 'neither', 
+                'nor', 'whether', 
+                )), 
+        # "to be" and "to have"
+        sat_articulators_re ((
+                'am', 'is', 'are', 'was', 'were',
+                'have', 'has', 'had',
+                )),
+        # Prepositions: Locators in Time and Place
+        sat_articulators_re ((
+                'in', 'at', 'on', 'to',
+                )),
+        # Articles
         sat_articulators_re ((
                 'a', 'an', 'the', 
-                'this', 'those', 'these'
-                )), 
+                )),
         # whitespaces
         re.compile ('\\s'), 
         # all sorts of hyphens 
