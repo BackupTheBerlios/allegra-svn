@@ -17,6 +17,8 @@
 
 ""
 
+# TODO: "land" this client back from the Attic in Allegra
+
 import re
 from types import StringTypes
 
