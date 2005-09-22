@@ -36,6 +36,8 @@ class FIFO_trunk:
 
 
 class FIFO_small:
+	
+	# TODO: use the asyncore fifo instead.
 
 	"FIFO class for small queues, wrapping a simple list"
 	
