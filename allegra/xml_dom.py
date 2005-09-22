@@ -139,30 +139,31 @@ class XML_dom:
                 try:
                         self.xml_expat.Parse (input, all)
                 except pyexpat.ExpatError, error:
-                        # save the error message
                         self.xml_parse_error (error)
                         all = 1
                 if all:
-                        # finished without error, clean up and return the
-                        # root, let the accessor decides what he wants to
-                        # do with that tree.
+                        # finished clean up and return the root, let the 
+                        # accessor decides what he wants to do with the
+                        # elements tree.
+                        #
                         e = self.xml_root
                         self.xml_root = self._curr = None
                         del self.xml_expat
                         return e
                         
-                return
+                return True
                 #
-                # returns the xml_root element or None or 1 to continue
+                # returns the xml_root element, or None when an error occured
+                # or True to continue ...
 
         def xml_parse_file (self, input, BLOCKSIZE=4096):
                 data = input.read (BLOCKSIZE)
                 while data:
-                        error = self.xml_parse_string (data, 0)
-                        if error:
-                                return error
-
-                        data = input.read (BLOCKSIZE)
+                        if self.xml_parse_string (data, 0):
+                                data = input.read (BLOCKSIZE)
+                        else:
+                                return None
+                                
                 return self.xml_parse_string ('', 1)
 
         def xml_parse_error (self, error):
