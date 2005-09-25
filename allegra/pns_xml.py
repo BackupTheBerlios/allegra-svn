@@ -148,21 +148,32 @@ class XML_PNS_articulate (XML_element):
                 return False
         
         def pns_articulate (self, subject, context, dom):
-                # SAT
+                # SAT articulate
                 if self.pns_object and self.pns_subject and len (
                         netstrings_decode (self.pns_subject)
                         ) > 1:
+                        # there is a SAT object and an articulated subject
                         if self.pns_subject == subject:
+                                # make a statement in the parent's context
+                                # if this element's subject is the same as
+                                # its parent
+                                #
                                 dom.pns_statement ((
                                         self.pns_subject, 'sat', 
                                         self.pns_object, context
                                         ))
                         else:
+                                # otherwise, make a statement in the context
+                                # of the parent's subject
+                                #
                                 dom.pns_statement ((
                                         self.pns_subject, 'sat', 
                                         self.pns_object, subject
                                         ))
                 elif len (self.pns_sats) > 0:
+                        # there is not one SAT object or no articulated
+                        # subject but there are multiple SAT statements 
+                        #
                         for name, text in self.pns_sats:
                                 if text and name != subject and len (
                                         netstrings_decode (name)
@@ -170,7 +181,7 @@ class XML_PNS_articulate (XML_element):
                                         dom.pns_statement ((
                                                 name, 'sat', text, subject
                                                 )) 
-                # XML
+                # XML articulate
                 try:
                         tag = self.xml_name.split (' ')[1]
                 except:
@@ -196,7 +207,7 @@ class XML_PNS_context (XML_PNS_articulate):
                 xml_delete (self)
         
         def pns_articulate (self, subject, context, dom):
-                # XML, no SAT
+                # XML, no SAT for a context!
                 try:
                         tag = self.xml_name.split (' ')[1]
                 except:
