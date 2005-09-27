@@ -134,6 +134,21 @@ def netstrings_generator (more):
 			buffer += more ()
 
 
+def netlines (encoded, indent=''):
+	netstrings = netstrings_decode (encoded)
+	if len (netstrings) > 1:
+		encoded = ''.join (
+			[netlines (e, indent+'  ') for e in netstrings]
+			)
+		return '%s%d:\n%s%s,\n' % (
+			indent, len (encoded), encoded, indent
+			)
+			
+	return '%s%d:%s,\n' % (
+		indent, len (encoded), encoded
+		)
+
+
 # The Beauty Validator
 
 if __name__ == '__main__':
@@ -143,19 +158,6 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0\n'
                 )
-	def netlines (encoded, indent=''):
-		netstrings = netstrings_decode (encoded)
-		if len (netstrings) > 1:
-			encoded = ''.join (
-				[netlines (e, indent+'  ') for e in netstrings]
-				)
-			return '%s%d:\n%s%s,\n' % (
-				indent, len (encoded), encoded, indent
-				)
-				
-		return '%s%d:%s,\n' % (
-			indent, len (encoded), encoded
-			)
 	for n in netstrings_generator (lambda: sys.stdin.read (4096)):
 		sys.stdout.write (netlines (n) + '\n')
         #
