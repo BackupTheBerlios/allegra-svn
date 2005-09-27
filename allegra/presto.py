@@ -29,7 +29,7 @@ from allegra.producer import Composite_producer
 from allegra.reactor import Buffer_reactor
 from allegra.xml_dom import XML_dom, XML_element
 from allegra.xml_unicode import \
-        xml_attr, xml_cdata, xml_pi, xml_ns, xml_prefixed
+        xml_attr, xml_cdata, xml_pi, xml_ns, xml_prefixed, xml_document
 from allegra.synchronizer import Synchronized
 
 # First thing first, from Python state to XML string
@@ -179,30 +179,42 @@ def presto_xml (
 
 class PRESTo_reactor (Buffer_reactor):
         
-        def __init__ (self, react):
+        def __init__ (
+                self, react, response='<presto xmlns="http://presto/" />'
+                ):
                 Buffer_reactor.__init__ (self)
                 self.presto_react = react
+                self.presto_response = response
         
         def __call__ (self, *args):
                 apply (self.presto_react, args)
                 self.presto_react = None
-                self.buffer ('<presto xmlns="http://presto/" />')
+                self.buffer (self.presto_response)
                 self.buffer ('') # ... buffer_react ()
-                                
+                             
+                             
+def presto_async_commit (self, reactor):
+        open (reactor.presto_dom.presto_path, 'w').write (xml_document (
+                reactor.presto_dom.xml_root, reactor.presto_dom
+                ))
 
 class PRESTo_async (Loginfo, Finalization, XML_element):
 
         def finalization (self, instance):
                 self.log ('<finalized />')
 
-        xml_name = u'http://presto/ presto-async'
+        xml_name = u'http://presto/ async'
 
         presto_interfaces = set ()
         
         def presto (self, reactor):
                 assert None == self.log ('<presto/>', '')
 
-        presto_methods = {}
+        presto_methods = {u'commit': presto_async_commit}
+        
+        # There is no need for a "rollback" method, instead dereference the
+        # DOM and have it be rolledback for the next call. It is a safer way
+        # to revert to a previous persistent state of a component instance.
 
 
 class PRESTo_reactor_sync (Buffer_reactor):
@@ -217,6 +229,8 @@ class PRESTo_reactor_sync (Buffer_reactor):
 
 
 class PRESTo_sync (PRESTo_async, Synchronized):
+
+        xml_name = u'http://presto/ sync'
 
         def presto_synchronized (self, reactor, method):
                 # instanciate a new reactor, with a copy of the PRESTo request
@@ -399,7 +413,7 @@ class PRESTo_root (Loginfo):
                         ) ()
                 return reactor.presto_dom != None
                 
-        PRESTo_FOLDER_MAX_DEPTH = 4
+        PRESTo_FOLDER_MAX_DEPTH = 1
                 
         def presto_folder (self, reactor, path, separator):
                 # Implements a cache folder lookup, starting from the right
