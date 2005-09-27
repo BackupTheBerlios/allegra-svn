@@ -204,11 +204,9 @@ class PNS_articulate (Finalization):
                         
         def pns_articulate_names (self, finalized):
                 if len (finalized.pns_indexes) > 1:
-                        indexes = list (finalized.pns_indexes)
-                        indexes.reverse ()
-                        self.pns_index = pns_name (
-                                netstrings_encode (indexes), set ()
-                                )
+                        self.pns_index = pns_name (netstrings_encode (
+                                list (finalized.pns_indexes)
+                                ), set ())
                 elif len (finalized.pns_indexes) > 0:
                         self.pns_index = tuple (finalized.pns_indexes)[0]
                 if len (finalized.pns_contexts) > 1:
@@ -240,7 +238,7 @@ class PNS_articulate (Finalization):
                                 self.pns_predicates,
                                 self.pns_context
                                 ).finalization = self.pns_articulate_subject
-                # get all SAT available for subjects
+                # get all SAT available for articulated names
                 for name in finalized.pns_contexts.union (
                         set (finalized.pns_indexes)
                         ):
@@ -296,7 +294,7 @@ class PNS_articulate_names (Finalization):
                 self.pns_articulator = articulator
                 self.pns_articulated = articulated
                 self.pns_indexes = set ()
-                self.pns_contexts = set ()
+                self.pns_contexts = set ((articulated, ))
                 self.PNS_HORIZON = HORIZON
                 # walk up the indexes ...
                 self.pns_articulator.pns_command (
