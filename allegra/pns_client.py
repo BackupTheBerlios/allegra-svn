@@ -32,6 +32,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
         def __init__ (self, ip='127.0.0.1', port=3534):
                 self.pns_commands = {}
                 self.pns_contexts = {}
+                self.pns_subscribed = {}
                 TCP_client_channel.__init__ (self, (ip, port))
                 Netstring_collector.__init__ (self)
                 
@@ -42,6 +43,10 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 # callback all pending statement handlers with echo, command
                 # or peer ip handlers with void responses, then callback
                 #
+                for context, handlers in self.pns_subscribed.items ():
+                        for handler in handlers:
+                                handler (None)
+                self.pns_subscribed = None
                 for context, statements in self.pns_contexts.items ():
                         for resolved, handlers in statements.items ():
                                 model = list (resolved)
@@ -68,14 +73,6 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 self.close ()
                 
         def netstring_collector_continue (self, encoded):
-                if encoded.startswith ('0:,'):
-                        assert None == self.log (
-                                '<peer-close/>'
-                                '<![CDATA[%s]]]!>' % encoded, ''
-                                )
-                        self.close ()
-                        return
-                  
                 model = netstrings_decode (encoded)
                 if len (model) < 5:
                         assert None == self.log (
@@ -88,9 +85,31 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 self.pns_peer (model[0])
                 self.netstring_collector_continue = self.pns_continue
 
+        def pns_subscribe (self, context, handler, ip=''):
+                if self.pns_subscribed.has_key (context):
+                        self.pns_subscribed[context].append (handler)
+                else:
+                        self.pns_subscribed[context] = handler
+                        encoded = netstrings_encode ((
+                                context, '', ip, context
+                                ))
+                        self.push ('%d:%s,' % (len (encoded), encoded))
+
+        def pns_unsubscribe (self, context, handler):
+                if self.pns_subscribed.has_key (context):
+                        self.pns_subscribed[context].remove (handler)
+                        if len (self.pns_subscribed[context]) == 0:
+                                del self.pns_subscribed[context]
+                                encoded = netstrings_encode ((
+                                        '', '', '', context
+                                        ))
+                                self.push ('%d:%s,' % (len (encoded), encoded))
+
         def pns_statement (self, model, context='', handler=None):
+                assert context == '' or not (
+                        model[1] == '' and model[0] == context
+                        )
                 # check for handlers
-                # self.log ('%r, %r' % (model, context), '')
                 if model[0] == '':
                         # commands
                         handlers = self.pns_commands.setdefault (
@@ -122,27 +141,23 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 # validate, the peer *must* anyway.
                 # 
                 self.pns_received += 1
-                if encoded.startswith ('0:,0:,0:,'):
-                        assert None == self.log (
-                                '<peer-close/>'
-                                '<![CDATA[%s]]]!>' % encoded, ''
-                                )
-                        self.close ()
-                        return
-                  
                 model = netstrings_decode (encoded)
                 if len (model) != 5:
                         assert None == self.log (
                                 '<invalid-peer-statement/>'
                                 '<![CDATA[%s]]]!>' % encoded, ''
                                 )
-                        # self.close ()
+                        self.close ()
                         return
                         
                 self.pns_log (model)
                 resolved = tuple (model[:3])
-                if model[0] == '':
-                        # commands
+                if '' == model[0]:
+                        if '' == model[1] == model[2]:
+                                # protocol command: unsubscribed
+                                return
+                                
+                        # index, context and route
                         handlers = self.pns_commands.get (resolved)
                         if handlers == None:
                                 assert None == self.log (
@@ -157,6 +172,9 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                                 ]
                         if len (self.pns_commands[resolved]) == 0:
                                 del self.pns_commands[resolved]
+                elif '' == model[1] and model[0] == model[3]:
+                        # protocol
+                        pass
                 else:
                         # statements
                         statements = self.pns_contexts.setdefault (
@@ -184,7 +202,8 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 if (
                         self.pns_close_when_done and 
                         len (self.pns_commands) == 0 and
-                        len (self.pns_contexts) == 0
+                        len (self.pns_contexts) == 0 and
+                        len (self.pns_subscribed) == 0
                         ):
                         assert None == self.log ('<done/>', '')
                         self.close ()
@@ -196,7 +215,12 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                         
         def pns_log (self, model):
                 assert None == self.log (netstrings_encode (model))
-
+                handlers = self.pns_subscribed.get (model[3])
+                if handlers:
+                        # multiplex if subscribed
+                        for handler in handlers:
+                                handler (model)
+                        
         def pns_signal (self, resolved, model):
                 # waits for echo
                 assert None == self.log (
@@ -233,47 +257,6 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
         # up and down in all directions.
         #
         # For a simple client, it's a nice one ;-)
-
-"""
-class PNS_multiplexer (PNS_client_channel):
-        
-        def __init__ (self, ip='127.0.0.1', port=3534):
-                PNS_client_channel.__init__ (ip, port)
-                self.pns_pipelined = []
-                self.pns_peer ('')
-
-        def pns_peer (self, ip):
-                if ip == '':
-                        # closed
-                        for context, multiplex in self.pns_context.items ():
-                                for multiplexed in multiplex:
-                                        multiplexed.pns_client = None
-                        self.pns_contexts = {}
-                        self.tcp_connect ()
-                        self.pns_statement = self.pns_pipeline
-                else:
-                        # opened
-                        for model, context, handler in self.pns_pipelined:
-                                self.pns_client.pns_statement (
-                                        model, context, handler
-                                        )
-                        self.pns_pipelined = None
-                        self.pns_pipeline = self.pns_statement
-                                
-        def pns_pipeline (self, *args):
-                self.pns_pipelined.append (args)
-                                
-        def pns_multiplex (self, context, multiplexed):
-                self.pns_contexts.setdefault (
-                        context, []
-                        ).append (mutliplexed)
-                
-        def pns_log (self, model):
-                multiplex = self.pns_contexts.get (model[3])
-                if multiplex:
-                        for multiplexed in multiplex:
-                                multiplexed.pns_log (tuple (model))
-"""
 
 
 if __name__ == '__main__':
@@ -376,6 +359,10 @@ if __name__ == '__main__':
         #
         #    python pns_client.py 192.168.1.1 < session.pns 1> signal 2> noise
         #
+        # if instructed to close when done, this client will close and delete
+        # itself when not more channel is subscribed, and when no more command
+        # or statements responses are pending. It is a gracefull pipe and
+        # present a trivial interface.
 
 
 # About This Implementation
@@ -393,12 +380,16 @@ if __name__ == '__main__':
 #
 # The data structure are simple:
 #       
+#        pns_client.pns_subscribed = {
+#                'c': [pns_handler, ...],
+#                ...
+#                }
 #        pns_client.pns_commands = {
 #                ('s','p','o'): [pns_handler, ...],
 #                ...
 #                }
 #        pns_client.pns_contexts = {
-#                'n': {('s','p','o'): [pns_handler, ...]}, 
+#                'c': {('s','p','o'): [pns_handler, ...]}, 
 #                ...
 #                }
 #
