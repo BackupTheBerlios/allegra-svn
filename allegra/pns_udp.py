@@ -18,7 +18,7 @@
 ""
 
 from allegra.netstring import netstrings_encode, netstrings_decode
-from allegra.pns_model import pns_name, pns_tcp_model
+from allegra.pns_model import pns_name, pns_quintet
 from allegra.timeouts import Timeouts
 from allegra.udp_channel import UDP_dispatcher
 
@@ -93,7 +93,7 @@ class PNS_circle (UDP_dispatcher):
 	# PNS/TCP continuation
 
 	def pns_tcp_continue (self, model, direction):
-		encoded = pns_tcp_model (model, direction)
+		encoded = pns_quintet (model, direction)
 		for subscriber in self.pns_subscribers:
 			subscriber.push (encoded)
 
@@ -615,8 +615,10 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 	# with the PNS peer and not their clock and that there is a latency
 	# in communication that is variable and tolerated up to 3 seconds.
 	#
-	# 768 or 3 timeouts the seconds would only require around three
-	# defered collections.
+	# Practically, at a sustained 512KBps rated (full speed!), every
+	# third of a second, a batch of 256 timeouts is handled, most of
+	# which are either simple and fast to handle (remove the timeout
+	# entry).
 
 	def __init__ (self, pns_peer, ip):
 		self.pns_peer = pns_peer
