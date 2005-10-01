@@ -15,10 +15,10 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/pns-tcp/"
 
 from allegra.netstring import netstrings_decode, Netstring_collector
-from allegra.pns_model import pns_quatuor, pns_tcp_model
+from allegra.pns_model import pns_quatuor, pns_quintet
 
 
 class PNS_session (Netstring_collector):
@@ -38,8 +38,8 @@ class PNS_session (Netstring_collector):
 		# bother to send back an error message
 		
 	def netstring_collector_continue (self, encoded):
-		if encoded.startswith ('0:,0:,0:,'):
-			# user agent closing gracefully, close too
+		if encoded.startswith ('0:,0:,0:,0:,'):
+			# user agent closing
 			assert None == self.log (
 				'<pns-user-close/>'
 				'<![CDATA[%s]]>' % encoded, ''
@@ -51,61 +51,59 @@ class PNS_session (Netstring_collector):
 		if model == None:
 			# invalid PNS model, log an error
 			self.pns_error (encoded, error)
-			return
-			
-		if '' == model[0]:
-			# user command, add the sessions text reference and
-			# pass to the PNS/Semantic ...
-			#
-			model.append ('%s:%d' % self.addr)
-			self.pns_peer.pns_semantic.pns_command (model)
-			return
-			
-		if '' == model[3]:
-			if '' == model[1]:
-				# contextless protocol statements, manage
-				# the session's subscriptions.
-				#
-				if model[2]:
-					self.pns_join (model[0], model[2])
-				elif model[0] in self.pns_subscribed:
-					self.pns_subscribed.remove (model[0])
-					self.pns_peer.pns_unsubscribe (
-						self, model[0]
-						)
-				else:
-					self.pns_subscribed.append (model[0])
-					self.pns_peer.pns_subscribe (
-						self, model[0]
-						)
+		elif '' == model[0]:
+			if model[1] or model[2]:
+				# open command: index, context or route 
+				model.append ('%s:%d' % self.addr)
+				self.pns_peer.pns_semantic.pns_command (model)
+			elif model[3] in self.pns_subscribed:
+				# protocol command: unsubscribe
+				self.pns_subscribed.remove (model[0])
+				self.pns_peer.pns_unsubscribe (
+					self, model[0]
+					)
 				self.pns_tcp_continue (model, '.')
-				return
-				
-			# anonymous statement
+			else:
+				self.pns_error (
+					encoded, '7 not subscribed'
+					)
+		elif '' == model[1] and model[0] == model[3]:
+			if model[2]:
+				# protocol answer: join
+				self.pns_join (model[0], model[2])
+			elif model[0] in self.pns_subscribed:
+				self.pns_error (
+					encoded, '8 allready subscribed'
+					)
+			else:
+				# protocol question: subscribe
+				self.pns_subscribed.append (model[0])
+				self.pns_peer.pns_subscribe (
+					self, model[0]
+					)
+				self.pns_tcp_continue (model, '.')
+		elif '' == model[3]:
 			model.append ('%s:%d' % self.addr)
 			if model[2]:
-				# infer a route for an anonymous answers
+				# infer a context for an open answer >>>
 				self.pns_peer.pns_semantic.pns_statement (
 					model
 					)
-				return
-
-			# resolve anonymous question ...
+			else:
+				# resolve an open question ...
+				self.pns_peer.pns_persistence.thread_loop (
+					lambda p=self.pns_peer.pns_persistence,
+					m=model:
+					p.pns_anonymous (m)
+					)
+		else:
+			# resolve contextual statement ...
+			model.append ('%s:%d' % self.addr)
 			self.pns_peer.pns_persistence.thread_loop (
 				lambda p=self.pns_peer.pns_persistence,
 				m=model:
-				p.pns_anonymous (m)
+				p.pns_statement (m)
 				)
-			return
-
-		# resolve named question or answer ...
-		#
-		model.append ('%s:%d' % self.addr)
-		self.pns_peer.pns_persistence.thread_loop (
-			lambda p=self.pns_peer.pns_persistence,
-			m=model:
-			p.pns_statement (m)
-			)
 			
 	def pns_error (self, encoded, error):
 		# PNS/TCP does support non-compliant articulator that
@@ -136,7 +134,7 @@ class PNS_session (Netstring_collector):
 			)
 
 	def pns_tcp_continue (self, model, direction):
-		self.push (pns_tcp_model (model, direction))
+		self.push (pns_quintet (model, direction))
 
 	def pns_tcp_close (self):
 		assert None == self.log ('<pns-tcp-close/>', '')
