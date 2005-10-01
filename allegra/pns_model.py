@@ -15,28 +15,12 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/pns-model/"
 
 import re
 
 from allegra.netstring import netstrings_decode, netstrings_encode
 
-
-# A Public Name is defined as either an 8bit byte string or the
-# sorted set of non null public names encoded as netstrings
-#
-# A Clean Public Name is one that does not encapsulate a literal Public Name
-# in something else than netstrings.
-# 
-# for instance
-#
-#         *7:Laurent,*
-#
-# is not a valid public name, as it may prevent to search a large public
-# names (an index) for the string "7:Laurent," reliably, leaving open
-# a hole for semantic attacks against fast indexes and maps.
-#
-# Reading the code is a "must" ...
 
 NETSTRING_RE = re.compile ('[1-9][0-9]*:')
 
@@ -63,8 +47,12 @@ def pns_name_cleanse (name, horizon, HORIZON):
         
         
 def pns_name (encoded, horizon, HORIZON=126):
-        # recursively validate a Public Name, returns the empty string if
-        # the name encoded is invalid or inside the horizon
+        # Recursively validate a Public Name, returns the empty string if
+        # the name encoded is invalid or inside the horizon. This function
+        # does more than just assert that the encoded 8-bit byte string is
+        # a valid public name: it transform it to a valid public name.
+        #
+        # Pub Names is a protocol.
         #
         names = [n for n in netstrings_decode (encoded) if n]
         if len (names) > 1:
@@ -107,35 +95,7 @@ def pns_name (encoded, horizon, HORIZON=126):
         return '' # return NULL
 
 
-# The PNS/Model is implemented as a simple sequence of strings.
-#
-# ['subject', 'predicate']
-# ['subject', 'predicate', 'object']
-# ['subject', 'predicate', 'object', 'name']
-# ['subject', 'predicate', 'object', 'name', 'ip:port']
-#
-# where 'ip:port' is a PNS/TCP session text reference for the PNS peer.
-#
-# The whole Object shebang is not so nice, specially if this design was to be
-# implemented as system pipes, a la DJB, passing netstrings between
-# supervised and reliably logged queued processes and safe asynchronous
-# network I/O. A simple string keeps you think on industrial strength
-# simplicity of the protocol.
-#
-# A decoder function for PNS Contextual RDF Triples and a encoder for
-# directed quatuor will just do. KISS!
-#
-# Without much more than a lists and strings to instanciate for each
-# statements, a PNS peer is lean on memory and CPU, even in Python. Once
-# the functions below and above are optimized in a C module, this functional
-# model would be quite fast too and still very much as pythonic at the next
-# level of abstraction (where Python excels!).
-#
-# Note that the "original" model instanciated from asynchronous input is
-# allways a list, but its copies handled by the threads are mostly tuples.
-
-
-def pns_quatuor (encoded, pns_names):
+def pns_quatuor (encoded, pns_names, PNS_LENGTH=1024):
         # a valid quatuor must have subject, predicate, object and context
         #
         model = netstrings_decode (encoded)
@@ -159,11 +119,11 @@ def pns_quatuor (encoded, pns_names):
                 sp_len = len (model[0]) + len (model[1]) + len (
                         '%d%d' % (len (model[0]), len (model[1]))
                         )
-                if sp_len > 512:
+                if sp_len > PNS_LENGTH/2:
                         return None, '3 invalid statement length'
 
                 # validate the statement subject as a public name
-                if not (
+                if model[0] != model[3] and not (
                         model[0] in pns_names or
                         model[0] == pns_name (model[0], set ())
                         ):
@@ -176,7 +136,9 @@ def pns_quatuor (encoded, pns_names):
                         # statement per user *does* limit potential abuses.
                         #
                         model[2] = model[2][:(
-                                1024 - sp_len - len ('%d' % (1024 - sp_len))
+                                PNS_LENGTH - sp_len - len (
+                                        '%d' % (PNS_LENGTH - sp_len)
+                                        )
                                 )]
                         #
                         # this is not an error condition, its a welcome
@@ -200,7 +162,7 @@ def pns_quatuor (encoded, pns_names):
         return model, ''
 
 
-def pns_tcp_model (model, direction): # TODO: rename to pns_quintet?
+def pns_quintet (model, direction):
         l = ['%d:%s,' % (len (s), s) for s in model[:4]]
         l.append ('%d:%s,' % (len (direction), direction))
         encoded = ''.join (l)
@@ -249,11 +211,46 @@ if __name__ == '__main__':
         # use -OO to prevent benchmark
 
 
-# A few comments
+# Note about this implementation
 #        
+# KISS!
+#
+# The PNS/Model is implemented as a simple sequence of strings.
+#
+# ['subject', 'predicate']
+# ['subject', 'predicate', 'object']
+# ['subject', 'predicate', 'object', 'name']
+# ['subject', 'predicate', 'object', 'name', 'ip:port']
+#
+# where 'ip:port' is a PNS/TCP session text reference for the PNS peer.
+#
+# The whole Object shebang is not so nice, specially if this design was to be
+# reimplemented as system pipes, a la DJB, passing netstrings between
+# supervised and reliably logged queued processes and safe asynchronous
+# network I/O. A simple string/list/tuple keeps you think on industrial
+# strength simplicity of the protocol.
+#
+# A decoder function for PNS Contextual RDF Triples (pns_quatuor) and an
+# encoder for directed quatuor (pns_quintet) will just do.
+#
+# Without much more than a lists and strings to instanciate for each
+# statements, a PNS peer is lean on memory and CPU, even in Python. Once
+# the functions below and above are optimized in a C module, this functional
+# model would be quite fast too and still very much as pythonic at the next
+# level of abstraction (where Python excels!).
+#
+# Note that the "original" model instanciated from asynchronous input is
+# allways a list, but its copies handled by the threads are mostly tuples.
+#
+#
+# Performances
+#
 # A C module for netstrings and public name validation will certainly improve
 # performances of Allegra. Basically, those two functions are probably the one
 # where the peer will spend the greater share if not most of its CPU time.
+#
+#
+# Blurb: Python Rules!
 #
 # With Python it is possible to design large cross-plateform projects,
 # then to reach a stable interface and implementation faster than with C.
@@ -265,5 +262,5 @@ if __name__ == '__main__':
 # offers a narrower set of practical solutions, the one selected by its
 # community. One database C library (BSDDB). One XML C library (Expat and its
 # cElementTree sibbling). One Object Database C library (cPickle) and
-# interface (ZODB). Peer review tend to elect a few standard implementation
+# interface (ZODB). Peer review tend to elect a few standard implementation,
 # possibly one for common functions. 
