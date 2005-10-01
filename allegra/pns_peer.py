@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/pns/"
 
 from allegra import async_loop
 from allegra import pns_persistence, pns_semantic, pns_tcp, pns_udp
