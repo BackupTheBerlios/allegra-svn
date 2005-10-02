@@ -84,43 +84,61 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                         
                 self.pns_peer (model[0])
                 self.netstring_collector_continue = self.pns_continue
+                
+        def pns_peer (self, ip):
+                assert None == self.log (
+                        '<peer ip="%s"/>' % ip, ''
+                        )
+                        
+        def pns_send (self, encoded):
+                self.push ('%d:%s,' % (len (encoded), encoded))
+                self.pns_sent += 1
 
-        def pns_subscribe (self, context, handler, ip=''):
+        def pns_join (self, context, ip, handler):
                 if self.pns_subscribed.has_key (context):
                         self.pns_subscribed[context].append (handler)
                 else:
-                        self.pns_subscribed[context] = handler
-                        encoded = netstrings_encode ((
-                                context, '', ip, context
-                                ))
-                        self.push ('%d:%s,' % (len (encoded), encoded))
+                        self.pns_subscribed[context] = [handler]
+                self.pns_send (netstrings_encode ((
+                        context, '', ip, context
+                        )))
 
-        def pns_unsubscribe (self, context, handler):
+        def pns_subscribe (self, context, handler):
+                if self.pns_subscribed.has_key (context):
+                        self.pns_subscribed[context].append (handler)
+                else:
+                        self.pns_subscribed[context] = [handler]
+                        self.pns_send (netstrings_encode ((
+                                context, '', '', context
+                                )))
+
+        def pns_quit (self, context, handler):
                 if self.pns_subscribed.has_key (context):
                         self.pns_subscribed[context].remove (handler)
                         if len (self.pns_subscribed[context]) == 0:
                                 del self.pns_subscribed[context]
-                                encoded = netstrings_encode ((
+                                self.pns_send (netstrings_encode ((
                                         '', '', '', context
-                                        ))
-                                self.push ('%d:%s,' % (len (encoded), encoded))
+                                        )))
 
+        def pns_command (self, model, handler=None):
+                return self.pns_resolve (
+                        model, '', handler, 
+                        self.pns_commands.setdefault (model, [])
+                        )
+                        
         def pns_statement (self, model, context='', handler=None):
                 assert context == '' or not (
                         model[1] == '' and model[0] == context
                         )
-                # check for handlers
-                if model[0] == '':
-                        # commands
-                        handlers = self.pns_commands.setdefault (
-                                model, []
-                                )
-                else:
-                        # other statements
-                        handlers = self.pns_contexts.setdefault (
+                return self.pns_resolve (
+                        model, context, handler, 
+                        self.pns_contexts.setdefault (
                                 context, {}
                                 ).setdefault (model, [])
-                # register a handler
+                        )
+
+        def pns_resolve (self, model, context, handler, handlers):
                 handlers.append (handler or self.pns_signal)
                 if len (handlers) == 1:
                         # send the statement if it is not redundant
@@ -129,8 +147,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                                 encoded += '%d:%s,' % (len (context), context)
                         else:
                                 encoded += '0:,'
-                        self.push ('%d:%s,' % (len (encoded), encoded))
-                        self.pns_sent += 1
+                        self.pns_send (encoded)
                         return True
                         
                 return False
@@ -150,7 +167,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                         self.close ()
                         return
                         
-                self.pns_log (model)
+                self.pns_multiplex (model)
                 resolved = tuple (model[:3])
                 if '' == model[0]:
                         if '' == model[1] == model[2]:
@@ -208,43 +225,21 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                         assert None == self.log ('<done/>', '')
                         self.close ()
                         
-        def pns_peer (self, ip):
-                assert None == self.log (
-                        '<peer ip="%s"/>' % ip, ''
-                        )
-                        
-        def pns_log (self, model):
-                assert None == self.log (netstrings_encode (model))
+        def pns_multiplex (self, model):
                 handlers = self.pns_subscribed.get (model[3])
                 if handlers:
-                        # multiplex if subscribed
                         for handler in handlers:
                                 handler (model)
                         
         def pns_signal (self, resolved, model):
-                # waits for echo
-                assert None == self.log (
-                        '<signal><![CDATA[%s]]></signal>'
-                        '' % netstrings_encode (model), ''
-                        )
+                assert None == self.log (netstrings_encode (model))
                 if model[4].startswith ('.'):
-                        assert None == self.log (
-                                '<resolve><![CDATA[%s]]></resolve>'
-                                '' % netstrings_encode (resolved), ''
-                                )
                         return False
 
-                assert None == self.log (
-                        '<pass><![CDATA[%s]]></pass>'
-                        '' % netstrings_encode (resolved), ''
-                        )
                 return True
                 
         def pns_noise (self, model):
-                assert None == self.log (
-                        '<noise><![CDATA[%s]]></noise>'
-                        '' % netstrings_encode (model), ''
-                        )
+                assert None == self.log (netstrings_encode (model), '')
 
         #
         # This implementation allows several articulators to "speak-over",
@@ -305,13 +300,21 @@ if __name__ == '__main__':
                                 return
 
                         model = netstrings_decode (encoded)
-                        self.pns_statement (
-                                tuple (model[:3]), model[3]
-                                )
+                        if '' == model[0]:
+                                if '' == model[1] == model[2]:
+                                        self.pns_quit (model[3])
+                                else:
+                                        self.pns_command (tuple (model[:3]))
+                        elif '' == model[1] and model[0] == model[3]:
+                                if model[2]:
+                                        self.pns_join (model[3], model[2])
+                                else:
+                                        self.pns_subscribe (model[3])
+                        else:
+                                self.pns_statement (
+                                        tuple (model[:3]), model[3]
+                                        )
                                 
-                def pns_log (self, model):
-                        pass # we log allready in signal and noise ...
-
                 def pns_signal (self, resolved, model):
                         # dump a netstring to STDOUT
                         encoded = netstrings_encode (model)
