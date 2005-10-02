@@ -19,7 +19,8 @@
 
 from allegra.reactor import Buffer_reactor
 from allegra.presto import PRESTo_async, PRESTo_reactor, presto_xml
-from allegra.netstring import netstrings_decode, netstrings_encode 
+from allegra.netstring import \
+        netstrings_decode, netstrings_encode, netlines
 from allegra import \
         pns_model, pns_sat, pns_xml, pns_client, pns_articulator
 
@@ -52,25 +53,25 @@ class PRESTo_command (Buffer_reactor):
         
         def __call__ (self, resolved, model):
                 if resolved[1] == '':
-                        if model[1]:
+                        if model:
                                 self.buffer (pns_xml.pns_names_unicode (
-                                        model[0], tag='pns:index', attr=''
+                                        model[0], tag='allegra:index', attr=''
                                         ))
                         else:
-                                self.buffer ('<pns:index name=""/>')
+                                self.buffer ('<allegra:index name=""/>')
                 elif resolved[2] == '':
-                        if len (model[1]) > 0:
+                        if model:
                                 self.buffer (''.join ([
                                         pns_xml.pns_names_unicode (
-                                                context, tag='pns:context', 
+                                                context, tag='allegra:context', 
                                                 attr='' 
                                                 ) 
                                         for context in model[1]
                                         ]))
                         else:
-                                self.buffer ('<pns:context name=""/>')
+                                self.buffer ('<allegra:context name=""/>')
                 else:
-                        self.buffer ('<pns:routes/>')
+                        self.buffer ('<allegra:routes/>')
                 self.buffer ('')
                 return False
                         
@@ -147,19 +148,37 @@ class PRESTo_articulator (
         #       also PNS persistence for XML component instances.
         #
         
-        pns_client = pns_client.PNS_client_channel ()
-        pns_client.tcp_connect ()
-        
-        #
+        pns_client = None
         
         def xml_valid (self, dom):
                 self.xml_dom = dom
+                self.pns_client_log = []
 
+        def presto_pns_open (self, reactor):
+                self.pns_client = pns_client.PNS_client_channel ()
+                if self.pns_client.tcp_connect ():
+                        self.pns_client.pns_peer = react = \
+                                 PRESTo_reactor (
+                                         self.pns_peer, '<allegra:open/>'
+                                         )
+                        return react
+                        
+                self.pns_client = None
+
+        def presto_pns_close (self, reactor):
+                if self.pns_client != None:
+                        # close the PNS/TCP session, finalize the client
+                        self.pns_client.pns_peer = react = \
+                                 PRESTo_reactor (
+                                         self.pns_peer, '<allegra:close/>'
+                                         )
+                        self.pns_client.push ('12:0:,0:,0:,0:,,')
+                        self.pns_client.close_when_done ()
+                        return react
+                        
         def presto_pns (self, reactor):
                 if self.pns_client == None:
-                        self.pns_client = pns_client.PNS_client_channel ()
-                        self.pns_client.tcp_connect ()
-                        return
+                        return self.presto_pns_open (reactor)
 
                 if reactor.presto_vector[u'subject']:
                         if (
@@ -175,9 +194,7 @@ class PRESTo_articulator (
                 
         def presto_articulate (self, reactor):
                 if self.pns_client == None:
-                        self.pns_client = pns_client.PNS_client_channel ()
-                        self.pns_client.tcp_connect ()
-                        return
+                        return self.presto_pns_open (reactor)
 
                 articulated, horizon = self.presto_pns_validate (
                         reactor.presto_vector[u'articulated'].encode ('UTF-8')
@@ -197,30 +214,40 @@ class PRESTo_articulator (
                 return react
                 
         presto_methods = {
+                u'open': presto_pns_open, 
+                u'close': presto_pns_close, 
                 u'pns': presto_pns, 
                 u'articulate': presto_articulate, 
                 }
                 
         presto = presto_articulate
-        
-        def presto_pns_validate (self, encoded, context=''):
-                # validate an attributes as a SAT Public Name, maybe
-                # reflect the validation in the vector, return the valid
-                # name and its horizon.
-                #
-                horizon = set ()
-                chunks = []
-                pns_sat.pns_sat_articulate (encoded, horizon, chunks)
-                if len (chunks) > 1 and len (horizon) < 126:
-                        horizon = set ()
-                        valid = pns_model.pns_name (netstrings_encode (
-                                [name for name, text in chunks]
-                                ), horizon)
-                elif len (chunks) > 0:
-                        valid = chunks[0][0]
-                else:
-                        valid = ''
-                return (valid, horizon)
+
+        def pns_peer (self, peer):
+                if peer:
+                        # opened
+                        self.xml_attributes[
+                                u'pns-udp-ip'
+                                ] = unicode (peer, 'UTF-8')
+                        self.pns_client.pns_peer = self.pns_peer 
+                        return
+                        
+                # closed
+                del self.pns_client.pns_peer
+                self.pns_client = None
+                try:
+                        del self.xml_attributes[u'pns-udp-ip']
+                except KeyError:
+                        pass
+                self.xml_dom = None # clear on close!
+
+        def presto_pns_join (self, reactor):
+                self.pns_client.pns_join (self.pns_multiplex)
+                
+        def presto_pns_subscribe (self, reactor):
+                self.pns_client.pns_subscribe (self.pns_multiplex)
+                
+        def presto_pns_quit (self, reactor):
+                self.pns_client.pns_quit (self.pns_multiplex)
                 
         def presto_pns_statement (self, reactor):
                 # statements
@@ -250,24 +277,6 @@ class PRESTo_articulator (
                         )
                 return react
                 
-        def presto_pns_protocol (self, reactor):
-                # articulate a protocol statement
-                #
-                subject, subject_horizon = self.presto_pns_validate (
-                        reactor.presto_vector[u'subject'].encode ('UTF-8')
-                        )
-                if subject == '':
-                        return
-                        
-                obj = reactor.presto_vector[u'object'].encode ('UTF-8')
-                react = PRESTo_reactor (
-                        self.pns_articulate_protocol_continue
-                        )
-                self.pns_client.pns_statement (
-                        (subject, '', obj), subject, react
-                        )
-                return react
-                
         def presto_pns_command (self, reactor):
                 predicate, predicate_horizon  = self.presto_pns_validate (
                         reactor.presto_vector[u'predicate'].encode ('UTF-8')
@@ -278,19 +287,64 @@ class PRESTo_articulator (
                 if predicate == obj == '':
                         return
                         
-                triple = ('', predicate, obj)
-                if self.pns_commands.has_key (triple):
-                        self.pns_articulate_command_continue (
-                                triple, self.pns_commands[triple]
-                                )
-                        return
-                        
                 react = PRESTo_command ()
-                self.pns_command (triple, react)
+                self.pns_command (('', predicate, obj), react)
                 return react
 
-        def presto_pns_protocol_continue (self, resolved, model):
-                return False
+        def presto_pns_validate (self, encoded, context=''):
+                # validate an attributes as a SAT Public Name, maybe
+                # reflect the validation in the vector, return the valid
+                # name and its horizon.
+                #
+                horizon = set ()
+                chunks = []
+                pns_sat.pns_sat_articulate (encoded, horizon, chunks)
+                if len (chunks) > 1 and len (horizon) < 126:
+                        horizon = set ()
+                        valid = pns_model.pns_name (netstrings_encode (
+                                [name for name, text in chunks]
+                                ), horizon)
+                elif len (chunks) > 0:
+                        valid = chunks[0][0]
+                else:
+                        valid = ''
+                return (valid, horizon)
+
+        def pns_multiplex (self, model):
+                self.log (netstrings_encode (model))
+                
+
+class PRESTo_pns_xml (PRESTo_async):
+        
+        # Asynchronous PNS/XML Proxy Component Class
+        #
+        # Rollback and Commit XML element trees as PNS statements from and
+        # to a possibly distributed PNS metabase. The possible XML strings
+        # are actually restricted to the flat 
+        
+        xml_name = 'http://presto/ pns-xml'
+        
+        pns_articulator = None
+
+        presto_interfaces = set ((
+                u'PRESTo', u'subject', u'context',
+                ))
+        
+        def xml_valid (self, dom):
+                pass
+                
+        def presto_commit (self, reactor):
+                pass 
+                # serialize as XML, then articulate as PNS using the 
+                
+        def presto_rollback (self, reactor):
+                pass
+                # articulate PNS statements as XML, then validate
+        
+        presto_methods = {
+                'commit': presto_commit,
+                'rollback': presto_rollback,
+                }
                         
-                        
+
 presto_components = (PRESTo_articulator, )
