@@ -58,9 +58,9 @@ class PNS_session (Netstring_collector):
 				self.pns_peer.pns_semantic.pns_command (model)
 			elif model[3] in self.pns_subscribed:
 				# protocol command: unsubscribe
-				self.pns_subscribed.remove (model[0])
+				self.pns_subscribed.remove (model[3])
 				self.pns_peer.pns_unsubscribe (
-					self, model[0]
+					self, model[3]
 					)
 				self.pns_tcp_continue (model, '.')
 			else:
