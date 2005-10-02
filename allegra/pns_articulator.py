@@ -30,47 +30,10 @@ def pns_articulate_route (encoded):
 
 class PNS_articulator:
 
-        # An articulator that manages a set of channels, caches answers
-        # by context and command responses as sets or list of sets.
-        
-        pns_client = None
-
-        def __init__ (
-                self, client=None, 
-                commands=None, contexts=None, channels=None
-                ):
-                self.pns_client = client or self.pns_client
-                self.pns_channels = channels or {}
+        def __init__ (self, client=None, commands=None, contexts=None):
+                self.pns_client = client
                 self.pns_commands = commands or {}
                 self.pns_contexts = contexts or {}
-                
-        def pns_protocol (self, articulated, handler):
-                assert (
-                        type (articulated) == tuple and 
-                        len (articulated) == 3 and
-                        articulated[1] == ''
-                        )
-                try:
-                        model = self.pns_channels[articulated]
-                except:
-                        self.pns_client.pns_statement (
-                                articulated, '', (
-                                        lambda
-                                        resolved, model, s=self, h=handler:
-                                        s.pns_protocol_continue (
-                                                resolved, model, h
-                                                )
-                                        )
-                                )
-                else:
-                        if handler != None:
-                                handler (articulated, model)
-
-        def pns_protocol_continue (self, resolved, model, handler=None):
-                self.pns_channels[resolved] = model
-                if handler != None:
-                        handler (resolved, model)
-                return False
                 
         def pns_command (self, articulated, handler):
                 assert (
@@ -81,8 +44,8 @@ class PNS_articulator:
                 try:
                         model = self.pns_commands[articulated]
                 except:
-                        self.pns_client.pns_statement (
-                                articulated, '', (
+                        self.pns_client.pns_command (
+                                articulated, (
                                         lambda
                                         resolved, model, s=self, h=handler:
                                         s.pns_command_continue (
