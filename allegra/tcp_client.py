@@ -17,8 +17,8 @@
 
 ""
 
-import sys
-import socket
+import sys, socket
+
 from time import time
 from asynchat import async_chat as Async_chat
 
