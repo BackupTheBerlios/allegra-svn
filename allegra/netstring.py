@@ -25,8 +25,12 @@ class NetstringsError (Exception): pass
 # decoder for buffered sequences of netstrings.
 #
 
-def netstring_encode (s):
-	return '%d:%s,' % (len(s), s)
+def netstring_encode (i):
+	try:
+		s = '%s' % (i,)
+	except:
+		s = '%r' % (i,)
+	return '%d:%s,' % (len (s), s)
 
 def netstrings_encode (n):
 	return ''.join (['%d:%s,' % (len (s), s) for s in n])
