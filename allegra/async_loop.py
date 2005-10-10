@@ -41,18 +41,22 @@ def async_defer (when, defered):
 def async_clock ():
 	now = time ()
 	while async_defered:
-		defered = heappop (async_defered) # get the next defered ...
+		# get the next defered ...
+		defered = heappop (async_defered)
 		if defered[0] > now:
-			heappush (async_defered, defered) # ... nothing to defer now.
-			break
+			heappush (async_defered, defered)
+			break  # ... nothing to defer now.
 
 		try:
-			defered = defered[1] (defered[0]) # ... do defer and ...
+			# ... do defer and ...
+			defered = defered[1] (defered[0])
 		except:
 			loginfo.loginfo_traceback ()
 		else:
 			if defered != None:
-				heappush (async_defered, defered) # ... continue ;-)
+				heappush (async_defered, defered) 
+				#
+				# ... maybe continue ...
 
 
 async_timeout = 0.1
@@ -66,7 +70,7 @@ except:
 	else:
 		from asyncore import poll as async_poll
 else:
-	from asyncore import poll2 as async_pol
+	from asyncore import poll2 as async_poll
 
 from asyncore import socket_map as async_map
 
@@ -98,3 +102,18 @@ def loop ():
 	# handled appropriately, after the async_poll, catching any finalized
 	# that would result from the deletion of the last asynchronous data
 	# structures.
+
+
+# Note about this implementation
+#
+# A marginaly extended asyncore loop, with finalizations and defered, 
+# asynchronous continuations as a piggy-back of the CPython GIL and the 
+# simplest event scheduler possible, a heap queue (also a CPyton feature). 
+#
+# Expanding to more asynchronous event stack is not a "good thing" IMHO, 
+# and certainly not to integrated peer networking with a GUI.
+#
+# It is implemented as a module (and not a class) because there is little
+# use for two async loops in the same CPython VM. 
+#
+# Use two distinct processes instead ;-)
