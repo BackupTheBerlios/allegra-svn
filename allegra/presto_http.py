@@ -151,8 +151,9 @@ class PRESTo_handler (Loginfo):
 if __name__ == '__main__':
         import sys
         sys.stderr.write (
-                'Allegra PRESTo Peer'
-                ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0'
+                'Allegra PRESTo'
+                ' - Copyright 2005 Laurent A.V. Szyster'
+                ' | Copyleft GPL 2.0'
                 '\n\n...\n'
                 )
         from allegra import async_loop
