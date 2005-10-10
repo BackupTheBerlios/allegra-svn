@@ -177,6 +177,8 @@ def presto_xml (
         return '<instance%s/>' % attributes
 
 
+# Asynchronous
+
 class PRESTo_reactor (Buffer_reactor):
         
         def __init__ (
@@ -191,12 +193,17 @@ class PRESTo_reactor (Buffer_reactor):
                 self.presto_react = None
                 self.buffer (self.presto_response)
                 self.buffer ('') # ... buffer_react ()
-                             
-                             
+
+
 def presto_async_commit (self, reactor):
+        # commit the instance's document to the file system, blocking.
         open (reactor.presto_dom.presto_path, 'w').write (xml_document (
                 reactor.presto_dom.xml_root, reactor.presto_dom
                 ))
+
+# There is no need for a "rollback" method, instead dereference the
+# DOM and have it be rolledback for the next call. It is a safer way
+# to revert to a previous persistent state of a component instance ;-)
 
 class PRESTo_async (Loginfo, Finalization, XML_element):
 
@@ -212,10 +219,8 @@ class PRESTo_async (Loginfo, Finalization, XML_element):
 
         presto_methods = {u'commit': presto_async_commit}
         
-        # There is no need for a "rollback" method, instead dereference the
-        # DOM and have it be rolledback for the next call. It is a safer way
-        # to revert to a previous persistent state of a component instance.
 
+# Synchronized
 
 class PRESTo_reactor_sync (Buffer_reactor):
         
@@ -290,50 +295,10 @@ def presto_synchronize (method):
         # a lambda factory to wrap PRESTo methods with an appropriate
         # synchronizer, the PRESTo_sync.presto_synchronized method.
 
-class PRESTo_folder (PRESTo_async):
-        
-        # A PRESTo_folder interface implemented with a BSDDB table
-        #
-        # If a matching path is not found in the table, the folder will
-        # by default return an new PRESTo_async instance, in any case.
-        
-        xml_name = u'http://presto/ folder'
-        
-        presto_interfaces = set ()
-        
-        def presto (self, reactor):
-                return presto_xml (self.__dict__)
-        
-        def presto_folder (self, path):
-                root = PRESTo_async ()
-                root.presto_interfaces = self.__class__.presto_interfaces
-                root.presto_methods = self.__class__.presto_methods
-                self.synchronized (
-                        lambda s=self, p=path, r=root: s.bsddb_folder (p, r)
-                        )
-                dom = XML_dom ()
-                dom.xml_root = root
-                return root
-
-        presto_methods = {}
-
 
 # The PRESTo root, loading and unloading Python modules, XML namespace to
 # classes mapping. To mixin with the appropriate network protocol root,
 # like http_server.HTTP_root or any other implementation of this interface.
-#
-# What's *specially* nice with the asynchronous design is that Python
-# modules reload is both efficient (reloading an identical module is
-# as fast as checking source identity, apparently ;-) and safe. Indeed
-# loading a new module *will* block the peer until it is compiled,
-# but doing it in a thread is just planning failure. Think about why you
-# would reload a module in a web application peer. Debug during development
-# or maintenance of a production run. When developing performance does
-# not matter. And it certainly does matter a lot less than stability when
-# maintaining a runtime environnement!
-#
-# Asynchronous is as fast as a safe network peer can get ;-)
-#
                 
 def _None_factory (): pass
                 
@@ -351,6 +316,18 @@ class PRESTo_root (Loginfo):
         def __repr__ (self):
                 return '<presto-root path="%s"/>' % self.presto_path
 
+        # What's *specially* nice with the asynchronous design is that Python
+        # modules reload is both efficient (reloading an identical module is
+        # as fast as checking source identity, apparently ;-) and safe. Indeed
+        # loading a new module *will* block the peer until it is compiled,
+        # but doing it in a thread is just planning failure. Think about why
+        # you would reload a module in a web application peer: debug during
+        # development or maintenance of a production run. When developing 
+        # performance does not matter. And it certainly does matter a lot less
+        # than stability when maintaining a runtime environnement!
+        #
+        # Asynchronous is as fast as a safe network peer can get ;-)
+        
         def presto_modules_dir (self):
                 return [os.path.basename (n)
                         for n in glob.glob (self.presto_path + '/*.py')]
@@ -413,17 +390,21 @@ class PRESTo_root (Loginfo):
                         ) ()
                 return reactor.presto_dom != None
                 
-        PRESTo_FOLDER_MAX_DEPTH = 1
+        # In order to limit the possible damage of broken/malicious
+        # URLs, a strict depth limit of 2 is set by default. Raise
+        # to a 4 for support of a "/model/controller/view" scheme.
+        #
+        PRESTo_FOLDER_DEPTH = 2
                 
         def presto_folder (self, reactor, path, separator):
                 # Implements a cache folder lookup, starting from the right
                 # of the path and walking up the root's cache to find a
-                # containing "folder" DOM instance. Obviously not something
-                # you'd want for a public server but which is very convenient
-                # for a peer.
+                # containing "folder" DOM instance.
                 #
+                depth = 0
                 base, path = path.rsplit (separator, 1)
-                while base:
+                while base and depth < self.PRESTo_FOLDER_DEPTH:
+                        depth += 1
                         presto_dom = self.presto_cached.get (
                                 path, _None_factory
                                 ) ()
@@ -483,13 +464,13 @@ class PRESTo_root (Loginfo):
                 elif type (root) == StringType:
                         reactor.presto_dom.xml_parser_reset ()
                         root = reactor.presto_dom.xml_parse_string (root)
-                elif not hasattr (root, 'xml_name'):
-                        reactor.presto_dom.xml_root = None
+                else:
+                        root.xml_valid (reactor.presto_dom)
                 if root == None:
                         root = PRESTo_async ()
                         root.xml_name = u'http://presto/ xml-error'
-                        root.xml_first = u'XML error!' # TODO: explicit ...
-                if not root.xml_attributes:
+                        root.xml_attributes = {}
+                elif not root.xml_attributes:
                         root.xml_attributes = {}
                 reactor.presto_dom.xml_root = root
                 self.presto_cached[path] = weakref.ref (reactor.presto_dom)
@@ -651,16 +632,17 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
 
 # Five Points of Articulation, Five Degrees of Freedom
 #
-# Allegra's PRESTo uses Python and the standard four points of articulation
-# to build a development stack for application peers:
+# Allegra's PRESTo adds PNS to the standard three points of articulation in
+# web development and integrates that stack for application peers:
 #
-# 1. XML               Data Model | File System, BSDDB, ...
-# 2. Python            API | Asynchronous State, Synchronized Methods, ...
-# 3. XSLT              Display | Themes, Localization, ...
-# 4. CSS               Look & Feel | Font, Colors, ...
-# 5. JavaScript        Local User Interaction
+# 1. PNS               Semantic Model | Distribution, Inference, ...
+# 2. XML               Data Model | Aggregation, Persistence, ...
+# 3. HTTP              API | Network Interfaces, ...
+# 4. XSLT+CSS          Look & Feel | Themes, Localization, ...
 #
-# Although there is no such thing as a "common" web application, those five
+# in Python, of course.
+#
+# Although there is no such thing as a "common" web application, those four
 # points provide enough degrees of freedom to develop the most complex
 # statefull web peer applications you can dream of ... or write a quick and
 # dirty CGI script (which is what you should do first, of course).
@@ -927,7 +909,7 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
 #
 #    As an application host and network peer, the CPython VM as a proven track
 #    record of reliability, performance and portability. Unlike Java, and
-#    much like C#, Python is an C implementation, not a formal specification
+#    much like C#, Python is a C implementation, not a formal specification
 #    (there is a "standard programming language", it's called LISP, and there
 #    is a "standard operating system language implementation" and it's that
 #    good old "C" ;-). Beeing also free software, Python has the advantage of
@@ -968,105 +950,3 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
 #
 # 4. IDE. Allegra's PRESTo development stack is fully supported by Eclipse
 #    and its Python, XML, CSS and JavaScript pluggins. 
-
-# Note about this implementation
-#
-# The purpose of xml_producer.py is to allow REST/AJAX developper (like me ;-)
-# to "bundle" a persistent state, a set of functions and their results as one
-# XML document pushed asynchronously on a stallable channel. It's an effective
-# way to allow trivial implementations of asynchronous data flow aggregation
-# and serialization.
-#
-# But it might also be applied to other XML network protocols, like SOAP,
-# XMLRPC, etc ...
-#
-#
-# True Concurrent State, Asynchronously
-#
-# One very unorthodox feature is the implied late-state serialization to the
-# client. Suppose that several client access a method of the same XML element 
-# instance and receive as response the XML string of the state of the tree
-# below that element plus an XML string providing the function result. Like
-# this:
-#
-#        <PRESTo!>
-#                <my-result>
-#                My function's result
-#                </my-result>
-#                <our-element>
-#                Our XML State of this Instance and <its-child/> ...
-#                </our-element>
-#        </PRESTo>
-#
-# Using an XML_producer for both result and element will yield a interesting
-# and quite practical feature for an Internet application server. Concurrent
-# access to the same instance will produce the expected behaviour and return
-# to the different clients a "true state" over a slow and unpredictable
-# network. If client A update the state of "our-element" and that it cannot
-# retrieve its response before B also modify that state, then its response
-# will include both updates. Ditto for B. If A and B concurrently update the
-# same state they will "view" both updates. Asynchronously :-)
-#
-# Since concurrent access to the same state yields a "correct" state to the
-# client, transaction logic is a lot simpler to implement and does not require
-# a centralized "transactional" SQL database. For instance, a stock
-# represented as the XML document and bound to a Python instance can be
-# accessed by two different agents concurrently and yet display the "real"
-# level of the stock.
-#
-# Remember that PRESTo is not confined to Web User Interfaces. An transaction
-# for a purchase order may include stock level check using the same interface
-# but dropping all XSLT/CSS/JavaScript part of the stack. Ditto for AJAX
-# (or is it good old Client/Server?). PRESTo can be used to develop complex
-# transactional applications without relying on a transactional SQL database.
-# 
-# Relational Databases are usefull to process large volumes of data, they are
-# not *that* good at holding state and managing transactions. If most RDBMS
-# implementations provide all those transactional features, the concept of a
-# centralized synchronous state holded by a single server and data model
-# has some terrible consequences on both the computer application development,
-# and the computer system it runs on.
-#
-# The popular "object database" design is a lot more effective in providing
-# a degree of freedom to a relational data model and allowing an easier
-# distribute off the application on a computer network.
-# 
-# The PRESTo host is another such object request broker, but asynchronous
-# and a lot simpler.
-#
-#
-# Fast.
-#
-# Now you can use all that memory not to host Apache but a cache of a web
-# message board. One that can handle the load of massive concurrent access
-# and still blast the true state of its cache to all clients.
-#
-#
-# Practical
-#
-# This design allows a faster and simpler generation of XML than 
-# serialization of data structure. By letting the XML dom accessor attach
-# simple XML producers or XML strings *allready* serialized and bypass the
-# process of instanciation/serialization ... in any language ;-)
-#
-# Think about asynchronous workflow with persistent web interfaces!
-#
-# You can attach to an XML element tree  a few set of Buffer_reactor wrapping
-# asynchat collectors and let the REST handler take care of aggregating a
-# REST response. It is simple, practical and ... very efficient.
-#
-# Wether is takes less than a millisecond or more ten seconds to aggregate all
-# data, the HTTP response head and the first part of the XML response will
-# be sent asap to the browser. The perceived speed of the response is fast
-# because the server articulates its responses and let the client process
-# aggregated serialized data in two chunks: state first, results second.
-#
-# Another application of XML producers is synchronized persistent REST
-# object interfaces (or PRESTo). REST method pushed to a thread loop queue
-# can stall and refill a Buffer_producer attached to the XML instance bounded.
-#
-# As the threaded REST method thunks appends strings to the Buffer_reactor
-# (via the select_trigger), the XML producer sends those strings to the
-# client browser as they are produced or stall the HTTP server channel, until
-# the threaded REST method exits, then finally completes the XML response.
-#
