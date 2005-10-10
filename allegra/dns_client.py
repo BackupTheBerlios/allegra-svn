@@ -1,8 +1,25 @@
+# Copyright (C) 2005 Laurent A.V. Szyster
+#
+# This library is free software; you can redistribute it and/or modify
+# it under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+#    http://www.gnu.org/copyleft/gpl.html
+#
+# This library is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# You should have received a copy of the GNU General Public License
+# along with this library; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+# USA
+
 ""
 
 # TODO: handle PTR right, handle non-existing domain/host and other
 #        DNS error conditions, change the DNS predicates to QCLASS
-#        and QTYPE values ...
+#        and QTYPE values? ...
 
 import time
 
@@ -157,24 +174,6 @@ class DNS_request_A (DNS_request):
                 return False
         
 
-class DNS_request_PTR (DNS_request):
-
-        DNS_DATAGRAM = (
-                '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
-                '\000\014\000\001'
-                )
-
-        def dns_unpack_continue (self, datagram, pos):
-                if datagram[pos:pos+4]== '\000\014\000\001':
-                        self.dns_ttl = dns_unpack_ttl (datagram, pos+4)
-                        self.dns_resources.append (
-                                dns_unpack_name (datagram, pos+10)
-                                )
-                        return True
-
-                return False
-
-
 class DNS_request_NS (DNS_request):
 
         DNS_DATAGRAM = (
@@ -233,11 +232,29 @@ class DNS_request_MX (DNS_request):
                 return False
 
 
+class DNS_request_PTR (DNS_request):
+
+        DNS_DATAGRAM = (
+                '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
+                '\000\014\000\001'
+                )
+
+        def dns_unpack_continue (self, datagram, pos):
+                if datagram[pos:pos+4]== '\000\014\000\001':
+                        self.dns_ttl = dns_unpack_ttl (datagram, pos+4)
+                        self.dns_resources.append (
+                                dns_unpack_name (datagram, pos+10)
+                                )
+                        return True
+
+                return False
+
+
 DNS_requests = {
         'A': DNS_request_A,
-        'PTR': DNS_request_PTR,
+        'NS': DNS_request_NS,
         'MX': DNS_request_MX,
-        'NS': DNS_request_NS
+        'PTR': DNS_request_PTR,
         }
 
 
@@ -272,6 +289,7 @@ class DNS_client (UDP_dispatcher):
                 request.dns_client = self
                 self.dns_send (request, when)
                 request.finalization = resolve
+                return request
                                 
         def dns_send (self, request, when):
                 request.dns_when = when
@@ -310,8 +328,7 @@ class DNS_client (UDP_dispatcher):
                                 )
                 #
                 # the dns_request instance will finalize, but only when it 
-                # times out ...
-
+                # times out ...        
 
 # a bit of OS specific code to get the addresses of the DNS name
 # servers for the host system
@@ -331,17 +348,12 @@ def dns_servers ():
                 if m:
                         return m.groups ()
                     
-                else:
-                        raise Error (
-                                'Could not extract the ip addresses from '
-                                '"IPCONFIG /ALL"'
-                                )
-                    
         else:
                 # TODO: parse /etc/resolve.conf for UNIX-like systems,
                 #       suppose a simple dns local cache ...
                 #
-                return ['127.0.0.1']
+                pass
+        return ['127.0.0.1']
 
 
 if __name__ == '__main__':
@@ -429,14 +441,3 @@ if __name__ == '__main__':
 # name about which there is dissent is not safe for public use.
 #
 #
-# A DNS Peer that is safe for public use
-#
-# A DNS/PNS gateway does just that: lookup DNS and PNS concurrently
-# and wait until 3 seconds (the PNS timeout) before reporting a local
-# answer witout DNS echo (safe), the same with a DNS confirmation, or
-# a PNS update, or dissent. In any case of dissent, the first local
-# answer or the PNS update will prevail.
-#
-# Practically a DNS/PNS peer is as safe for public use as DNS can get.
-#
-# 
