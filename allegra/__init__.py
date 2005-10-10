@@ -27,37 +27,35 @@ __all__ = [
 
         # 'async_core', 'async_chat', 
         
-        # Part I - Asynchronous Internet Peer, with Safe Threading
+        # Part I - Asynchronous Internet Peer Programming
         
-        'loginfo', 'async_loop', 'finalization', 'fifo', 
+        'netstring', 'loginfo', 'async_loop', 'finalization', 'fifo', 
         'select_trigger', 'thread_loop', 'sync_stdio', 'synchronizer',
-        'timeouts', 'async_limits', 'udp_channel', 'tcp_client', 'tcp_server', 
-        'collector', 'producer', 'reactor', 'netstring', 
+        'timeouts', 'async_limits', 
+        'udp_channel', 'tcp_client', 'tcp_server', 
+        'collector', 'producer', 'reactor', 
         
-        # Part II - The Usual Suspects, Internet Application Protocols
+        # Part II - Major Internet Application Protocols
         
-        'xml_dom','xml_unicode', 'xml_utf8', 'xml_producer', 
-        'mime_collector', 'mime_producer', 'http_collector', 
-        'http_server', # 'smtp_server', 
+        'xml_dom','xml_unicode', 'xml_utf8', # 'xml_collector',
+        'mime_collector', 'mime_producer', 'http_collector',
         'dns_client', 'tcp_pipeline', 
         'http_client', # 'smtp_client', 'pop_client', 'nnrp_client', 
+        'http_server', # 'smtp_server', 
         
-        # Part III - PNS, The Semantic Peer
+        # Part III - The Public Name System
         
         'pns_peer', 'pns_model', 
         'pns_tcp', 'pns_persistence', 'pns_semantic', 'pns_udp',
         'pns_client', 'pns_articulator', 
+        'pns_sat', 'pns_xml', # 'pns_mime',
         
-        # Part IV - PRESTo, The Web Peer
+        # Part IV - PRESTo, The First Semantic Web Peer
         
         'presto', 
-        'presto_http', 'presto_prompt', 'presto_bsddb', 
+        'presto_http', 'presto_prompt', 'presto_bsddb', 'presto_pns', 
         
-        # Part VI - PNS Application Test Cases.
-
-        'presto_pns', 'pns_sat', 'pns_xml', # 'pns_mime',
-        
-        # Part VI - The Last DNS Application.
+        # Part V - Allegra, The Last DNS Application.
 
         # 'dns_peer'
         
