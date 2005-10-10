@@ -31,34 +31,35 @@ __all__ = [
         
         'loginfo', 'async_loop', 'finalization', 'fifo', 
         'select_trigger', 'thread_loop', 'sync_stdio', 'synchronizer',
-        'timeouts', 'async_limits', 'udp_peer', 'tcp_client', 'tcp_server', 
+        'timeouts', 'async_limits', 'udp_channel', 'tcp_client', 'tcp_server', 
         'collector', 'producer', 'reactor', 'netstring', 
         
         # Part II - The Usual Suspects, Internet Application Protocols
         
         'xml_dom','xml_unicode', 'xml_utf8', 'xml_producer', 
         'mime_collector', 'mime_producer', 'http_collector', 
-        'http_server', # 'smtp_server', 'pop_server', 'nnrp_server',
-        # 'dns_client', 'dns_cache', 'dns_resolver',
-        # 'http_client', 'smtp_client', 'pop_client', 'nnrp_client', 
+        'http_server', # 'smtp_server', 
+        'dns_client', 'tcp_pipeline', 
+        'http_client', # 'smtp_client', 'pop_client', 'nnrp_client', 
         
         # Part III - PNS, The Semantic Peer
         
-        'pns_model', 'pns_persistence', 'pns_semantic', 
-        'pns_peer', 'pns_tcp', # 'pns_udp',
+        'pns_peer', 'pns_model', 
+        'pns_tcp', 'pns_persistence', 'pns_semantic', 'pns_udp',
         'pns_client', 'pns_articulator', 
         
         # Part IV - PRESTo, The Web Peer
         
-        'presto', 'presto_http', 'presto_prompt', 'presto_bsddb', 
+        'presto', 
+        'presto_http', 'presto_prompt', 'presto_bsddb', 
         
         # Part VI - PNS Application Test Cases.
 
-        'pns_sat', 'pns_xml', 'pns_rss', #'pns_html',
+        'presto_pns', 'pns_sat', 'pns_xml', # 'pns_mime',
         
         # Part VI - The Last DNS Application.
 
-        # 'dns_pns'
+        # 'dns_peer'
         
         ]
         
@@ -72,7 +73,7 @@ __all__ = [
 # Web Peer. First and foremost, it is a reference implementation of PNS and
 # it should provides a practical toolkit for PNS developpers.
 #
-# Most modules include a script that is their "primary" application, 
+# Many modules include a script that is their "primary" application, 
 # their first practical application test cases. For instance you 
 # can use the module that implements PNS/Model to validate a PNS/TCP
 # session input or output:
@@ -100,10 +101,24 @@ __all__ = [
 # to do. Then only will it be fruitfull to optimize their implementation
 # in hand crafted C code, full support for BSDDB fine tuning, etc.
 #
+#
+# Measure twice, Cut Once.
+#
+# Modules in Allegra are designed as levers of the same magnitude in force
+# and size (in numbers of lines) and that are effectively applied to more 
+# than one other module and/or application. I have no special interest
+# in an orthogonal API, but rather in a practical one. Eventually, this
+# "measure twice and cut once" approach pays off, and I tried to allways
+# validating an API with at least two applications.
+#
+# The result is an practically orthogonal library. Allegra is effectively
+# applied to develop such diverse software as an innovative metabase peer, 
+# a powerfull HTTP/1.1 peer and semantic application components that 
+# integrate multiprotocol asynchronous networking with synchronized system 
+# and database functions.
+#
 # Like all carpenters, tailors and shoemakers use to say:
 #
 #  "Measure twice, cut once."
 #
-# This is why Allegra comes with more than one test case for each aspect
-# of its API.
-#
+# This is why Allegra comes with more than one test case for API.
