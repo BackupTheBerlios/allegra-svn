@@ -209,17 +209,39 @@
 </div>
 </xsl:template>    
 
+<xsl:template match="presto:async">
+    <div class="presto-top">
+        <h1 style="font-weight: bold;"
+            >Async <span style="color: #BBBBBB;"
+            ><xsl:value-of select="/presto:PRESTo/@presto-path"/></span></h1>
+        <div style="font-size: small;">Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0</div>
+    </div>
+    <xsl:apply-templates/>
+</xsl:template>    
+    
+<xsl:template match="presto:sync">
+    <div class="presto-top">
+        <h1 style="font-weight: bold;"
+            >Sync <span style="color: #BBBBBB;"
+            ><xsl:value-of select="/presto:PRESTo/@presto-path"/></span></h1>
+        <div style="font-size: small;">Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0</div>
+    </div>
+    <xsl:apply-templates/>
+</xsl:template>    
+    
 <xsl:template match="/">
-<html>
-<head>
-    <title><xsl:value-of select="/presto:PRESTo/@presto-path"/></title>
-    <link rel="stylesheet" href="/presto.css" type="text/css"/>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-</head>
-<body>
-<xsl:apply-templates />
-</body>
-</html>
+    <html>
+        <head>
+            <title><xsl:value-of select="/presto:PRESTo/@presto-path"/></title>
+            <link rel="stylesheet" href="/presto.css" type="text/css"/>
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        </head>
+        <body
+            style="font-family: 'Trebuchet MS', 'Lucida Grande', Verdana, Arial, Sans-Serif;"
+            >
+            <xsl:apply-templates />
+        </body>
+    </html>
 </xsl:template>    
 
 </xsl:stylesheet>

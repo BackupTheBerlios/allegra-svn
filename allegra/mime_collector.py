@@ -120,7 +120,7 @@ def mime_headers_get_parameter (line, name):
 class MIME_collector:
 	
 	# A collector implementation for all MIME collectors protocols,
-	# like SMTP, HTTP, etc ...
+	# like MULTIPART but also SMTP, HTTP, etc ...
 	
 	collector_is_simple = 0
 	
@@ -129,40 +129,54 @@ class MIME_collector:
 	mime_collector_body = None
 
 	def __init__ (self, headers=None, set_terminator=None):
+		# first maybe attribute another set_terminator method,
 		if set_terminator != None:
 			self.set_terminator = set_terminator
 		if headers == None:
+			# if no headers have been provided, get them by
+			# seting the terminator to '\r\n\r\n'
 			self.set_terminator ('\r\n\r\n')
 		else:
+			# or consiser the headers as allready collected and
+			# immediately set the body collector to the result of
+			# the continuation ...
+			#
 			self.mime_collector_headers = headers
-			self.mime_collector_body = self.mile_collector_continue ()
+			self.mime_collector_buffer = ''
+			self.mime_collector_body = \
+				self.mime_collector_continue ()
+		#
+		# This "akward" initialisation does actually match a very
+		# practical application of MULTIPART collector. And it also 
+		# serves decently when mixing with an asynchat channel to
+		# form HTTP or SMTP servers and clients. 
+
+	mime_collector_continue = Buffer_reactor # buffer the mime body
 
 	def collect_incoming_data (self, data):
 		# collect the MIME body or its headers
-		if self.mime_collector_body:
-			self.mime_collector_body.collect_incoming_data (data)
-		else:
+		if self.mime_collector_body == None:
 			self.mime_collector_buffer += data
+		else:
+			self.mime_collector_body.collect_incoming_data (data)
 
 	def found_terminator (self):
-		if self.mime_collector_body:
-			# if the MIME body final terminator is reached,
-			# finalize it and reset the state of the collector
-			if self.mime_collector_body.found_terminator ():
-				self.mime_collector_finalize ()
-				self.mime_collector_buffer = ''
-				self.set_terminator ('\r\n\r\n')
-		else:
+		if self.mime_collector_body == None:
 			# MIME headers collected, clear the buffer, split the
 			# headers and continue ...
 			self.mime_collector_lines = mime_headers_split (
 				self.mime_collector_buffer
 				)
 			self.mime_collector_buffer = ''
-			self.mime_collector_body = self.mime_collector_continue ()
-
-	def mime_collector_continue (self):
-		return Buffer_reactor ()
+			self.mime_collector_body = \
+				self.mime_collector_continue ()
+		else:
+			# if the MIME body final terminator is reached,
+			# finalize it and reset the state of the collector
+			if self.mime_collector_body.found_terminator ():
+				self.mime_collector_finalize ()
+				self.mime_collector_buffer = ''
+				self.set_terminator ('\r\n\r\n')
 
 	def mime_collector_finalize (self, collector):
 		self.mime_collector_headers = \
@@ -181,9 +195,12 @@ class MULTIPART_collector:
                 self.multipart_buffer = ''
                 self.multipart_part = None
                 self.multipart_parts = {}
-		self.multipart_boundary = '\r\n\r\n--' + mime_headers_get_parameter (
-			mime_collector.mime_collector_headers['content-type'], 'boundary'
-			)
+		self.multipart_boundary = '\r\n\r\n--' + \
+			mime_headers_get_parameter (
+				mime_collector.mime_collector_headers[
+					'content-type'
+					], 'boundary'
+				)
 		self.set_terminator = mime_collector.set_terminator
 		self.set_terminator (self.multipart_boundary[4:])
 		
@@ -191,7 +208,9 @@ class MULTIPART_collector:
 		#name = mime_headers_get_parameter (
 		#	headers.setdefault (
 		#		'content-disposition',
-		#		'not available; name="%d"' % len (self.multipart_parts)
+		#		'not available; name="%d"' % len (
+		#			self.multipart_parts
+		#			)
 		#		), 'name'
 		#	)
 		content_type, parameters = mime_headers_value_and_parameters (
@@ -202,18 +221,18 @@ class MULTIPART_collector:
 			
 		return MIME_collector
 		
-        def multipart_collect_buffer (self, data):
+        def multipart_collect (self, data):
 		self.multipart_buffer += data
 
 	def multipart_found_next (self):
 		if self.multipart_buffer == '--':
-			return 1 # end of the mulipart
+			return True # end of the mulipart
 		
 		else:
 			self.set_terminator ('\r\n\r\n')
 			self.found_terminator = self.multipart_found_headers
-			self.collect_incoming_data = self.multipart_collect_buffer
-			return 0
+			self.collect_incoming_data = self.multipart_collect
+			return False
 
 	def multipart_found_headers (self):
 		headers = mime_headers_map (
@@ -227,11 +246,10 @@ class MULTIPART_collector:
 		self.collect_incoming_data = collector.collect_incoming_data		
 		self.found_terminator = self.multipart_found_boundary
 		self.set_terminator (self.boundary)
-		return 0
+		return False
 
 	def multipart_found_boundary (self):
 		self.set_terminator (2)
 		self.found_terminator = self.multipart_found_next
-		return 0
-			
+		return False
 

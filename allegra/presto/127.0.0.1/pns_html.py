@@ -17,19 +17,84 @@
 
 ""
 
-# TODO: move to allegra/presto/127.0.0.1/pns_html.py, this is an application
+# How to "read" (articulate) and XHTML page?
+#
+# 0. orphan any semantically irrelevant tags, actually white-list a set
+#    of semantically relevant ones (delete <script>, orphan shallow like
+#    formatting <div> or <span> with singletons elements or inarticulated
+#    text inside. 
+#
+# 1. read the <head>, set a context name using the <title> and 
+#    articulate all other metadata white-listed.
+#
+#        5:Names,6:Public,
+#        href
+#        /blog/public-names/
+#        http://laurentszyster.be
+#
+#        5:Names,6:Public,
+#        html
+#        <html xmlns=""><head/><body/></html>
+#        http://laurentszyster.be
+#
+#        5:Names,6:Public,
+#        title
+#        <title>Public Name</title>
+#        http://laurentszyster.be
+#
+# 2. read the <body>, divide the document in sections after each <h?>,
+#    set a new context for each section, and step down like that for
+#    <p> with <?l>, <blockuote> or <cite>, building-up a semantic graph.
+#    for the whole page.
+#
+#        5:Names,6:Public,
+#        a
+#        <a href="/blog/public-names/">Public Names</a>
+#        http://laurentszyster.be
+#
+#        5:Names,6:Public,
+#        title
+#        <title>Public Name</title>
+#        
+#
+#        5:Names,6:Public,
+#        title
+#        <title>Public Name</title>
+#        http://...
+#
+#    
 #
 
 XHTML_NAMESPACE = {
-        'html': pns_xml.XML_PNS_articulate,
-        'body': pns_xml.XML_PNS_articulate,
+        'html': HTML_html_articulate,
+        'head': HTML_head_articulate,
+        }
+XHTML_NAMESPACE.update ({[
+        (tag, pns_xml.XML_PNS_articulate) 
+        for tag in (
+                'h1', 'h2', 'h3', 'h4', 
+                'p', 'blockquote', 
+                'b', 'i', 'tt', 'di', 'dt', 'dd', 'li',
+                'body',
+                'dl', 
+                'ol', 'ul', 
+                )
+        ]})
+        'body': ,
+        'h1': pns_xml.XML_PNS_articulate,
+        'h2': pns_xml.XML_PNS_articulate,
+        'h3': pns_xml.XML_PNS_articulate,
+        'h4': pns_xml.XML_PNS_articulate,
         'p': pns_xml.XML_PNS_articulate,
-        'a': pns_xml.XML_PNS_articulate,
+        'a': HTML_a_articulate,
         'b': pns_xml.XML_PNS_articulate,
-        'div': pns_xml.XML_PNS_orphan,
-        'span': pns_xml.XML_PNS_orphan,
-        'hr': pns_xml.XML_PNS_delete,
-        'br': pns_xml.XML_PNS_delete,
+        'i': pns_xml.XML_PNS_articulate,
+        'tt': pns_xml.XML_PNS_articulate,
+        'dt': pns_xml.XML_PNS_articulate,
+        'dd': pns_xml.XML_PNS_articulate,
+        'di': pns_xml.XML_PNS_context,
+        'di': pns_xml.XML_PNS_articulate,
+        'script': pns_xml.XML_PNS_delete,
         }
 
 
@@ -62,7 +127,7 @@ if __name__ == '__main__':
         t = time.time ()
         dom = xml_dom.XML_dom ()
         dom.xml_unicoding = 0 # UTF-8 only!
-        dom.xml_class = xml_pns.XML_pns_drop
+        dom.xml_class = xml_pns.XML_pns_orphan
         dom.xml_classes = {}
         dom.xml_parser_reset ()
         dom.pns_statement = pns_stdio_statement

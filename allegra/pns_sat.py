@@ -101,6 +101,11 @@ SAT_ARTICULATE_EN = (
         re.compile ('[(]|[)]|[[]|[]]|{|}|\\s+-+\\s+'),
         # quotes and a common web separator
         re.compile ('["&|]'), 
+        # The Verb is First: "to be" and "to have"
+        sat_articulators_re ((
+                'am', 'is', 'are', 'was', 'were',
+                'have', 'has', 'had',
+                )),
         # Subordinating Conjunctions
         sat_articulators_re ((
                 'after', 'although', 'as', 'as\\s+if', 'as\\s+long\\s+as',
@@ -119,11 +124,6 @@ SAT_ARTICULATE_EN = (
                 'both', 'not\\s+only', 'but\\s+also', 'either', 'neither', 
                 'nor', 'whether', 
                 )), 
-        # "to be" and "to have"
-        sat_articulators_re ((
-                'am', 'is', 'are', 'was', 'were',
-                'have', 'has', 'had',
-                )),
         # Prepositions: Locators in Time and Place
         sat_articulators_re ((
                 'in', 'at', 'on', 'to',

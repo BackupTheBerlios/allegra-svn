@@ -16,49 +16,31 @@
 
 ""
 
-from allegra.loginfo import Loginfo
 from allegra.finalization import Finalization
 from allegra.reactor import Buffer_reactor
-from allegra.mime_collector import MIME_collector, MULTIPART_collector
 from allegra.mime_producer import MIME_producer
+from allegra.mime_collector import MIME_collector
 
 
-class MIME_proxy (MIME_collector, MIME_producer, Finalization, Loginfo):
+class MIME_reactor (MIME_collector, MIME_producer, Finalization):
 
-	def __init__ (self, headers=None, set_terminator=None):
-		MIME_collector.__init__ (self, headers, set_terminator)
+	__init__ = MIME_collector.__init__
 		
 	def mime_collector_continue (self):
-		MIME_collector.mime_collector_continue (self)
+		body = Buffer_reactor ()
 		MIME_producer.__init__ (
-			self,
-			self.mime_collector_headers,
-			self.mime_collector_body
+			self, self.mime_collector_headers, body
 			)
-			
-	def mime_collector_continue (self):
-		pass
-			
-	def mime_collector_finalize (self):
-		pass
-			
-	def finalization (self, instance):
-		self.log ('<finalization /><![CDATA[%s]]!>' % (
-			'\r\n'.join (mime_headers_lines (
-				self.mime_producer_headers, []
-				))
-			))
+		return body
 			
 
 if __name__ == '__main__':
 	import sys
 	sys.stderr.write (
-		'Allegra MIME Reactor'
-		' - Copyright 2005 Laurent A.V. Szyster\n'
-		)
-	def mime_collector_continue (collector):
-		return Buffer_reactor ()
-		
+		'Allegra MIME Validator'
+		' - Copyright 2005 Laurent A.V. Szyster'
+                ' | Copyleft GPL 2.0\n...\n'
+                )
 	def mime_collector_finalize (collector):
 		while 1:
 			data = collector.mime_collector_body.more ()
@@ -68,7 +50,6 @@ if __name__ == '__main__':
 				break
 				
 	mime_reactor = MIME_reactor ()
-	mime_reactor.mime_collector_continue = mime_collector_continue
 	mime_reactor.mime_collector_finalize = mime_collector_finalize
 	simple_collector = Simple_collector (mime_reactor)
 	while 1:

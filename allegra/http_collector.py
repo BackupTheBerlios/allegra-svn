@@ -51,19 +51,19 @@ class Chunk_collector:
 			self.set_terminator ('\r\n')
 			self.chunk_size = ''
 			self.collect_incoming_data = self.chunk_collect_size
-			return 0
+			return False # continue ...
 		
 		if self.chunk_size == '0':
 			# last chunk
 			if self.chunk_trailers == None:
 				self.chunk_trailers = []
 				self.collect_incoming_data = self.chunk_collect_trailers
-				return 0
+				return False # continue ...
 			
 			elif self.chunk_trailer:
 				self.chunk_trailers.append (self.chunk_trailer)
 				self.chunk_trailer = ''
-				return 0
+				return False # continue ...
 			
 			elif self.chunk_trailers:
 				self.mime_collector_headers.update (
@@ -72,7 +72,7 @@ class Chunk_collector:
 			self.chunk_collector.found_terminator ()
 			self.set_terminator ('\r\n\r\n')
 			del self.set_terminator
-			return 1 # finalize!
+			return True # final!
 
 		# end of chunk size, collect the chunk with the wrapped collector
 		if self.chunk_size.find (';') > 0:
@@ -84,7 +84,7 @@ class Chunk_collector:
 			)
 		self.chunk_size = None
 		self.collect_incoming_data = self.chunk_collector.collect_incoming_data
-		return 0
+		return False # continue ...
 
 
 class HTTP_collector:
@@ -121,7 +121,7 @@ class HTTP_collector:
 				# HTTP/1.0 connection closed
 				self.mime_collector_body = collector
 				self.set_terminator (None)
-		return 1
+		return True # final!
 
 """
 allegra/http_collector.py

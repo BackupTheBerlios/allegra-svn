@@ -46,10 +46,14 @@ class RSS_item (pns_xml.XML_PNS_context):
 class RSS_pubDate (pns_xml.XML_PNS_articulate):
         
         sat_re = re.compile (
-                '(?:^([A-z]+?)[,]? +)|' # day of the week Mon, Tue, ..., Sun. 
-                '(?:^.*?([0-3][0-9]) ([A-z]+) ([0-9]{4}))|' # date 01 Jan 2001
-                '([0-2][0-9]:[0-5][0-9]:[0-5][0-9])|' # time 23:59:59
-                '((?:GMT)|(?:[+\\-][0-9]{4}))' # and zone GMT or +0000
+                '^(?:'
+                '(?:([A-z]+?)[,]?\\s+)?' # day of the week Mon, Tue, ..., Sun. 
+                '([0-3][0-9])\\s+([A-z]+)\\s+([0-9]{4})'# date 01 Jan 2001
+                ')|' 
+                '(?:'
+                '\\s+([0-2][0-9]:[0-5][0-9]:[0-5][0-9])' # time 23:59:59
+                '\\s+((?:GMT)|(?:[+\\-][0-9]{4}))' # and zone GMT or +0000
+                ')?' 
                 )
         
         # that's really cool!
@@ -120,9 +124,6 @@ if __name__ != '__main__':
                 presto_prompt.presto_debug_async (presto_pns.PRESTo_articulator)
         
         def presto_reload ():
-                # allow to debug those too without reloading individually,
-                # as this module itself is reloaded.
-                #
                 for module in (
                         netstring, xml_dom, xml_utf8, 
                         pns_model, pns_sat, pns_xml, presto_pns

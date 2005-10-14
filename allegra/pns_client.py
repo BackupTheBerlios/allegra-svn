@@ -26,15 +26,12 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
         
         # a PNS client to implement multiplexing user agents like a resolver.
         
-        pns_sent = pns_received = 0
-        pns_close_when_done = False
-        
-        def __init__ (self, ip='127.0.0.1', port=3534):
+        def __init__ (self):
+                TCP_client_channel.__init__ (self)
+                Netstring_collector.__init__ (self)
                 self.pns_commands = {}
                 self.pns_contexts = {}
                 self.pns_subscribed = {}
-                TCP_client_channel.__init__ (self, (ip, port))
-                Netstring_collector.__init__ (self)
                 
         def __repr__ (self):
                 return '<pns-client/>'
@@ -85,6 +82,9 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 self.pns_peer (model[0])
                 self.netstring_collector_continue = self.pns_continue
                 
+        pns_sent = pns_received = 0
+        pns_close_when_done = False
+        
         def pns_peer (self, ip):
                 assert None == self.log (
                         '<peer ip="%s"/>' % ip, ''
@@ -266,11 +266,11 @@ if __name__ == '__main__':
         
         class PNS_pipe (PNS_client_channel):
                 
-                def __init__ (self, ip, pipe):
+                def __init__ (self, addr, pipe):
                         self.pns_start = time.time ()
                         self.pns_pipe = pipe
-                        PNS_client_channel.__init__ (self, ip)
-                        self.tcp_connect ()
+                        PNS_client_channel.__init__ (self)
+                        self.tcp_connect (addr)
                         
                 def pns_peer (self, ip):
                         if ip:
@@ -335,10 +335,15 @@ if __name__ == '__main__':
                         sys.stderr.write ('%d:%s,' % (len (encoded), encoded))
                         
         if len (sys.argv) > 1:
-                ip = sys.argv[1]
+                if len (sys.argv) > 2:
+                        addr = tuple (sys.argv[1:2])
+                else:
+                        addr = (sys.argv[1], 3534)
         else:
-                ip = '127.0.0.1'
-        PNS_pipe (ip, netstrings_generator (lambda: sys.stdin.read (4096)))
+                addr = ('127.0.0.1', 3534)
+        PNS_pipe (
+                addr, netstrings_generator (lambda: sys.stdin.read (4096))
+                )
         from allegra import async_loop
         try:
                 async_loop.loop ()

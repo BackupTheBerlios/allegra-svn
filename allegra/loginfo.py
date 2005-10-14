@@ -19,35 +19,8 @@
 
 import sys
 
-def compact_traceback ():
-	# taken from asyncore, moved out serialization 
-	#
-        t, v, tb = sys.exc_info ()
-        tbinfo = []
-        # assert tb # Must have a traceback
-        while tb:
-                tbinfo.append ((
-                        tb.tb_frame.f_code.co_filename,
-                        tb.tb_frame.f_code.co_name,
-                        str (tb.tb_lineno)
-                        ))
-                tb = tb.tb_next
-        # just to be safe
-        del tb
-        return t, v, tbinfo
 
-
-# The default logger implementation, logs uncategorized entries like
-#
-#	log ('output')
-#
-# to STDOUT and categorized entries with no handlers, like:
-#
-#	log ('404 Not found', 'HTTP Error')
-#
-# to STDERR. It does what the simplest program requires, and comes
-# with a Write_and_flush wrapper for buffered files (you don't want your
-# logs to be buffered!).
+# Wrapper class for buffered files that allways flush. 
 
 class Write_and_flush:
 	
@@ -58,13 +31,25 @@ class Write_and_flush:
 		self.file.write (data)
 		self.file.flush ()
 
-		
 def write_and_flush (file):
 	if hasattr (file, 'flush'):
 		return Write_and_flush (file)
 		
 	return file
 
+
+# The default logger implementation, logs uncategorized entries like
+#
+#	log ('output')
+#
+# to STDOUT and categorized entries with no handlers, like:
+#
+#	log ('404 Not found', 'HTTP Error')
+#
+# to STDERR.
+#
+# Developers can assign a method of they choice to specific loginfo category,
+# set the logger's STDOUT and STDERR to other file instances.
 
 class Loginfo_stdio:
 
@@ -86,7 +71,8 @@ class Loginfo_stdio:
 		prev = (self.loginfo_stdout, self.loginfo_stderr)
 		(self.loginfo_stdout, self.loginfo_stderr) = (stdout, stderr)
 		return prev
-	
+
+# close all three standard I/O files and instanciate a loginfo_logger
 	
 def loginfo_stdio_detach (stdout, stderr):
 	sys.stdin.close ()
@@ -95,11 +81,37 @@ def loginfo_stdio_detach (stdout, stderr):
 	Loginfo.loginfo_logger = Loginfo_stdio (stdout, stderr)
 
 
+# produce a compact traceback data structure, ready to be serialized ...
+
+def compact_traceback ():
+        t, v, tb = sys.exc_info ()
+        tbinfo = []
+        # assert tb # Must have a traceback
+        while tb:
+                tbinfo.append ((
+                        tb.tb_frame.f_code.co_filename,
+                        tb.tb_frame.f_code.co_name,
+                        str (tb.tb_lineno)
+                        ))
+                tb = tb.tb_next
+        # just to be safe
+        del tb
+        return t, v, tbinfo
+
+def compact_traceback_str (cbt):
+ 	return ctb[0], ctb[1], ''.join (['[%s|%s|%s]' % x for x in ctb[2]])
+
+
 # The Loginfo class implementation
 
 class Loginfo:
 
         loginfo_logger = None # can be overriden by instances or by classes
+
+	def __repr__ (self):
+		return '<%s pid="%x"/>' % (
+			self.__class__.__name__, id (self)
+			)
 
 	def loginfo_log (self, data, info=None):
                 """log the message with an optional category, prefixed
@@ -130,24 +142,31 @@ class Loginfo:
 		return self.log != self.loginfo_null
 
 	def loginfo_traceback (self):
-		'logs as <traceback /> and return a compact traceback list'
-		# makes sure to log the traceback even when loginfo is "off"
+		'logs as <traceback /> and return a compact traceback tuple'
 		cbt = compact_traceback ()
 		self.loginfo_log (
-			'<![CDATA[%s:%s%s]]!>' % (
-				cbt[0], cbt[1], ''.join ([
-					' [%s|%s|%s]' % x for x in cbt[2]
-					])
-				),
+			'<![CDATA[%s:%s%s]]!>' % compact_traceback_str (cbt),
 			'<traceback />'
 			)
 		return cbt
 
-	def __repr__ (self):
-		return '<%s pid="%x"/>' % (
-			self.__class__.__name__, id (self)
-			)
 
+# A simple collector that logs all collected data (to STDOUT or any output
+# method set for the Loginfo.loginfo_logger instance.
+
+class Loginfo_collector (Loginfo):
+	
+	simple_collector = None
+
+	def __init__ (self, info=None):
+		self.loginfo_info = info
+	
+	def collect_incoming_data (self, data):
+		self.log (data, self.loginfo_info)
+		
+	def found_terminator (self):
+		return True # final!
+		
 
 # The Loginfo module implementation
 
@@ -161,7 +180,6 @@ def loginfo_toggle (Class=Loginfo):
 		Class.log = Class.loginfo_null
 		return 0
 
-
 def loginfo_log (data, info=None):
 	if Loginfo.loginfo_logger == None:
 		Loginfo.loginfo_logger = Loginfo_stdio ()
@@ -171,15 +189,10 @@ log = loginfo_log
 	
 def loginfo_null (data, info=None): pass
 
-
 def loginfo_traceback ():
 	ctb = compact_traceback ()
 	loginfo_log (
-		'<![CDATA[%s:%s %s]]!>' % (
-			ctb[0], ctb[1], ''.join ([
-				'[%s|%s|%s]' % x for x in ctb[2]
-				])
-			),
+		'<![CDATA[%s:%s%s]]!>' % compact_traceback_str (cbt),
 		'<traceback />'
 		)
 	return ctb
@@ -196,3 +209,6 @@ def loginfo_traceback ():
 # simply because one may require to log XML and therefore prefer to use
 # ASCII and XML character references, while another logs text to a cp1252
 # console (you know which one!).
+
+"""
+"""

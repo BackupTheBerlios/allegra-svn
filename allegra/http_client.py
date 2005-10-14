@@ -17,159 +17,199 @@
 
 ""
 
-# TODO: "land" this client back from the Attic in Allegra
-
 import re
 from types import StringTypes
 
-from allegra.producer import Simple_producer
-from allegra.mime_reactor import MIME_reactor, mime_header_lines
-from allegra.tcp_client import TCP_client_pipeline, TCP_client_pipeline_cache
-from allegra.mime_collector import MIME_collector, mime_headers_split, mime_headers_map
+from allegra.finalization import Finalization
+from allegra.producer import \
+	Simple_producer, Composite_producer, Chunked_producer
+from allegra.mime_producer import MIME_producer
+from allegra.mime_collector import \
+	MIME_collector, mime_headers_split, mime_headers_map
 from allegra.http_collector import HTTP_collector
+from allegra.tcp_pipeline import \
+	TCP_pipeline, TCP_pipeline_cache
+from allegra.dns_client import DNS_client, dns_servers
 
+
+class HTTP_client_reactor (Finalization, MIME_producer, MIME_collector):
+
+	__init__ = MIME_collector.__init__
+		
 
 HTTP_RESPONSE_RE = re.compile ('.+?/([0-9.]+) ([0-9]{3}) (.*)')
 
-class HTTP_client_pipeline (TCP_client_pipeline, MIME_collector, HTTP_collector):
+class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
 
         terminator = '\r\n\r\n'
 	http_version = '1.1'
 
+	def pipeline_error (self):
+		# TODO: handle pipeline error
+		if self.pipeline_responses_fifo.is_empty ():
+			# not resolved or not connected ...
+			while not self.pipeline_requests.is_empty ():
+				reactor = self.pipeline_requests.pop ()
+				reactor.http_response = \
+					'418 Unknown DNS host name'
+		else:
+			# broken connection ...
+			TCP_pipeline.pipeline_error (self)
+			
 	def pipeline_wake_up (self):
-		# HTTP/1.0 keep-alive
-		reactor = self.pipeline_requests_fifo.pop ()
+		# HTTP/1.0, push one at a time, maybe keep-alive or close
+		# when done.
+		#
+		reactor = self.pipeline_requests.pop ()
 		if (
-			self.pipeline_requests_fifo.is_empty () and
+			self.pipeline_requests.is_empty () and
 			not self.pipeline_keep_alive
 			):
 			reactor.mime_producer_headers['connection'] = 'Close'
 		else:
-			reactor.mime_producer_headers['connection'] = 'Keep-alive'
-		self.http_client_pipeline_push (reactor)
+			reactor.mime_producer_headers[
+				'connection'
+				] = 'Keep-alive'
+		self.http_producer_push (reactor)
+		self.initiate_send ()
 
 	def pipeline_wake_up_11 (self):
-		# HTTP/1.1 pipeline
+		# HTTP/1.1 pipeline, send all at once and maybe close when
+		# done if not keep-aliver.
+		#
 		while 1:
-			reactor = self.pipeline_requests_fifo.pop ()
-			if (
-				self.pipeline_requests_fifo.is_empty () and
-				not self.pipeline_keep_alive
-				):
-				reactor.mime_producer_headers['connection'] = 'Close'
-				self.http_client_pipeline_push (reactor)
+			reactor = self.pipeline_requests.pop ()
+			reactor.mime_producer_headers[
+				'connection'
+				] = 'Keep-alive'
+			if self.pipeline_requests.is_empty ():
+				if not self.pipeline_keep_alive:
+					reactor.mime_producer_headers[
+						'connection'
+						] = 'Close'
 				break
-			
-			else:
-				reactor.mime_producer_headers['connection'] = 'Keep-alive'
-				self.http_client_pipeline_push (reactor)
-
-	def pipeline_push (self, reactor):
-		line = '%s %s HTTP/%s' % (
-			reactor.http_command, reactor.http_urlpath, self.http_version
-			)
-		if reactor.mime_producer_body != None:
-			# POST and PUT
-			if self.http_version == '1.1':
-				reactor.mime_producer_body = Chunked_producer (
-					reactor.mime_producer_body
-					)
-				reactor.mime_producer_headers['transfer-encoding'] = 'chunked'
-			elif hasattr (reactor, 'content_length'):
-				reactor.mime_producer_headers['content-length'] = str(
-					reactor.content_length ()
-					)
-			else:
-				return
-				#
-				# TODO: add an error condition in self.http_response
-				#       or raise an exception?
-
-			self.producer_fifo.push (Simple_producer ('\r\n'.join (
-				mime_header_lines (reactor.mime_producer_headers, [line])
-				)))
-			self.producer_fifo.push (reactor.mime_producer_body)
-		else:
-			# GET, HEAD, ...
-			self.producer_fifo.push (Simple_producer ('\r\n'.join (
-				mime_header_lines (reactor.mime_producer_headers, [line])
-				)))
+				
+			# push all request's reactors but the last one
+			#
+			self.http_client_push (reactor)
+		# push the last one, maybe close when done, and iniate send
+		#
+		self.http_producer_push (reactor)
 		self.initiate_send ()
-		self.pipeline_responses_fifo.push (reactor)
 
 	def mime_collector_continue (self):
 		reactor = self.pipeline_responses_fifo.first ()
 		try:
 			(
 				http_version, reactor.http_response
-				) = self.mime_collector_lines.pop (0).split (' ', 1)
+				) = self.mime_collector_lines.pop (
+					0
+					).split (' ', 1)
 		except:
 			self.http_collector_error ()
-			return 0
+			return False
 
 		if self.http_version == http_version[-3:]:
 			if self.http_version == '1.1':
-				self.pipeline_wake_up = self.pipeline_wake_up_11
+				self.pipeline_wake_up = \
+					self.pipeline_wake_up_11
 			self.http_version = http_version[-3:]
-		if not self.pipeline_requests_fifo.is_empty ():
+		if not self.pipeline_requests.is_empty ():
 			self.pipeline_wake_up ()
-		reactor.mime_collector_headers = self.mime_collector_headers = \
+		reactor.mime_collector_headers = \
+			self.mime_collector_headers = \
 			mime_headers_map (self.mime_collector_lines)
 		if (
 			reactor.http_command == 'HEAD' or
 			reactor.http_response[:3] in ('204', '304', '305')
 			):
-			self.pipeline_responses_fifo.pop ()
-			return 0
+			self.pipeline_responses.pop ()
+			return False
 
 		return self.http_collector_continue (reactor)
 
-	http_collector_error = TCP_client_pipeline.handle_close
-	# 	close the channel when there's a problem in the HTTP collector!
-
 	def mime_collector_finalize (self, collector):
-		reactor = self.pipeline_responses_fifo.pop ()
+		self.pipeline_responses.pop ()
 		if (
-			self.pipeline_responses_fifo.is_empty () and
+			self.pipeline_responses.is_empty () and
 			not self.pipeline_keep_alive
 			):
 			self.producer_fifo.push (None)
 
-	def tcp_client_dns_error (self, reactor):
-		reactor.http_response = '418 Unknown DNS host name'
+	# close the channel when there is an in the HTTP collector!
+	#
+	http_collector_error = TCP_pipeline.handle_close
 
+	def http_producer_push (self, reactor):
+		# push one or two producers in the output fifo ...
+		line = '%s %s HTTP/%s' % (
+			reactor.http_command, 
+			reactor.http_urlpath, 
+			self.http_version
+			)
+		if reactor.mime_producer_body == None:
+			# GET, HEAD, DELETE, ...
+			#
+			self.producer_fifo.push (Simple_producer (
+				'\r\n'.join (mime_header_lines (
+					reactor.mime_producer_headers, [line]
+					))
+				))
+		else:
+			# POST and PUT ...
+			#
+			if self.http_version == '1.1':
+				reactor.mime_producer_body = Chunked_producer (
+					reactor.mime_producer_body
+					)
+				reactor.mime_producer_headers[
+					'transfer-encoding'
+					] = 'chunked'
+			elif hasattr (reactor, 'content_length'):
+				reactor.mime_producer_headers[
+					'content-length'
+					] = str (reactor.content_length ())
+			else:
+				return
+				#
+				# TODO: add an error condition in s
+				#	elf.http_response or raise an 
+				#	exception?
 
-class HTTP_client_interface:
+			self.producer_fifo.push (Simple_producer (
+				'\r\n'.join (mime_header_lines (
+					reactor.mime_producer_headers, [line]
+					))
+				))
+			self.producer_fifo.push (reactor.mime_producer_body)
+		#
+		#
+		self.pipeline_responses.push (reactor)
+		#
+		# ready to send.
 
 	def http_client_reactor (self, url, headers, command):
-                reactor = MIME_reactor ()
+                reactor = HTTP_client_reactor (headers)
                 reactor.http_command = command
                 reactor.http_urlpath = url
                 reactor.mime_producer_headers = headers
-                reactor.__call__ = (
-                        lambda instance=None, me=self, r=reactor:
-                                me.http_client_reactor_continue (r, instance)
-                        )
+		reactor.mime_producer_headers['host'] = self.http_host
+                def react (instance=None):
+                	self.http_client (reactor, instance)
+                reactor.__call__ = react
                 return reactor
 
-	def http_client_reactor_continue (self, reactor, instance=None):
+	def http_client (self, reactor, instance):
 		del reactor.__call__
 		#	break the circular reference between the reactor and
 		#	the channel via the client cache
-                if instance != None:
-			http_client_reactor_body (reactor, instance)
-                self.pipeline_push (reactor)
-		return reactor
-		#
-		# return the method bounded instance, so that calling the
-		# instance is equivalent to retrieving its reference, making
-		# a nice syntax possible when chaining reactors
+                if instance == None:
+	                self.pipeline_push (reactor)
+			return reactor
 
-	def http_client_reactor_body (self, reactor, instance):
-		if reactor.http_command not in ('POST', 'PUT'):
-			reactor.http_command = 'POST'
+		assert reactor.http_command in ('POST', 'PUT')
 		if has_attr (instance, 'mime_collector_headers'):
 			# allow to chain MIME reactors
 			reactor.mime_producer_headers.update (
@@ -182,147 +222,127 @@ class HTTP_client_interface:
 		elif isinstance (instance, StringTypes):
 			# and accept strings too
 			if len (instance) < 1<<16:
-				reactor.mime_producer_body = Simple_producer (
-					instance
-					)
+				reactor.mime_producer_body = \
+					Simple_producer (instance)
 			else:
-				reactor.mime_producer_body = Scanning_producer (
-					instance
-					)
+				reactor.mime_producer_body = \
+					Composite_producer (instance)
 		else:
 			raise Error (
 				'MIME reactors must be called with a string, '
 				'or a stallable producer as unique argument.'
 				)
+		return reactor
+		#
+		# return the method bounded instance, so that calling the
+		# instance is equivalent to retrieving its reference, making
+		# a nice syntax possible when chaining reactors
 			
+	# The AIO Interface:
+	#
+	#	aio.http ('host').POST ('/form.cgi') (
+	#		'urlencoded-form-data'
+	#		)
 
-class HTTP_proxy_client (HTTP_client_interface, HTTP_client_pipeline):
-
-	def http (self, url, headers={}, command='GET'):
-		if url[:2] == '//':
-			url = 'http:' + url
-			headers['host'] = url[2:].split ('/', 1)[0]
-		else:
-			url = 'http://127.0.0.1' + url
-			headers['host'] = '127.0.0.1'
-		return self.http_client_reactor (url, headers, command)
-
-
-class HTTP_client_pipeline_cache (HTTP_client_interface, TCP_client_pipeline_cache):
-
-	timeouts_time = 5
-	timeouts_precision = 0.5
-	pipeline_keep_alive = 1
-
-	def http (self, url, headers={}, command='GET'):
-		if url[:2] == '//':
-			headers['host'], url = url[2:].split ('/', 1)[0]
-		else:
-			headers['host'] = '127.0.0.1'
-                reactor = self.http_client_reactor (url, headers, command)
-                reactor.tcp_client_key = host
-                return reactor
-
-	def Pipeline (self, key):
-		if key.find (':') > -1:
-			host, port = key.split (':')
-			return HTTP_client_pipeline (host, port, self)
+	def HEAD (self, url, headers={}):
+                return self.http_client_reactor (url, headers, 'HEAD')		
 		
-		else:
-			return HTTP_client_pipeline (key, 80, self) 
+	def DELETE (self, url, headers={}):
+                return self.http_client_reactor (url, headers, 'DELETE')		
 		
+	def GET (self, url, headers={}):
+                return self.http_client_reactor (url, headers, 'GET')		
+		
+	def POST (self, url, headers={}):
+                return self.http_client_reactor (url, headers, 'POST')
+		
+	def PUT (self, url, headers={}):
+                return self.http_client_reactor (url, headers, 'PUT')
+		
+		
+class HTTP_client (TCP_pipeline_cache):
 
-def HTTP_client (proxy=None, port=3128):
-	if proxy != None:
-		return HTTP_proxy_client (proxy, port)
+	Pipeline = HTTP_client_pipeline
 
-	return HTTP_client_pipeline_cache ()
-
-
-#--- command line interface
+	def pipeline_init (self, addr):
+		pipeline = TCP_pipeline_cache.pipeline_init (self, addr)
+                if addr[1] == 80:
+			pipeline.http_host = addr[0]
+         	else:
+			pipeline.http_host = '%s:%d' % addr
+		return pipeline
+	
+	def http (self, host, port=80):
+		return self.pipeline_get ((host, port))
+	
 
 if __name__ == '__main__':
-	import asyncore
-	from allegra.monitor_server import monitor_server
-	monitor_server ()
-	asyncore.loop (1.0)
-			
+        import sys
+        assert None == sys.stderr.write (
+                'Allegra HTTP/1.1 Client'
+                ' - Copyright 2005 Laurent A.V. Szyster'
+                ' | Copyleft GPL 2.0\n...\n'
+                )
+        from allegra import async_loop
+        try:
+        	command, url = sys.argv[1:]
+        	protocol, url = url.split ('//')
+        	host, path = url.split ('/', 1)
+        	addr = host.split (':')
+        	if len (addr) < 2:
+        		addr.append ('80')
+ 	except:
+ 		sys.exit (1)
+ 	
+ 	# get a TCP pipeline connected to the address extracted from the
+ 	# URL and push an HTTP reactor with the given command and URL path,
+ 	# close when done ...
+ 	#
+        HTTP_client (
+        	DNS_client (dns_servers ())
+        	).http (
+        		addr[0], int (addr[1])
+        		).http_client_reactor (
+        			'/' + path, {}, command
+        			) (async_loop.loginfo.Loginfo_collector ())
+        try:
+                async_loop.loop () # ... loop.
+        except:
+                async_loop.loginfo.loginfo_traceback ()
+	#
+	# Note:
+	#
+	# Network latency is usually so high that the DNS response will
+	# come back long after the program entered the async_loop. So it is
+	# safe to instanciate a named TCP pipeline and trigger asynchronous
+	# DNS resolution.
+
 """
-allegra/http_client.py
+http_client.py
 
-an asynchronous HTTP client library with support for HTTP/1.0
-keep-alive and HTTP/1.1 pipelining, asynchronous caching, finalization
-timeouts and loginfo.
+An Asynchronous HTTP/1.1 Client Pipeline
 
-the principal interface is the 'http' factory function. it returns a
-reactor instance with a finalization interface. the reactor can be
-pushed onto the producer fifo of a stallable asynchronous channel, or
-it may be called with a string, a producer or a reactor as unique
-argument, then finalyzed.
-
-write
-
-	from http_client import http
-	
-	http ('//host/urlpath/post') (
-		http ('//host/urlpath/get') ()
-		)
-
-if you were to collect data from the web and post it to a web server,
-with both channel open in parallel. the http function is a factory that
-returns a reactor. see reactors.py for more information about them.
-
-if you require a strict sequence in operations, use the finalization
-interface and write:
-
-	http ('//host/urlpath/get') ().finalization = http (
-		'//host/urlpath/post'
-		)
-
-or maybe more clearly, using a continuation:
-
-	from continuation import Continue
-	Continue ([
-		http ('//host/urlpath/get'),
-		http ('//host/urlpath/post')
-		]) ()
-
-you may chain other type of reactors, like file or mail reactors
-
-to save the Google home page, write:
-
-	from allegra.aio import fs
-	fs ('~/archive/www.google.com/index.html') (
-		http ('//www.google.com/') ()
-		)
-
-to send it by mail, write:
-
-	from allegra.aio import smtp
-	smtp (['laurent.szyster@q-survey.be',]) (
-		http ('//www.google.com/') ()
-		)
-
-if you want to do both at the same time:
-
-	from allegra.aio import split
-	split (
-		http ('//www.google.com/') (), [
-			mailto ('laurent.szyster@q-survey.be'),
-			fs ('~/archive/www.google.com/index.html')
-			]
-		)
-
-the writing may seem awkward at first, but it is the only simple one
-to program asynchronous network clients from a Python console.
+The module http_client.py implements is an asynchronous HTTP client 
+with support for HTTP/1.0 keep-alive and HTTP/1.1 pipelining, asynchronous 
+caching, finalization, timeouts and loginfo. The purpose is to integrate
+a simple and reliable client interface in Allegra's library.
 
 HTTP_client is intended to cache and manage HTTP pipelines and relieve
-the developper (me!) from networking chore about timeouts, broken
-connection and more. any request submitted via the HTTP_client will
+web peer developers from networking chore about timeouts, broken
+connection and more. Any request submitted via the HTTP_client will
 either fail or succeed, but none will hang or block.
 
+The principal interface is the 'http' factory function. It returns
+an HTTP pipeline from a cache (or the proxy's pipeline) with the 
+following factories:
+	
+	get, head, del, post, put, ...
 
-How does it works?
+that return a reactor instance with a finalization interface. 
+
+This reactor can be pushed onto the producer fifo of a stallable asynchronous 
+channel, or it may be called with a string, a producer or a reactor as unique
+argument, then finalyzed.
 
 the mechanic at work is the following: each request is instanciated as
 a mime reactor and pushed into a HTTP client pipeline. the reactor can
@@ -330,5 +350,83 @@ be immediately pushed as a producer in a channel that supports stalled
 producers. if it is not referenced elswhere, the reactor will finalize
 itself when the response is complete and the reactor popped out of the
 HTTP pipeline response fifo.
+
+Write
+
+	from allegra.aio import http
+	
+	http ('dest').POST ('/urlpath/post.cgi') (
+		http ('source').GET ('/urlpath/get.html') ()
+		)
+
+to collect data from the web and post it to a web server, with both channel 
+open in parallel.  If you require a strict sequence in operations, use the 
+finalization interface instead, and write:
+
+	http ('source').GET ('/urlpath/get.html') (
+		).finalization = http ('dest').POST ('/urlpath/post.cgi')
+
+or maybe more clearly, using a continuation:
+
+	from allegra.finalization import Continue
+	
+	Continue ([
+		http ('source').GET ('/urlpath/get.html'),
+		http ('dest').POST ('/urlpath/post.cgi')
+		]) ()
+
+you may chain other type of reactors, like file or mail reactors.
+
+To save the Google's home page (or error message), write:
+
+	from allegra.aio import fs
+	
+	fs ('~').write ('/archive/www.google.com/index.html') (
+		http ('www.google.com').GET ('/') ()
+		)
+
+To send the same web page by mail via the local relay, write:
+
+	from allegra.aio import mailto
+	
+	mailto (('laurent.szyster@q-survey.be',)) (
+		http ('www.google.com').GET ('/') ()
+		)
+
+And if you want to do both at the same time, without queuing:
+
+	from allegra.aio import atee
+	atee (http ('www.google.com').GET ('/'), (
+		mailto (('laurent.szyster@q-survey.be',)),
+		fs ('~').write (
+			'/archive/www.google.com/index.html'
+			)
+		)) ()
+
+The writing may seem awkward at first, but it is the only simple one
+to program asynchronous network clients from a Python console.
+
+Let's write it line by line instead:
+
+	from allegra.aio import http
+	
+	dest_POST = http ('dest').POST ('/urlpath/post.cgi')
+	source_GET = http ('source').GET ('/urlpath/get.html')
+
+and multiplex
+
+	dest_POST (source_GET ())
+
+But if you use a finalization to chain
+
+	source_GET ().finalization = dest_POST
+	
+the page with not be posted, because there is still a reference to
+the source_get instance and it will not finalize. It is not an ugly
+bug but a remarkable feature, a reliable and convenient way to set 
+breakpoints in an asynchronous workflow.
+
+To debug it as it is written: at the interpreter's prompt.
+
 
 """

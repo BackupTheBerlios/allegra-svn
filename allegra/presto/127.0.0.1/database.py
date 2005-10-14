@@ -23,7 +23,6 @@ presto_components = (
         presto_bsddb.BSDDB_open,
         presto_bsddb.BSDDB_set,
         presto_bsddb.BSDDB_get,
-        presto_bsddb.BSDDB_log,
         )
 
 if __debug__:

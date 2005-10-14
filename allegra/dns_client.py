@@ -25,7 +25,6 @@ import time
 
 from allegra import async_loop
 from allegra.loginfo import Loginfo
-from allegra.finalization import Finalization, finalization_extend
 from allegra.udp_channel import UDP_dispatcher
 
 # unpack and parse names, ttl and preference from resource DNS records
@@ -73,16 +72,16 @@ def dns_unpack_preference (datagram, pos):
 
 # The DNS request
 
-class DNS_request (Finalization):
+class DNS_request:
 
-        dns_servers = ['127.0.0.1']
         dns_failover = 0
 
-        dns_when = dns_uid = dns_peer = \
+        dns_when = dns_uid = dns_peer = dns_resolve = \
                 dns_ttl = dns_response = dns_resources = None
 
-        def __init__ (self, question):
+        def __init__ (self, question, servers):
                 self.dns_question = question
+                self.dns_servers = servers
 
         def udp_datagram (self):
                 return (
@@ -122,19 +121,22 @@ class DNS_request (Finalization):
                 return False # error
 
         def dns_unpack_continue (self, datagram, pos):
-                raise Error (
-                        'The dns_unpack_continue is not implemented'
-                        ' by the %s class.' % self.__class__.__name__
-                        )
+                return False
 
         def dns_unpack_end (self):
                 return True
 
-        def dns_timeout (self, when):
+        def dns_continue (self, when):
                 try:
                         del self.dns_client.dns_pending[self.dns_uid]
                 except KeyError:
-                        return # ... allready answered, finalize ...
+                        for resolve in self.dns_resolve:
+                                resolve (self)
+                        self.dns_resolve = None
+                        if len (self.dns_client.dns_pending) == 0:
+                                self.dns_client.close ()
+                        self.dns_client = None
+                        return
                         
                 self.dns_failover += 1
                 if self.dns_failover < (
@@ -262,44 +264,89 @@ class DNS_client (UDP_dispatcher):
 
         udp_datagram_size = 512
 
-        dns_timeout = 3
+        # Parameters
+        #
+        dns_timeout = 1
+        #
+        # one second timeout, enough to notice the delay, reduce to a lower
+        # figure as you expand the number of servers and failovers.
+        #
+        # check for inactive DNS client after 1 seconds and close if no
+        # pending requests. re-open the channel at will, binding each time
+        # to a new port with a new socket.
+        #
+        # Note:
+        #
+        # In effect, a DNS client will be kept alive 1 seconds after the 
+        # first request and at most 1 seconds after the last one.
+        #
+        # Practically, this is the desired behaviour of a decent DNS cache, 
+        # bind only when miss and keep alive if there is a high load (like
+        # a web proxy or an smtp relay).
+        #
+        # A DNS client waits for the first request before binding, and then
+        # only starts to defer for dns_keep_alive the close_when_done 
+        # event. 
 
-        def __init__ (self, ip=None):
+        def __init__ (self, servers, ip=None):
                 self.dns_sent = 0
                 self.dns_pending = {}
                 self.dns_cache = {}
+                self.dns_servers = servers
+                self.dns_ip = ip
+                
+        def __repr__ (self):
+                return '<dns-client pending="%d" sent="%d"/>' % (
+                        len (self.dns_pending), self.dns_sent
+                        )
+                        
+        def dns_resolve (self, question, resolve):
+                # first check the cache for a valid response or a 
+                # pending request ...
+                #
+                try:
+                        request = self.dns_cache.get[question]
+                except:
+                        when = time.time ()
+                else:
+                        if request.dns_resolve != None:
+                                # ... either resolve with pending ...
+                                request.dns_resolve.append (resolve)
+                                return
+                                
+                        when = time.time ()
+                        if request.dns_ttl < when:
+                                # ... or resolve now.
+                                resolve (request)
+                                return
+
+                # no cache entry, maybe bind and send a new request
+                #
+                if not self.connected:
+                        self.dns_bind (self.dns_ip)
+                request = DNS_requests[question[1]] (
+                        question, self.dns_servers
+                        )
+                request.dns_client = self
+                request.dns_resolve = [resolve]
+                self.dns_send (request, when)
+                return
+                                
+        def dns_bind (self, ip):
                 if ip == None:
                         import socket
                         ip = socket.gethostbyname (socket.gethostname ())
                 UDP_dispatcher.__init__ (self, ip)
 
-        def __repr__ (self):
-                return '<dns-client pending="%d" sent="%d"/>' % (
-                        len (self.dns_pending), self.dns_sent
-                        )
-
-        def dns_resolve (self, question, resolve):
-                answer = self.dns_cache.get (question)
-                when = time.time ()
-                if answer != None and answer[0] < when:
-                        resolve (answer)
-                        return
-                        
-                request = DNS_requests[question[1]] (question)
-                request.dns_client = self
-                self.dns_send (request, when)
-                request.finalization = resolve
-                return request
-                                
         def dns_send (self, request, when):
                 request.dns_when = when
                 request.dns_uid = self.dns_sent % (1<<16)
                 request.dns_peer = (request.dns_servers[0], 53)
-                self.dns_pending [request.dns_uid] = request
+                self.dns_pending[request.dns_uid] = request
                 self.sendto (request.udp_datagram (), request.dns_peer)
                 async_loop.async_defer (
-                        request.dns_when+self.dns_timeout,
-                        request.dns_timeout
+                        request.dns_when + self.dns_timeout,
+                        request.dns_continue
                         )
                 self.dns_sent += 1
 
@@ -321,14 +368,7 @@ class DNS_client (UDP_dispatcher):
                 assert None == self.log (
                         '<signal ip="%s" port="%d"/>' % peer, ''
                         )
-                if dns_request.dns_unpack (datagram):
-                        self.dns_cache[dns_request.dns_question] = (
-                                dns_request.dns_ttl + dns_request.dns_when, 
-                                dns_request.dns_resources
-                                )
-                #
-                # the dns_request instance will finalize, but only when it 
-                # times out ...        
+                dns_request.dns_unpack (datagram)
 
 # a bit of OS specific code to get the addresses of the DNS name
 # servers for the host system
@@ -364,7 +404,6 @@ if __name__ == '__main__':
                 ' | Copyleft GPL 2.0\n...\n'
                 )
         from allegra.netstring import netstring_encode, netstrings_encode
-        DNS_request.dns_servers = dns_servers ()
         def resolve (request):
                 sp = netstrings_encode (request.dns_question)
                 c = request.dns_peer[0]
@@ -373,24 +412,31 @@ if __name__ == '__main__':
                         encoded = sp + '0:,' + c
                 else:
                         encoded = netstrings_encode ([
-                                sp + netstring_encode (res) + c
-                                for res in request.dns_resources
+                                sp + ('%d:%s,' % (len(o), o)) + c
+                                for o in request.dns_resources
                                 ])
                 sys.stdout.write (
                         '%d:%s,' % (len (encoded), encoded)
                         )
                 sys.stderr.write ('\n')
+        try:
+                servers = sys.argv[3:]
+        except:
+                servers = dns_servers ()
+        dns_resolver = DNS_client (servers)
         if len (sys.argv) > 1:
                 if len (sys.argv) > 2:
-                        if len (sys.argv) > 3:
-                                DNS_request.dns_servers = sys.argv[3:]
-                        DNS_client ().dns_resolve (
+                        dns_resolver.dns_resolve (
                                 tuple (sys.argv[1:3]), resolve
                                 )
                 else:
-                        DNS_client ().dns_resolve ((sys.argv[1],'A'), resolve)
+                        dns_resolver.dns_resolve (
+                                (sys.argv[1], 'A'), resolve
+                                )
         else:
-                DNS_client ().dns_resolve (('localhost', 'A'), resolve)
+                dns_resolver.dns_resolve (
+                        ('localhost', 'A'), resolve
+                        )
         try:
                 async_loop.loop ()
         except:
@@ -401,6 +447,7 @@ if __name__ == '__main__':
 #
 # This is a very "strict" DNS client indeed, because it will wait all the
 # timeout period set before finalization of the request instance it manages.
+#
 # Effectively, dns_client.py wait for the full timeout for requests that do
 # not belong to its cache and only then continue, callback the resolver or
 # do whatever was assigned to the request instance. Cached entry on the 
@@ -439,5 +486,4 @@ if __name__ == '__main__':
 # escape the audit of unsollicited responses, wich of course undermine the
 # credibility of an answer. DNS is not supposed to produce dissent. Any
 # name about which there is dissent is not safe for public use.
-#
 #

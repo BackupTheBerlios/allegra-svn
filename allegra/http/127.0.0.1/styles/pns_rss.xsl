@@ -59,9 +59,21 @@
     <a 
         style="padding-left: 2px; padding-right: 2px;"
         href="?PRESTo=articulate&amp;articulated={@name}"
-        > <xsl:value-of select="@name"/></a>, 
+        ><xsl:value-of select="@name"/></a>, 
 </xsl:template>
 
+<xsl:template match="allegra:index[@name]">
+    <a 
+        href="?PRESTo=pns&amp;predicate=&amp;object={@name}"
+        ><xsl:value-of select="@name"/></a>,
+</xsl:template>    
+    
+<xsl:template match="allegra:index[@names]">
+    [ <xsl:apply-templates/><a 
+        href="?PRESTo=pns&amp;predicate=&amp;object={@names}"
+        >...</a> ]
+</xsl:template>    
+    
 <xsl:template match="allegra:articulate/pns:index[@name]">
     <div class="presto-body" style="font-size: small; color: grey;">
         <xsl:apply-templates/><a 
@@ -118,9 +130,21 @@
     <div><a 
         style="padding-left: 2px; padding-right: 2px;"
         href="?PRESTo=articulate&amp;articulated={@name}"
-        > <xsl:value-of select="@name"/></a></div>
+        ><xsl:value-of select="@name"/></a></div>
 </xsl:template>
 
+<xsl:template match="allegra:context[@name]">
+    <a 
+        href="?PRESTo=pns&amp;object=&amp;predicate={@name}"
+        ><xsl:value-of select="@name"/></a>,
+</xsl:template>    
+    
+<xsl:template match="allegra:context[@names]">
+    [ <xsl:apply-templates/><a 
+        href="?PRESTo=pns&amp;object=&amp;predicate={@names}"
+        >...</a> ]
+</xsl:template>    
+    
 <!-- 3. Objects, to subclass for something else than RSS (what about auto-load?) -->    
 
 <xsl:template match="allegra:subject">
@@ -153,18 +177,32 @@
             <xsl:value-of select="$SUBJECTS[@predicate='description'][1]"/>
         </div>
     </div>
-</xsl:template>    
+</xsl:template>
 
-<xsl:template match="allegra:articulate|presto:presto">
+<xsl:template match="allegra:close">
     <div class="presto-prompt-menu"
         ><a 
-            href="/root.xml"
-            >root</a> | <a 
+            href="?PRESTo=open"
+            >open</a> | <a 
             href="?PRESTo=async&amp;prompt=xdir()"
-            >async</a> | <a href="?">presto</a></div>
+            >async</a></div>
     <div class="presto-top">
         <h1 style="font-weight: bold;"
-            ><a href="/index.html">Allegra</a> for RSS</h1>
+            ><a href="/index.html">Allegra</a> RSS</h1>
+        <div style="font-size: small;">Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0</div>
+    </div>
+</xsl:template>
+
+<xsl:template match="allegra:open">
+    <div class="presto-prompt-menu"
+        ><a 
+            href="?PRESTo=close"
+            >close</a> | <a 
+            href="?PRESTo=async&amp;prompt=xdir()"
+            >async</a></div>
+    <div class="presto-top">
+        <h1 style="font-weight: bold;"
+            ><a href="/index.html">Allegra</a> RSS</h1>
         <div style="font-size: small;">Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0</div>
     </div>
     <div class="presto-body">
@@ -175,9 +213,39 @@
                 <xsl:if test="/presto:PRESTo/@articulated!=''">
                     <a 
                         style="padding-left: 8px; padding-right: 8px;"
-                        href="?PRESTo=articulate&amp;predicate=comment&amp;subject={/presto:PRESTo/@articulated}"
-                        >post</a>
+                        href="?PRESTo=pns&amp;predicate={/presto:PRESTo/@articulated}"
+                        >pns</a>
                 </xsl:if>
+            </div>
+        </form>
+    </div>
+</xsl:template>        
+    
+<xsl:template match="allegra:articulate|presto:presto">
+    <div class="presto-prompt-menu"
+        ><a 
+            href="?PRESTo=close"
+            >close</a> | <a 
+            href="?PRESTo=async&amp;prompt=xdir()"
+            >async</a></div>
+    <div class="presto-top">
+        <h1 style="font-weight: bold;"
+            ><a href="/index.html">Allegra</a> RSS</h1>
+        <div style="font-size: small;">Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0</div>
+    </div>
+    <div class="presto-body">
+        <form action="{/presto:PRESTo/@presto-path}">
+            <div class="presto-line">
+                <input name="articulated" type="text" size="52" value=""/>
+                <input name="PRESTo" type="submit" value="articulate"/>
+                <a 
+                    style="padding-left: 8px; padding-right: 8px;"
+                    href="?PRESTo=pns&amp;predicate={/presto:PRESTo/@articulated}"
+                    >pns</a>
+                <a 
+                    style="padding-left: 8px; padding-right: 8px;"
+                    href="?PRESTo=log"
+                    >log</a>
             </div>
         </form>
     </div>
@@ -198,23 +266,24 @@
     </div>
 </xsl:template>    
 
-<xsl:template match="allegra:post">
+<xsl:template 
+    match="presto:PRESTo/allegra:index|presto:PRESTo/allegra:context|presto:PRESTo/pns:statement"
+    >
     <div class="presto-prompt-menu"
         ><a 
             href="/root.xml"
             >root</a> | <a 
             href="?PRESTo=async&amp;prompt=xdir()"
-            >async</a> | <a href="?">presto</a></div>
+            >async</a></div>
     <div class="presto-top">
         <h1 style="font-weight: bold;"
-            ><a href="/index.html">Allegra</a> for RSS</h1>
+            ><a href="/index.html">Allegra</a> XML</h1>
         <div style="font-size: small;">Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0</div>
     </div>
     <div class="presto-body">
         <form action="{/presto:PRESTo/@presto-path}">
             <div class="presto-line">
                 <input name="subject" type="text" size="52" value="{/presto:PRESTo/@subject}"/> subject
-                <input name="PRESTo" type="submit" value="post"/>
             </div>
             <div class="presto-line">
                 <input name="predicate" type="text" size="52" value="{/presto:PRESTo/@predicate}"/> predicate
@@ -225,15 +294,58 @@
             <div class="presto-line">
                 <input name="context" type="text" size="52" value="{/presto:PRESTo/@context}"/> context
             </div>
+            <div class="presto-line">
+                <input name="PRESTo" type="submit" value="pns"/>
+                <a 
+                    style="padding-left: 8px; padding-right: 8px;"
+                    href="?PRESTo=articulate"
+                    >articulate</a>
+                <a 
+                    style="padding-left: 8px; padding-right: 8px;"
+                    href="?PRESTo=log"
+                    >log</a>
+                </div>
         </form>
     </div>
-    <xsl:apply-templates/>
+    <div class="presto-body" style="font-size: small; color: grey;">
+        <xsl:apply-templates/>
+    </div>
+</xsl:template>    
+
+<xsl:template match="allegra:log">
+    <div class="presto-prompt-menu"
+        ><a 
+            href="/root.xml"
+            >root</a> | <a 
+            href="?PRESTo=async&amp;prompt=xdir()"
+            >async</a> | <a href="?">presto</a></div>
+    <div class="presto-top">
+        <h1 style="font-weight: bold;"
+            ><a href="/index.html">Allegra</a> PNS</h1>
+        <div style="font-size: small;">Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0</div>
+    </div>
+    <div class="presto-body">
+        <xsl:for-each select="pns:statement">
+            <div class="presto-line">
+                <xsl:value-of select="@subject"/>
+            </div>
+            <div class="presto-line">
+                <xsl:value-of select="@predicate"/>
+            </div>
+            <div class="presto-line" style="color: black;">
+                <xsl:value-of select="."/>
+            </div>
+            <div class="presto-line">
+                <xsl:value-of select="@context"/>
+            </div>
+        </xsl:for-each>
+    </div>
 </xsl:template>    
 
 <xsl:template match="/">
     <html>
     <head>
-        <title>Allegra PNS - The Semantic Peer</title>
+        <title>Allegra for RSS</title>
         <link rel="stylesheet" href="/presto.css" type="text/css"/>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     </head>

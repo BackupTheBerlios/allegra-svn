@@ -30,8 +30,7 @@ class TCP_client_channel (Async_chat, Loginfo):
 
 	tcp_connect_timeout = 10 # a ten seconds timeout for connection
 
-	def __init__ (self, addr, terminator=None):
-		self.tcp_client_addr = addr
+	def __init__ (self, terminator=None):
 		Async_chat.__init__ (self)
 		if terminator:
 			self.set_terminator (terminator)
@@ -49,7 +48,7 @@ class TCP_client_channel (Async_chat, Loginfo):
 		self.closing = 1
 
         def handle_error (self):
-		assert None == self.log ('<handle-expt/>', '')
+		assert None == self.log ('<handle-error/>', '')
                 t, v = sys.exc_info ()[:2]
                 if t is SystemExit:
                         raise t, v # don't catch SystemExit!
@@ -76,21 +75,21 @@ class TCP_client_channel (Async_chat, Loginfo):
 			
 	def found_terminator (self):
 		assert None == self.log ('<terminator/>', '')
-
-        def tcp_connect (self):
+		
+        def tcp_connect (self, addr):
 		if self.connected:
 			return True
-		
+
                 self.create_socket (socket.AF_INET, socket.SOCK_STREAM)
                 try:
-			self.connect (self.tcp_client_addr)
+			self.connect (addr)
 		except:
 			self.loginfo_traceback ()
 			return False
 			
 		assert None == self.log (
 			'<connect ip="%s" port="%d" '
-			'/>' % self.tcp_client_addr, ''
+			'/>' % addr, ''
 			)
 		async_loop.async_defer (
 			time () + self.tcp_connect_timeout,
@@ -150,7 +149,9 @@ class TCP_client_limit (TCP_client_channel, Async_limit_in, Async_limit_out):
 
 from allegra.async_limits import Async_throttle_in, Async_throttle_out
 
-class TCP_client_throttle (TCP_client_limit, Async_throttle_in, Async_throttle_out):
+class TCP_client_throttle (
+	TCP_client_limit, Async_throttle_in, Async_throttle_out
+	):
 
 	tcp_inactive_timeout = 10	# ten seconds timeout for inactive client
 	tcp_defer_precision = 1		# one second precision for defered

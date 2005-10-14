@@ -17,17 +17,23 @@
 
 ""
 
-from allegra.presto import PRESTo_sync
+from allegra import presto
 
-class Console (PRESTo_sync):
-        xml_name = u'http://presto/ console'
-        presto_interfaces = set ()
-        presto_methods = {}
 
-presto_components = (Console,)
+class PRESTo_prompt_async (presto.PRESTo_async):
+        
+        xml_name = u'http://presto/ async'
+
+
+class PRESTo_prompt_sync (presto.PRESTo_sync):
+        
+        xml_name = u'http://presto/ sync'
+                
+
+presto_components = (PRESTo_prompt_async , PRESTo_prompt_sync)
 
 if __debug__:
-        from allegra.presto_prompt import presto_debug_sync
-        presto_debug_sync (Console)
+        from allegra import presto_prompt
+        presto_prompt.presto_debug_async (PRESTo_prompt_async)
+        presto_prompt.presto_debug_sync (PRESTo_prompt_sync)
 
-# This module can/should be used as a template for new synchronized components.

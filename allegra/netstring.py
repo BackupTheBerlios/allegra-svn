@@ -19,11 +19,8 @@
 
 from exceptions import Exception
 
-class NetstringsError (Exception): pass
-
 # the netstring definition, a few netstrings encoders and one usefull
 # decoder for buffered sequences of netstrings.
-#
 
 def netstring_encode (i):
 	try:
@@ -32,8 +29,10 @@ def netstring_encode (i):
 		s = '%r' % (i,)
 	return '%d:%s,' % (len (s), s)
 
+
 def netstrings_encode (n):
 	return ''.join (['%d:%s,' % (len (s), s) for s in n])
+
 
 def netstrings_decoder (buffer):
 	while buffer:
@@ -60,11 +59,12 @@ def netstrings_decoder (buffer):
 
 		buffer = buffer[next+1:]
 
+
 def netstrings_decode (buffer):
 	return list (netstrings_decoder (buffer))
 
 
-# Collector and Producer
+# Netstrings Collector and Generator
 
 class Netstring_collector:
 	
@@ -105,6 +105,9 @@ class Netstring_collector:
 		
 	# def nestring_collector_error (self):
 		
+
+class NetstringsError (Exception): pass
+
 
 def netstrings_generator (more):
 	# a simple netstring generator "wrapping" a producer method
@@ -153,12 +156,12 @@ def netlines (encoded, indent=''):
 		)
 
 
-# The Beauty Validator
+# The Netstring Beauty Validator
 
 if __name__ == '__main__':
         import sys
         assert None == sys.stderr.write (
-                'Allegra Netstring Validator'
+                'Allegra Netstrings'
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0\n'
                 )

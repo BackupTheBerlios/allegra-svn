@@ -201,12 +201,6 @@ if __name__ == '__main__':
 # as a module (imported) and the class with an xml_name attribute are
 # mapped in the XML namespace associated with the hostname.
 #
-# You will find a module manager implemented as a REST module and XML peerlet
-# in the two presto.* files:
-#
-#        ./rest/127.0.0.1/presto.py
-#        ./rest/127.0.0.1/presto.xml
-#
 #
 # No Authentication
 #
@@ -228,18 +222,37 @@ if __name__ == '__main__':
 # it between the two default handlers, after PREST and before HTTP static.
 #
 # However, the most common case for URI pattern is the "folder" paradigm,
-# where an instance on the path
-#
-#        /folder
-#
-# matches or not requests for
+# where a requests for
 #
 #        /folder/this/and/that?...
 #
-# to handle them. Simply implement the interface
+# is walked from the left, looking up for a match of:
 #
-#        presto_cache ("/this/and/that")
+#        /folder/this/and
+#        /folder/this
+#        /folder
 #
-# to return None if no match is found or an XML string for the DOM to
-# instanciate, cache and to which to transfer control.
+# in the presto root's cache with an xml_root element that implements
+# the interface:
+#
+#        presto_folder
+#
+# and returns not NULL. There is a limit on the "depth" of folder, stricly
+# set to 1, and which should be raised to 3 for the popular:
+#
+#        /model/controller/view
+#
+# web API articulation. IMHO, this URL rewriting stuff is just a patch
+# and the purpose is rather to support a flat collections of component
+# instances that manage their own collection of instances, like
+# a BSDDB database or a PNS metabase.
+#
+#        /~component        # asynchronous, disk I/O, may be blocking
+#        /pns/~component    # asynchronous, network I/O, not blocking
+#        /bsddb/~component  # synchronized, disk I/O, may be slowing
+#
+# Those three kind of persistence are enough to provide a PRESTo peer
+# with support for a broad range of applications. BSDDB can manage huge
+# databases (backups) and PNS delivers distributed persistence and semantic
+# on top of the same industrial-strength C library.
 #

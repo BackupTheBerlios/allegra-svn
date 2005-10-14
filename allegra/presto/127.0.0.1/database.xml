@@ -19,5 +19,21 @@
   USA
 
 -->
-<?xml-stylesheet type="text/xsl" href="/styles/presto.xsl"?>
-<presto:console xmlns:presto="http://presto/" />
+<?xml-stylesheet type="text/xsl" href="/styles/database.xsl"?>
+<presto:async 
+    xmlns:presto="http://presto/" 
+    >
+    <presto:bsddb-open 
+        database="./presto/127.0.0.1" 
+        name="database.db" 
+        type="HASH" 
+        />
+    <presto:bsddb-get 
+        database="./presto/127.0.0.1" 
+        name="database.db" 
+        />
+    <presto:bsddb-set 
+        database="./presto/127.0.0.1" 
+        name="database.db" 
+        />
+</presto:async>
