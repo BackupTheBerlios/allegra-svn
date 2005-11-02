@@ -15,9 +15,10 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-from types import StringType
+import types
 
-from allegra.xml_dom import XML_dom
+from allegra import xml_dom
+
 
 def xml_tag (name):
         if name.find (' ') < 0:
@@ -26,7 +27,7 @@ def xml_tag (name):
         return name.split (' ')[1]
 
 def xml_attr (data):
-        assert type (data) == StringType
+        assert type (data) == types.StringType
         data = data.replace ("&", "&amp;")
         data = data.replace ("'", "&apos;")
         data = data.replace ("\"", "&quot;")
@@ -34,7 +35,7 @@ def xml_attr (data):
         return data.replace (">", "&gt;")
 
 def xml_cdata (data):
-        assert type (data) == StringType
+        assert type (data) == types.StringType
         data = data.replace ("&", "&amp;")
         data = data.replace ("<", "&lt;")
         return data.replace (">", "&gt;")
@@ -220,7 +221,7 @@ def xml_document (
 
 
 def xml_valid (encoded, prefixes=None):
-        dom = XML_dom ()
+        dom = xml_dom.XML_dom ()
         dom.xml_unicoding = 0
         dom.xml_parser_reset ()
         root = dom.xml_parse_string (encoded)
@@ -231,7 +232,7 @@ def xml_valid (encoded, prefixes=None):
         
         return ()
                 
-           
+
 if __name__ == '__main__':
         import os, sys, time
         sys.stderr.write (
@@ -243,7 +244,7 @@ if __name__ == '__main__':
         else:
                 allegra_time = time.time
         t_parse = allegra_time ()
-        dom = XML_dom ()
+        dom = xml_dom.XML_dom ()
         dom.xml_unicoding = 0
         dom.xml_parser_reset ()
         root = dom.xml_parse_file (sys.stdin)

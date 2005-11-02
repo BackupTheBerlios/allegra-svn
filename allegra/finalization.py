@@ -20,13 +20,11 @@
 from allegra import async_loop
 
 
-# Finalize
-
 class Finalization:
 
 	finalization = None
 
-	def finalization_finalize (self):
+	def __del__ (self):
 		# if any, thunk the finalization through the async_finalized
 		# loop and let async_loop.async_immediate call it ...
 		if self.finalization == None:
@@ -42,8 +40,6 @@ class Finalization:
 		# callable and they should not be more complex than defering
 		# for immediate execution in async_loop.
 
-	__del__ = finalization_finalize
-	
 	# the purpose of finalization is to implement asynchronous pipe-like
 	# interfaces, like this:
 	#

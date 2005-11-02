@@ -18,19 +18,16 @@
 ""
 
 import types, glob, os, imp, weakref, time
+
 if os.name == 'nt':
         allegra_time = time.clock
 else:
         allegra_time = time.time
 
-from allegra.loginfo import Loginfo, compact_traceback
-from allegra.finalization import Finalization
-from allegra.producer import Composite_producer
-from allegra.reactor import Buffer_reactor
-from allegra.xml_dom import XML_dom, XML_element
-from allegra.xml_unicode import \
-        xml_attr, xml_cdata, xml_pi, xml_ns, xml_prefixed, xml_document
-from allegra.synchronizer import Synchronized
+from allegra import \
+        loginfo, finalization, synchronizer, \
+        producer, reactor, xml_dom, xml_unicode
+
 
 # First thing first, from Python state to XML string
 
@@ -48,34 +45,37 @@ PRESTo_String = (
 
 # Types with safe __iter__ 
 
-PRESTo_Iterable = (types.TupleType, types.ListType, set)
+PRESTo_Iterable = (types.TupleType, types.ListType, set, frozenset)
 
 #
 # TODO: ... find out more about the types below
 #
-#types.InstanceType,
-#types.ObjectType,
-#types.ClassType,
-#types.TypeType,
-#types.CodeType, 
-#types.UnboundMethodType,
-#types.BuiltinMethodType,
-#types.NotImplementedType,
-#types.BuiltinFunctionType,
-#types.DictProxyType, # what's this?
-#types.MethodType,
-#types.GeneratorType,
-#types.EllipsisType,
-#types.ModuleType,
-#types.FrameType,
-#types.FileType,
-#types.BufferType,
-#types.TracebackType,
-#types.SliceType,
-#types.ComplexType,
-#types.LambdaType,
-#types.FunctionType,
-#types.XRangeType, # and this?
+
+PRESTo_others = (
+        types.InstanceType,
+        types.ObjectType,
+        types.ClassType,
+        types.TypeType,
+        types.CodeType, 
+        types.UnboundMethodType,
+        types.BuiltinMethodType,
+        types.NotImplementedType,
+        types.BuiltinFunctionType,
+        types.DictProxyType, # what's this?
+        types.MethodType,
+        types.GeneratorType,
+        types.EllipsisType,
+        types.ModuleType,
+        types.FrameType,
+        types.FileType,
+        types.BufferType,
+        types.TracebackType,
+        types.SliceType,
+        types.ComplexType,
+        types.LambdaType,
+        types.FunctionType,
+        types.XRangeType, # and this?
+        )
 
 def presto_xml (
         instance, walked,
@@ -94,21 +94,23 @@ def presto_xml (
         # simpler to join some ad-hoc formatted XML strings.
         #
         t = type (instance)
-        attributes += ' type="%s"' % xml_attr (
+        attributes += ' type="%s"' % xml_unicode.xml_attr (
                 unicode (t.__name__), encoding
                 )
         if issubclass (t, PRESTo_String):
                 # 1. Byte string
                 return '<str%s repr="%s">%s</str>' % (
                         attributes, 
-                        xml_attr (unicode ('%r' % instance), encoding),
-                        xml_cdata (unicode (instance), encoding)
+                        xml_unicode.xml_attr (
+                                unicode ('%r' % instance), encoding
+                                ),
+                        xml_unicode.xml_cdata (unicode (instance), encoding)
                         )
 
         elif issubclass (t, types.UnicodeType):
                 # 2. UNICODE string
                 return '<str%s>%s</str>' % (
-                        attributes, xml_cdata (instance, encoding)
+                        attributes, xml_unicode.xml_cdata (instance, encoding)
                         )
 
         instance_id = id (instance)
@@ -159,16 +161,18 @@ def presto_xml (
                 
         # 4. try to serialize as an 8bit "representation"
         try:
-                attributes += ' repr="%s"' % xml_attr (
+                attributes += ' repr="%s"' % xml_unicode.xml_attr (
                         u'%r' % instance, encoding
                         )
         except:
                 pass
         # 5. try to serialize as an 8bit string, using the default encoding
         try:
-                return '<str%s>%s</str>' % (attributes, xml_cdata (
-                        unicode ('%s' % instance), encoding
-                        ))
+                return '<str%s>%s</str>' % (
+                        attributes, xml_unicode.xml_cdata (
+                                unicode ('%s' % instance), encoding
+                                )
+                        )
                         
         except:
                 pass
@@ -179,12 +183,12 @@ def presto_xml (
 
 # Asynchronous
 
-class PRESTo_reactor (Buffer_reactor):
+class PRESTo_reactor (reactor.Buffer_reactor):
         
         def __init__ (
                 self, react, response='<presto xmlns="http://presto/" />'
                 ):
-                Buffer_reactor.__init__ (self)
+                reactor.Buffer_reactor.__init__ (self)
                 self.presto_react = react
                 self.presto_response = response
         
@@ -197,22 +201,26 @@ class PRESTo_reactor (Buffer_reactor):
 
 def presto_async_commit (self, reactor):
         # commit the instance's document to the file system, blocking.
-        open (reactor.presto_dom.presto_path, 'w').write (xml_document (
-                reactor.presto_dom.xml_root, reactor.presto_dom
-                ))
+        open (
+                reactor.presto_dom.presto_path, 'w'
+                ).write (xml_unicode.xml_document (
+                        reactor.presto_dom.xml_root, reactor.presto_dom
+                        ))
 
 # There is no need for a "rollback" method, instead dereference the
 # DOM and have it be rolledback for the next call. It is a safer way
 # to revert to a previous persistent state of a component instance ;-)
 
-class PRESTo_async (Loginfo, Finalization, XML_element):
+class PRESTo_async (
+        loginfo.Loginfo, finalization.Finalization, xml_dom.XML_element
+        ):
 
         def finalization (self, instance):
                 self.log ('<finalized />')
 
         xml_name = u'http://presto/ async'
 
-        presto_interfaces = set ()
+        presto_interfaces = set ((u'presto-host', u'presto-path'))
         
         def presto (self, reactor):
                 assert None == self.log ('<presto/>', '')
@@ -222,18 +230,18 @@ class PRESTo_async (Loginfo, Finalization, XML_element):
 
 # Synchronized
 
-class PRESTo_reactor_sync (Buffer_reactor):
+class PRESTo_reactor_sync (reactor.Buffer_reactor):
         
         def __init__ (self, select_trigger):
                 self.select_trigger = select_trigger
-                Buffer_reactor.__init__ (self)
+                reactor.Buffer_reactor.__init__ (self)
                 
         def __call__ (self, data):
                 assert type (data) == types.StringType
-                self.select_trigger (lambda m=self, d=data: m.buffer (d))
+                self.select_trigger ((self.buffer, (data,)))
 
 
-class PRESTo_sync (PRESTo_async, Synchronized):
+class PRESTo_sync (PRESTo_async, synchronizer.Synchronized):
 
         xml_name = u'http://presto/ sync'
 
@@ -246,10 +254,9 @@ class PRESTo_sync (PRESTo_async, Synchronized):
                         self.synchronizer.select_trigger
                         )
                 xml_reactor.presto_vector = reactor.presto_vector.copy ()
-                self.synchronized (
-                        lambda x=self, r=xml_reactor:
-                        x.__class__.__dict__[method] (x, r)
-                        )
+                self.synchronized ((
+                        x.__class__.__dict__[method], (self, reactor)
+                        ))
                 return xml_reactor
                 #
                 # returns the stallable buffer reactor that can be safely
@@ -302,7 +309,7 @@ def presto_synchronize (method):
                 
 def _None_factory (): pass
                 
-class PRESTo_root (Loginfo):
+class PRESTo_root (loginfo.Loginfo):
         
         def __init__ (self, path):
                 self.presto_path = path
@@ -453,7 +460,7 @@ class PRESTo_root (Loginfo):
                         '<cached count="%d"'
                         '/>' % len (self.presto_cached), ''
                         )
-                reactor.presto_dom = XML_dom ()
+                reactor.presto_dom = xml_dom.XML_dom ()
                 reactor.presto_dom.xml_classes = self.presto_classes
                 reactor.presto_dom.presto_path = path
                 if root == None:
@@ -615,7 +622,7 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
         # byte string, unicode string, xml element or producer returned by
         # a call to presto_rest.
         #
-        e = XML_element ()
+        e = xml_dom.XML_element ()
         e.xml_name = u'http://presto/ PRESTo'
         e.xml_attributes = reactor.presto_vector
         e.xml_children = [result, reactor.presto_dom.xml_root]
@@ -623,11 +630,17 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
                 e.xml_children.append (PRESTo_benchmark (benchmark))
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if reactor.presto_dom.xml_pi:
-                head += xml_pi (reactor.presto_dom.xml_pi, encoding)
-        return Composite_producer (head, xml_prefixed (
-                e, reactor.presto_dom.xml_prefixes, 
-                xml_ns (reactor.presto_dom.xml_prefixes), encoding
-                ))
+                head += xml_unicode.xml_pi (
+                        reactor.presto_dom.xml_pi, encoding
+                        )
+        return producer.Composite_producer (
+                head, xml_unicode.xml_prefixed (
+                        e, 
+                        reactor.presto_dom.xml_prefixes, 
+                        xml_unicode.xml_ns (reactor.presto_dom.xml_prefixes), 
+                        encoding
+                        )
+                )
 
 
 # Five Points of Articulation, Five Degrees of Freedom

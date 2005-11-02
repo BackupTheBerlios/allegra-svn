@@ -377,7 +377,7 @@ if __name__ == '__main__':
                 )
                 
         from exceptions import StopIteration
-        from allegra.netstring import netstrings_generator
+        from allegra.netstring import netstrings_pipe
         from allegra.pns_client import PNS_client_channel
         
         class PNS_pipe (PNS_client_channel):
@@ -436,7 +436,7 @@ if __name__ == '__main__':
                 ip = sys.argv[1]
         else:
                 ip = '127.0.0.1'
-        PNS_pipe (ip, netstrings_generator (lambda: sys.stdin.read (4096)))
+        PNS_pipe (ip, netstrings_pipe (lambda: sys.stdin.read (4096)))
         from allegra import async_loop
         try:
                 async_loop.loop ()

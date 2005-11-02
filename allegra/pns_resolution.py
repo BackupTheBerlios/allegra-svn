@@ -17,118 +17,137 @@
 
 ""
 
-# TODO: rename this module to pns_resolution.py
-
-from glob import glob
-from bsddb import db
-
-from cPickle import dumps, loads
+import glob, bsddb, cPickle
 #
 # TODO: maybe replace cPickle by a faster dictionnary made of netstrings
 #       and actually search for strings instead of instanciating hashes
 #       ...
 #
 
-from allegra.thread_loop import Thread_loop
-from allegra.netstring import netstrings_encode
+from allegra import netstring, thread_loop
 
 
-class PNS_persistence (Thread_loop):
+class PNS_resolution (thread_loop.Thread_loop):
 
-	pns_persistence = None
+	pns_statements = None
 
 	def __init__ (self, pns_peer):
 		self.pns_peer = pns_peer
 		self.pns_root = self.pns_peer.pns_root
-		Thread_loop.__init__ (self)
+		thread_loop.Thread_loop.__init__ (self)
 		self.start ()
 		
 	def __repr__ (self):
-		return '<persistence/>'
-
+		return 'pns_resolution'
+		
 	def thread_loop_init (self):
+		if __debug__:
+                	if glob.glob (self.pns_root + '/statements.log'):
+                		self.pns_log_file = open (
+                			self.pns_root + '/statements.log', 
+                			'a'
+                			)
+           		else:
+           			self.pns_log_file = open (
+                			self.pns_root + '/statements.log', 
+                			'w'
+                			)
                 try:
-                        self.pns_persistence = db.DB ()
-                        if glob (self.pns_root + '/statements.db'):
-                        	self.pns_persistence.open (
+                        self.pns_statements = bsddb.db.DB ()
+                        if glob.glob (self.pns_root + '/statements.db'):
+                        	self.pns_statements.open (
                         		self.pns_root + '/statements.db'
                         		)
                   	else:
-                        	self.pns_persistence.open (
+                        	self.pns_statements.open (
                         		self.pns_root + '/statements.db',
-                        		dbtype=db.DB_HASH,
-                        		flags=db.DB_CREATE
+                        		dbtype=bsddb.db.DB_HASH,
+                        		flags=bsddb.db.DB_CREATE
                         		)
                 except:
-                        self.loginfo_traceback ()
+                        self.select_trigger_traceback ()
+                        return False
+                        
                 else:
-                        assert None == self.log ('<open/>', '')
-                        return 1
+                        assert None == self.select_trigger_log (
+                        	'open', 'debug'
+                        	)
+                return True
 
 	def thread_loop_delete (self):
-                if self.pns_persistence != None:
+                if self.pns_statements != None:
                         try:
-                                self.pns_persistence.close ()
+                                self.pns_statements.close ()
                         except:
-                                self.loginfo_traceback ()
+                                self.select_trigger_traceback ()
                         else:
-                                del self.pns_persistence
-                        	assert None == self.log ('<close/>', '')
-                self.select_trigger (
-                	self.pns_peer.pns_persistence_finalize
-                	)
+                                del self.pns_statements
+                        	assert None == self.select_trigger_log (
+                        		'close', 'debug'
+                        		)
+                self.select_trigger ((
+                	self.pns_peer.pns_resolution_finalize, ()
+                	))
                 del self.pns_peer
+                return True
                 
 	# Resolution
 
-	def pns_persistent (self, model):
+	def pns_log (self, model):
+		encoded = netstring.netstrings_encode (model)
+		self.pns_log_file.write (
+			'%d:%s,' % (len (encoded), encoded)
+			)
+
+	def pns_resolve (self, model):
 		# store, retrieve and update, but also filter statements,
 		# returns a tuple (persistent, stored), indicating wether
 		# the statement is to be blocked and the object stored
 		# previously if any.
 		#
-                sp = netstrings_encode (model[:2])
-                stored = self.pns_persistence.get (sp)
+                sp = netstring.netstrings_encode (model[:2])
+                stored = self.pns_statements.get (sp)
                 if stored == None:
-                	# new (subject, predicate), store and pass
-			self.pns_persistence [sp] = dumps (
+                	# new (subject, predicate), maybe log, store and pass
+                	assert None == self.pns_log (model)
+			self.pns_statements [sp] = cPickle.dumps (
 				{model[3]: model[2]}
 				)
 			return True, None
 
 		# load the {(object, context)} hash from the store
-		persistents = loads (stored)
+		persistents = cPickle.loads (stored)
 		o = persistents.get (model[3])
 		if o == model[2]:
 			# redundant contextual statement, block
 			return False, None
 			
-		# dissent, update answer and pass
 		if model[2] != '':
+			# dissent, maybe log, update answer and pass
+                	assert None == self.pns_log (model)
 			persistents[model[3]] = model[2]
-			self.pns_persistence[sp] = dumps (persistents)
+			self.pns_statements[sp] = cPickle.dumps (persistents)
 		return True, o
 		
-        # PNS/TCP anonymous questions and named statements
-                
+        # PNS/TCP open questions and named statements
+        
 	def pns_anonymous (self, model):
-		# anonymous question, resolve all contexts.
-                sp = netstrings_encode (model[:2])
-                stored = self.pns_persistence.get (sp)
+		# anonymous question, resolve in all contexts.
+                sp = netstring.netstrings_encode (model[:2])
+                stored = self.pns_statements.get (sp)
                 if stored != None:
 	          	bounce = model[:5]
-	          	bounce[2] = netstrings_encode ([
-				netstrings_encode (i) 
-				for i in loads (stored).items ()
+	          	bounce[2] = netstring.netstrings_encode ([
+				netstring.netstrings_encode (i) 
+				for i in cPickle.loads (stored).items ()
 				])
-			self.select_trigger (
-				lambda p=self.pns_peer, m=bounce:
-				p.pns_tcp_continue (m, '_')
-				)
-		self.select_trigger (
-			lambda p=self.pns_peer, m=model:
-			p.pns_tcp_continue (m, '.')
-			)
+			self.select_trigger ((
+				self.pns_peer.pns_tcp_continue,
+				(bounce, '_')
+				))
+		self.select_trigger ((
+			self.pns_peer.pns_tcp_continue, (model, '.')
+			))
 		#
 		# why not do anonymous answers too? well, the only use
 		# for such syntax would be to find the context for a
@@ -137,7 +156,7 @@ class PNS_persistence (Thread_loop):
 		# question.
 		
 	def pns_statement (self, model):
-		dissent, stored = self.pns_persistent (model)
+		dissent, stored = self.pns_resolve (model)
 		if dissent:
 			if stored:
 				# bounce any persistent statement stored
@@ -146,25 +165,25 @@ class PNS_persistence (Thread_loop):
 				#
 		          	bounce = model[:5]
 		          	bounce[2] = stored
-				self.select_trigger (
-					lambda p=self.pns_peer, m=bounce:
-					p.pns_tcp_continue (m, '_')
-					)
+				self.select_trigger ((
+					self.pns_peer.pns_tcp_continue,
+					(bounce, '_')
+					))
 			# let the peer continue this statement, try to relay
 			# or route it to a subscribed context
 			#
-			self.select_trigger (
-				lambda p=self.pns_peer, m=model:
-				p.pns_statement_continue (m)
-				)
+			self.select_trigger ((
+				self.pns_peer.pns_statement_continue, 
+				(model,)
+				))
 		else:
 			# redundant statement, echo request handling to the
 			# user agent.
 			#
-			self.select_trigger (
-				lambda p=self.pns_peer, m=model:
-				p.pns_tcp_continue (m, '.')
-				)
+			self.select_trigger ((
+				self.pns_peer.pns_tcp_continue,
+				(model, '.')
+				))
 
 	# PNS/UDP circle
 
@@ -172,18 +191,17 @@ class PNS_persistence (Thread_loop):
 		# bounce back a persistent protocol answer to the peer
 		#
 		encoded = '%d:%s,0:,' % (len (name), name)
-		dissent, left = self.pns_persistent (
+		dissent, left = self.pns_resolve (
 			(name, '', '', name)
 			)
 		if dissent and left:
 			encoded += '%d:%s,' % (len (left), left)
 		else:
 			encoded += '0:,'
-		self.select_trigger (
-			lambda
-			p=self.pns_peer, n=name, d=encoded, a=addr:
-			p.pns_pirp_continue (n, d, a)
-			)
+		self.select_trigger ((
+			self.pns_peer.pns_pirp_continue,
+			(name, encoded, addr)
+			))
 		#
 		# this is PIRP, restricted to PNS/UDP protocol questions.
 
@@ -192,43 +210,62 @@ class PNS_persistence (Thread_loop):
 		# route a protocol question
 		#
 		model = [name, '', '', name]
-		dissent, left = self.pns_persistent (model)
+		dissent, left = self.pns_resolve (model)
 		if left == None:
-			self.select_trigger (
-				lambda p=self.pns_peer, m=model:
-				p.pns_semantic.pns_statement (m)
-				)
+			self.select_trigger ((
+				self.pns_peer.pns_inference.pns_statement,
+				(model,)
+				))
 			return
 			
-		self.select_trigger (
-			lambda p=self.pns_peer, n=name, l=left:
-			p.pns_join_continue (n, l)
-			)
-
+		self.select_trigger ((
+			self.pns_peer.pns_join_continue, (name, left)
+			))
+			
 	def pns_question (self, model):
 		# check persistence, bounce answer and route dissent
-		dissent, stored = self.pns_persistent (model)
+		dissent, stored = self.pns_resolve (model)
 		if dissent:
 			if stored:
 				bounce = model[:]
 				bounce[2] = stored
-				self.select_trigger (
-					lambda p=self.pns_peer, m=bounce:
-					p.pns_statement_continue (m)
-					)
-			self.select_trigger (
-				lambda p=self.pns_peer, m=model:
-				p.pns_semantic.pns_statement (m)
-				)
+				self.select_trigger ((
+					self.pns_peer.pns_statement_continue,
+					(bounce,)
+					))
+			self.select_trigger ((
+				self.pns_peer.pns_inference.pns_statement,
+				(model,)
+				))
 			
 	def pns_answer (self, model):
-		dissent, stored = self.pns_persistent (model)
+		dissent, stored = self.pns_resolve (model)
 		if dissent:
-			self.select_trigger (
-				lambda p=self.pns_peer, m=model:
-				p.pns_semantic.pns_statement (m)
-				)			
+			self.select_trigger ((
+				self.pns_peer.pns_inference.pns_statement,
+				(model,)
+				))		
+	
+	# asynchronous interfaces
 		
+        def pns_tcp_anonymous (self, *args):
+        	self.thread_loop_queue ((self.pns_anonymous, args))
+                
+	def pns_tcp_statement (self, *args):
+        	self.thread_loop_queue ((self.pns_statement, args))
+		
+	def pns_udp_pirp (self, *args):
+		self.thread_loop_queue ((self.pns_pirp, args))
+
+	def pns_udp_out_of_circle (self, *args):
+		self.thread_loop_queue ((self.pns_out_of_circle, args))
+
+	def pns_udp_question (self, *args):
+		self.thread_loop_queue ((self.pns_question, args))
+
+	def pns_udp_answer (self, *args):
+		self.thread_loop_queue ((self.pns_answer, args))
+
 		
 # Note about this implementation
 #

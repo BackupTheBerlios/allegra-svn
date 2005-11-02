@@ -31,12 +31,15 @@ class Async_limit_out:
 
 	def async_limit_send (self):
 		self.send = (
-			lambda data, c=self, s=self.send: c.async_limit_out (s (data))
+			lambda 
+			data, c=self, s=self.send: 
+			c.async_limit_out (s (data))
 			)
 
 	def async_limit_sendto (self):
 		self.sendto = (
-			lambda data, peer, c=self, s=self.sendto:
+			lambda 
+			data, peer, c=self, s=self.sendto:
 			c.async_limit_out (s (data, peer))
 			)
 
@@ -56,7 +59,9 @@ class Async_limit_in:
 
 	def async_limit_recv (self):
 		self.recv = (
-			lambda bytes, c=self, r=self.recv: c.async_limit_in (r (bytes))
+			lambda 
+			bytes, c=self, r=self.recv: 
+			c.async_limit_in (r (bytes))
 			)
 
         def async_limit_from (self, received, peer):
@@ -66,7 +71,9 @@ class Async_limit_in:
 
 	def async_limit_recvfrom (self):
 		self.recvfrom = (
-			lambda c=self, r=self.recvfrom: c.async_limit_from (r ())
+			lambda 
+			c=self, r=self.recvfrom: 
+			c.async_limit_from (r ())
 			)
 
 

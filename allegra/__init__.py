@@ -15,53 +15,76 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"http://laurentszyster.be/blog/allegra/"
-
-__author__ = "Laurent A.V. Szyster <contact@laurentszyster.be>"
-
-# Table of Content
+__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
 
 __all__ = [
-
-        # Introduction
-
-        # 'async_core', 'async_chat', 
-        
-        # Part I - Asynchronous Internet Peer Programming
-        
-        'netstring', 'loginfo', 'async_loop', 'finalization', 'fifo', 
-        'select_trigger', 'thread_loop', 'sync_stdio', 'synchronizer',
-        'timeouts', 'async_limits', 
-        'udp_channel', 'tcp_client', 'tcp_server', 
+        'netstring', 'prompt', 'loginfo', 
+        'async_loop', 'finalization', 'fifo', 
+        'select_trigger', 'thread_loop', 'sync_stdio', 'synchronizer', 
+        'udp_channel', 'timeouts', 
+        'async_limits', 'tcp_client', 'tcp_server',
         'collector', 'producer', 'reactor', 
-        
-        # Part II - Major Internet Application Protocols
-        
-        'xml_dom','xml_unicode', 'xml_utf8', # 'xml_collector',
-        'mime_collector', 'mime_producer', 'http_collector',
         'dns_client', 'tcp_pipeline', 
-        'http_client', # 'smtp_client', 'pop_client', 'nnrp_client', 
-        'http_server', # 'smtp_server', 
-        
-        # Part III - The Public Name System
-        
-        'pns_peer', 'pns_model', 
-        'pns_tcp', 'pns_persistence', 'pns_semantic', 'pns_udp',
+        'mime_collector', 'mime_producer', 'mime_reactor',
+        'smtp_client', 'pop_client', 'nnrp_client', 
+        'http_collector', 'http_client', 'http_server', 
+        'xml_dom', 'xml_unicode', 'xml_utf8', 'xml_reactor',
+        'pns_model', 'pns_sat', 'pns_xml', 'pns_mime',
+        'pns_tcp', 'pns_resolution', 'pns_inference', 'pns_udp', 
+        'pns_peer', 
         'pns_client', 'pns_articulator', 
-        'pns_sat', 'pns_xml', # 'pns_mime',
-        
-        # Part IV - PRESTo, The First Semantic Web Peer
-        
-        'presto', 
-        'presto_http', 'presto_prompt', 'presto_bsddb', 'presto_pns', 
-        
-        # Part V - Allegra, The Last DNS Application.
-
-        # 'dns_peer'
-        
+        'presto', 'presto_http', 
+        'presto_prompt', 'presto_bsddb', 'presto_pns', 
+        'dns_peer'
         ]
-        
-        
+
+# Table Of Content
+#
+# Introduction
+#        
+#        asyncore, asynchat, 
+#
+# Part I - Allegra's Core
+#        
+#        netstring, prompt, loginfo, async_loop, finalization, fifo, 
+#        select_trigger, thread_loop, synchronizer, sync_stdio, 
+#        
+#        udp_channel, timeouts, async_limits, tcp_client, tcp_server,
+#        collector, producer, reactor, 
+#        
+# Part II - The Web Stack: DNS, MIME, HTTP and XML protocols
+#        
+#        dns_client, tcp_pipeline, 
+#        mime_collector, mime_producer, mime_reactor,
+#        smtp_client, pop_client, nnrp_client, 
+#
+#        http_collector, http_client, http_server, 
+#        xml_dom, xml_unicode, xml_utf8, xml_reactor,
+#        
+# Part III - The Semantic Stack: PNS peer, client and articulators
+#        
+#        pns_model, pns_sat, 
+#        pns_tcp, pns_resolution, pns_inference, pns_udp, pns_peer, 
+#        pns_client, pns_articulator, 
+#        pns_xml, pns_mime
+#        
+# Part IV - The First Semantic Web Peer
+#        
+#        presto, presto_http, 
+#        presto_prompt, presto_bsddb, presto_pns, 
+#        
+# Part V - The Last DNS Application.
+#        
+#        dns_peer
+#
+# Conclusion
+#
+#        allegra_presto
+#
+# an asynchronously distributed PNS/XML web of component instances!
+#
+
+
 # Note about This Implementation
 #
 #
@@ -100,23 +123,20 @@ __all__ = [
 # in hand crafted C code, full support for BSDDB fine tuning, etc.
 #
 #
-# Measure twice, Cut Once.
+# Like all carpenters, tailors and shoemakers use to say:
 #
-# Modules in Allegra are designed as levers of the same magnitude in force
-# and size (in numbers of lines) and that are effectively applied to more 
-# than one other module and/or application. I have no special interest
-# in an orthogonal API, but rather in a practical one. Eventually, this
-# "measure twice and cut once" approach pays off, and I tried to allways
-# validating an API with at least two applications.
+#  "Measure twice, cut once."
 #
-# The result is an practically orthogonal library. Allegra is effectively
+# So I tried to allways validating each API with at least two applications.
+#
+# The result is a practically orthogonal library. Allegra is successfully
 # applied to develop such diverse software as an innovative metabase peer, 
 # a powerfull HTTP/1.1 peer and semantic application components that 
 # integrate multiprotocol asynchronous networking with synchronized system 
 # and database functions.
 #
-# Like all carpenters, tailors and shoemakers use to say:
-#
-#  "Measure twice, cut once."
-#
-# This is why Allegra comes with more than one test case for API.
+# Modules in Allegra are designed as levers of the same magnitude in force
+# and size (in numbers of lines), that are effectively applied to more 
+# than one other module and/or application.
+#        
+#        

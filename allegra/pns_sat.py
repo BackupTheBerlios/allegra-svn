@@ -87,7 +87,9 @@ def pns_sat_utf8 (
         
 def sat_articulators_re (articulators):
         return re.compile (
-                '(?:^|\\s+)(?:(?:%s))(?:$|\\s+)' % ')|(?:'.join (articulators)
+                '(?:^|\\s+)'
+                '(?:(?:%s))'
+                '(?:$|\\s+)' % ')|(?:'.join (articulators)
                 )
 
 # English linguists have mercy! Here's a frenchspeaker coding ...
@@ -108,21 +110,19 @@ SAT_ARTICULATE_EN = (
                 )),
         # Subordinating Conjunctions
         sat_articulators_re ((
-                'after', 'although', 'as', 'as\\s+if', 'as\\s+long\\s+as',
-                'as\\s+though', 'because', 'before', 'even\\s+if', 
-                'even\\s+though', 'if', 'if\\s+only', 'in\\s+order\\s+ that', 
-                'now\\s+that', 'once', 'rather\\s+than', 'since', 'so\\s+that', 
-                'than', 'that', 'though', 'till', 'unless', 'until', 'when', 
+                'after', 'although', 'because', 'before', 
+                'once', 'since', 'though', 'till', 'unless', 'until', 'when', 
                 'whenever', 'where', 'whereas', 'wherever', 'while', 
+                'as\\s+if', 'as\\s+long\\s+as', 'as\\s+though', 'as', 
+                'even\\s+though', 'even\\s+if', 'if\\s+only', 'if', 
+                'in\\s+order\\s+that', 'now\\s+that', 'so\\s+that', 'that', 
+                'rather\\s+than', 'than', 
                 )), 
-        # Coordinating Conjunctions
+        # Coordinating and Correlative Conjunctions
         sat_articulators_re ((
                 'and', 'but', 'or', 'yet', 'for', 'nor', 'so',
-                )),
-        # Correlative Conjunctions
-        sat_articulators_re ((
                 'both', 'not\\s+only', 'but\\s+also', 'either', 'neither', 
-                'nor', 'whether', 
+                'whether', 
                 )), 
         # Prepositions: Locators in Time and Place
         sat_articulators_re ((
@@ -132,6 +132,8 @@ SAT_ARTICULATE_EN = (
         sat_articulators_re ((
                 'a', 'an', 'the', 
                 )),
+        # Noun (Upper case, like "D.J. Bernstein" or "RDF")
+        re.compile ('((?:[A-Z]+[^\\s]*?\\s+)+)')
         # whitespaces
         re.compile ('\\s'), 
         # all sorts of hyphens 
@@ -183,13 +185,16 @@ def pns_sat_chunk (
         articulators=SAT_ARTICULATE_EN, CHUNK=507,
         whitespaces=SAT_STRIP_UTF8
         ):
+        # move down the stack of regexp until ...
         while articulators[depth].search (articulated) == None:
                 depth += 1
                 if depth < len (articulators):
                         continue
                 
+                # ... the end.
                 return articulated
 
+        # ... until an articulation is found.
         if depth+1 < len (articulators):
                 if len (articulated) > CHUNK:
                         for text in articulators[depth].split (articulated):

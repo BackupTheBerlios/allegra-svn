@@ -17,61 +17,59 @@
 
 ""
 
-# TODO: rename as pns_inference.py
+import glob, bsddb
 
-from glob import glob
-from bsddb import db
-
-NULL_SET = set ()
-
-from allegra.loginfo import Loginfo
-from allegra.thread_loop import Thread_loop
-from allegra.netstring import netstrings_decode, netstrings_encode
-from allegra.pns_model import pns_name
+from allegra import netstring, thread_loop, pns_model
 
 
-class PNS_semantic (Thread_loop):
+NULL_SET = frozenset ()
+
+class PNS_inference (thread_loop.Thread_loop):
         
         pns_horizon = 126
 
         def __init__ (self, pns_peer):
 		self.pns_peer = pns_peer
                 self.pns_root = pns_peer.pns_root
-		Thread_loop.__init__ (self)
+		thread_loop.Thread_loop.__init__ (self)
                 self.start ()
 
 	def __repr__ (self):
-		return '<semantic/>'
+		return 'pns_inference'
 
 	def thread_loop_init (self):
 		try:
-			self.pns_routes = db.DB ()
-                        if glob (self.pns_root + '/routes.db'):
+			self.pns_routes = bsddb.db.DB ()
+                        if glob.glob (self.pns_root + '/contexts.db'):
                                 self.pns_routes.open (
-                                        self.pns_root + '/routes.db'
+                                        self.pns_root + '/contexts.db'
                                         )
                         else:
                                 self.pns_routes.open (
-				        self.pns_root + '/routes.db',
-                                        dbtype=db.DB_HASH,
-                                        flags=db.DB_CREATE
+				        self.pns_root + '/contexts.db',
+                                        dbtype=bsddb.db.DB_HASH,
+                                        flags=bsddb.db.DB_CREATE
 				        )
-			self.pns_index = db.DB ()
-                        if glob (self.pns_root + '/index.db'):
+			self.pns_index = bsddb.db.DB ()
+                        if glob.glob (self.pns_root + '/names.db'):
                                 self.pns_index.open (
-                                        self.pns_root + '/index.db'
+                                        self.pns_root + '/names.db'
                                         )
                         else:
                                 self.pns_index.open (
-				        self.pns_root + '/index.db',
-                                        dbtype=db.DB_HASH,
-                                        flags=db.DB_CREATE
+				        self.pns_root + '/names.db',
+                                        dbtype=bsddb.db.DB_HASH,
+                                        flags=bsddb.db.DB_CREATE
 				        )
 		except:
-                        self.loginfo_traceback ()
+                        self.select_trigger_traceback ()
+                        return False
+                        
                 else:
-                        assert None == self.log ('<open/>', '')
-                        return 1
+                        assert None == self.select_trigger_log (
+                                'open', 'debug'
+                                )
+                        return True
                         
 	def thread_loop_delete (self):
                 try:
@@ -80,14 +78,17 @@ class PNS_semantic (Thread_loop):
                         if self.pns_index != None:
                                 self.pns_index.close ()
                 except:
-                        self.loginfo_traceback ()
+                        self.select_trigger_traceback ()
                 else:
                         del self.pns_routes, self.pns_index
-                        assert None == self.log ('<close/>', '')
-		self.select_trigger (
-			self.pns_peer.pns_semantic_finalize
-			)
+                        assert None == self.select_trigger_log (
+                                'close', 'debug'
+                                )
+		self.select_trigger ((
+			self.pns_peer.pns_inference_finalize, ()
+			))
 		del self.pns_peer
+                return True
 
         # in order to understand the code vs. the specifications, I'll go
         # backward and start with what happens last for a directed quatuor
@@ -99,12 +100,9 @@ class PNS_semantic (Thread_loop):
         # ... Building The Semantic Graph: Map and Index
 
         def pns_map (self, model):
-                self.thread_loop_queue.push (
-                        lambda
-                        m=self.pns_map_graph,
-                        s=model[0], c=model[3]:
-                        m (s, c)
-                        )
+                self.thread_loop_queue ((
+                        self.pns_map_graph, (model[0], model[3])
+                        ))
 
         # >>>
 
@@ -144,7 +142,7 @@ class PNS_semantic (Thread_loop):
 
         def pns_map_names (self, index):
                 # index a sequence of names to the index
-                names = netstrings_decode (index)
+                names = netstring.netstrings_decode (index)
                 if len (names) == 1:
                         return
                         
@@ -160,7 +158,7 @@ class PNS_semantic (Thread_loop):
                                 ):
                                 # update an entry with a new index
                                 horizon = set ()
-                                stored = pns_name (
+                                stored = pns_model.pns_name (
                                         index + stored[:-1], horizon
                                         )
                                 if len (horizon) < self.pns_horizon:
@@ -182,28 +180,25 @@ class PNS_semantic (Thread_loop):
                                 # contexts (and not implement that common walk
                                 # into the client, but rather articulate it).
                                 #
-                                contexts = set (netstrings_decode (model[2]))
-                                self.thread_loop_queue.push (
-                                        lambda
-                                        m=self.pns_walk_simplest,
-                                        q=model,
-                                        d=contexts:
-                                        m (q, d)
+                                contexts = set (
+                                        netstring.netstrings_buffer (model[2])
                                         )
+                                self.thread_loop_queue ((
+                                        self.pns_walk_simplest,
+                                        (model, contexts)
+                                        ))
                                 return
 
                         # walk down the contexts once, in all contexts
-                        self.thread_loop_queue.push (
-                                lambda
-                                m=self.pns_command_predicate, q=model:
-                                m (q)
-                                )
+                        self.thread_loop_queue ((
+                                self.pns_command_predicate, (model,)
+                                ))
                         return
 
                 # walk up the names once, for in contexts
-                self.thread_loop_queue.push (
-                        lambda m=self.pns_command_object, q=model: m (q)
-                        )
+                self.thread_loop_queue ((
+                        self.pns_command_object, (model,)
+                        ))
 
         # >>> Commands
         
@@ -212,11 +207,9 @@ class PNS_semantic (Thread_loop):
                 stored = self.pns_routes.get (model[1])
                 if stored:
                         model[3] = stored[:-1]                        
-                self.select_trigger (
-                        lambda
-                        m=self.pns_peer, q=model, d='_':
-                        m.pns_tcp_continue (q, d)
-                        )
+                self.select_trigger ((
+                        self.pns_peer.pns_tcp_continue, (model, '_')
+                        ))
 
         def pns_command_object (self, model):
                 # return the index for the subject submitted
@@ -225,17 +218,15 @@ class PNS_semantic (Thread_loop):
                         # return only indexes beyond the peer's horizon, not
                         # those behind.
                         model[3] = stored[:-1]
-                self.select_trigger (
-                        lambda
-                        m=self.pns_peer, q=model, d='_':
-                        m.pns_tcp_continue (q, d)
-                        )
+                self.select_trigger ((
+                        self.pns_peer.pns_tcp_continue, (model, '_')
+                        ))
                 return
 
         # ... Statements
                       
         def pns_statement (self, model):
-                # Named PNS/TCP or PNS/UDP
+                # PNS/TCP or PNS/UDP statement
                 if model[1]:
                         # non-protocol, routes to subscribed circles
                         contexts = set (
@@ -248,13 +239,9 @@ class PNS_semantic (Thread_loop):
                                 self.pns_peer.pns_udp.pns_joined.values ()
                                 ])      
                 # ... route >>>
-                self.thread_loop_queue.push (
-                        lambda
-                        m=self.pns_walk_simplest,
-                        q=model,
-                        d=contexts:
-                        m (q, d)
-                        )
+                self.thread_loop_queue ((
+                        self.pns_walk_simplest, (model, contexts)
+                        ))
 
         # >>> The Semantic Walk
                                 
@@ -272,22 +259,18 @@ class PNS_semantic (Thread_loop):
                         self.pns_walk_out (model, routes)
                         return
                         
-                names = netstrings_decode (subject)
-                self.thread_loop_queue.push (
-                        lambda
-                        m=self.pns_walk_simple,
-                        q=model,
-                        d=contexts,
-                        w=walked,
-                        r=routes,
-                        n=names:
-                        m (q, d, w, r, n)
-                        ) # thread loop the simple case >>>
+                names = netstring.netstrings_decode (subject)
+                self.thread_loop_queue ((
+                        self.pns_walk_simple,
+                        (model, contexts, walked, routes, names)
+                        ))
                         
 	def pns_walk_down (self, name, contexts):
                 stored = self.pns_routes.get (name)
                 if stored and (ord (stored[-1]) < self.pns_horizon):
-		        return contexts & set (netstrings_decode (stored))
+		        return contexts & set (
+                                netstring.netstrings_buffer (stored)
+                                )
                 
                 return NULL_SET
                         
@@ -296,9 +279,9 @@ class PNS_semantic (Thread_loop):
                 for name in names:
                         stored = self.pns_index.get (name)
                         if stored and (ord (stored[-1]) < self.pns_horizon):
-                                for n in (set (
-                                        netstrings_decode (stored[:-1])
-                                        ) - walked):
+                                for n in (set (netstring.netstrings_buffer (
+                                        stored[:-1]
+                                        )) - walked):
                                         index.setdefault (
                                                 n, set()
                                                 ).add (name)
@@ -307,12 +290,12 @@ class PNS_semantic (Thread_loop):
 	def pns_walk_simple (
                 self, model, contexts, walked, routes, names
                 ):
-                assert None == self.log (
+                assert None == self.select_trigger_log (
                         '<walk-simple horizon="%d" walked="%d"/>'
                         '<![CDATA[%s]]!>' % (
                                 len (names), len (walked),
-                                netstrings_encode (model)
-                                ), ''
+                                netstring.netstrings_encode (model)
+                                ), 'debug'
                         )
                 for name in names:
                         if name in walked:
@@ -336,32 +319,27 @@ class PNS_semantic (Thread_loop):
                         return
                         
                 names = [r[1] for r in pns_weight_names (names)]
-                self.thread_loop_queue.push (
-		        lambda
-                        m=self.pns_walk_simple,
-                        q=model,
-                        d=contexts,
-                        w=walked,
-                        r=routes,
-                        n=names:
-                        m (q, d, w, r, n)
-			)  # >>> do another simple step 
+                self.thread_loop_queue ((
+		        self.pns_walk_simple,
+                        (model, contexts, walked, routes, names)
+			))  # >>> do another simple step 
 
         def pns_walk_out (self, model, routes):
                 # continue the commands, drop the statements
                 routes = pns_weight_routes (routes)
-                assert None == self.log (
+                assert None == self.select_trigger_log (
                         '<walk-out routes="%d"/>'
                         '<![CDATA[%s]]!><![CDATA[%s]]!>' % (
                                 len (routes),
-                                netstrings_encode (model),
-                                netstrings_encode ([r[1] for r in routes])
+                                netstring.netstrings_encode (model),
+                                netstring.netstrings_encode (
+                                        [r[1] for r in routes]
+                                        )
                                 ), ''
                         )
-                self.select_trigger (
-                        lambda p=self, q=model, r=routes:
-                        p.pns_walk_continue (q, r)
-                        )
+                self.select_trigger ((
+                        self.pns_walk_continue, (model, routes)
+                        ))
 
         # ... PNS/Semantic walker asynchronous continuation
 
@@ -373,8 +351,11 @@ class PNS_semantic (Thread_loop):
                 if model[0] == '':
                         # user command, send response to the PNS/TCP session
                         # as an ordered set of contexts and related names.
-                        model[3] = netstrings_encode ([
-                                '%d:%s,%s' % (len (c), c, netstrings_encode (n))
+                        model[3] = netstring.netstrings_encode ([
+                                '%d:%s,%s' % (
+                                        len (c), c, 
+                                        netstring.netstrings_encode (n)
+                                        )
                                 for w, c, n in routes
                                 ])
                         self.pns_peer.pns_tcp_continue (model, '_')

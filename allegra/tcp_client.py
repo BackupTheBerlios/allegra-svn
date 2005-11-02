@@ -17,38 +17,36 @@
 
 ""
 
-import sys, socket
+import sys, socket, time, asynchat
 
-from time import time
-from asynchat import async_chat as Async_chat
-
-from allegra import async_loop
-from allegra.loginfo import Loginfo
+from allegra import loginfo, async_loop
 
 
-class TCP_client_channel (Async_chat, Loginfo):
+class TCP_client_channel (loginfo.Loginfo, asynchat.async_chat):
 
 	tcp_connect_timeout = 10 # a ten seconds timeout for connection
 
 	def __init__ (self, terminator=None):
-		Async_chat.__init__ (self)
+		asynchat.async_chat.__init__ (self)
 		if terminator:
 			self.set_terminator (terminator)
 
 	def __repr__ (self):
 		return '<tcp-client-channel id="%x"/>' % id (self)
 
-	log = Loginfo.loginfo_log
+	# take precedence over the asyncore dispatcher logging facility
+	#
+	log = log_info = loginfo.Loginfo.loginfo_log
 
 	def close (self):
-		assert None == self.log ('<close/>', '')
+		assert None == self.log ('close', 'debug')
 		self.del_channel ()
 		self.socket.close ()
 		self.connected = 0
 		self.closing = 1
 
         def handle_error (self):
-		assert None == self.log ('<handle-error/>', '')
+		assert None == self.log ('handle_error', 'debug')
                 t, v = sys.exc_info ()[:2]
                 if t is SystemExit:
                         raise t, v # don't catch SystemExit!
@@ -61,20 +59,17 @@ class TCP_client_channel (Async_chat, Loginfo):
         #       self.close ()
 
         def handle_close (self):
-		assert None == self.log ('<handle-close/>', '')
+		assert None == self.log ('handle_close', 'debug')
 		self.close ()
 			
 	def handle_connect (self):
-		assert None == self.log ('<handle-connected/>', '')
+		assert None == self.log ('handle_connected', 'debug')
 
 	def collect_incoming_data (self, data):
-		assert None == self.log (
-			'<collect bytes="%d"/>'
-			'<![CDATA[%s]]!>' % (len (data), data), ''
-			)
+		assert None == self.log (data, 'debug')
 			
 	def found_terminator (self):
-		assert None == self.log ('<terminator/>', '')
+		assert None == self.log ('found_terminator', 'debug')
 		
         def tcp_connect (self, addr):
 		if self.connected:
@@ -87,12 +82,9 @@ class TCP_client_channel (Async_chat, Loginfo):
 			self.loginfo_traceback ()
 			return False
 			
-		assert None == self.log (
-			'<connect ip="%s" port="%d" '
-			'/>' % addr, ''
-			)
-		async_loop.async_defer (
-			time () + self.tcp_connect_timeout,
+		assert None == self.log ('connect %s %d' % addr, 'debug')
+		async_loop.async_schedule (
+			time.time () + self.tcp_connect_timeout,
 			self.tcp_timeout
 			)
 		return True
@@ -100,8 +92,8 @@ class TCP_client_channel (Async_chat, Loginfo):
 	def tcp_timeout (self, when):
 		if not (self.connected or self.closing):
 			assert None == self.log (
-				'<connect-timeout timeout="%r" '
-				'/>' % self.tcp_connect_timeout, ''
+				'connect_timeout'
+				' %d' % self.tcp_connect_timeout, 'debug'
 				)
 			self.close ()
 			
@@ -132,8 +124,8 @@ class TCP_client_limit (TCP_client_channel, Async_limit_in, Async_limit_out):
 				
 		if not self.closing:
 			assert None == self.log (
-				'<connect-timeout timeout="%r" '
-				'/>' % self.tcp_connect_timeout, ''
+				'connect_timeout'
+				' %d' % self.tcp_connect_timeout, 'debug'
 				)
 			self.handle_close ()
 
@@ -141,7 +133,7 @@ class TCP_client_limit (TCP_client_channel, Async_limit_in, Async_limit_out):
 		if not self.closing and self.connected and (
 			when - max (self.async_when_in, self.async_when_out)
 			) > self.tcp_inactive_timeout:
-			assert None == self.log ('<inactive/>', '')
+			assert None == self.log ('inactive', 'debug')
 			self.close ()
 
 		return when + self.tcp_defer_precision, self.tcp_client_defer

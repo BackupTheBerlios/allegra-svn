@@ -17,30 +17,30 @@
 
 ""
 
-from allegra.finalization import Finalization
-from allegra.thread_loop import Thread_loop, Select_trigger
+from allegra import finalization, select_trigger, thread_loop 
 
 
-class Synchronizer (Select_trigger):
+class Synchronizer (select_trigger.Select_trigger):
 
         def __init__ (self):
-        	Select_trigger.__init__ (self)
+        	select_trigger.Select_trigger.__init__ (self)
 		self.synchronized_thread_loops = []
 		self.synchronized_instance_count = []
                 self.synchronized_count = 0
 
 	def __repr__ (self):
-		return '<synchronizer/>'
+		return '<synchronizer pid="%x" count="%d"/>' % (
+                        id (self), self.synchronized_count
+                        )
 
-	synchronizer_size = 4 # test for optimum on each OS
+	synchronizer_size = 4 # your mileage may vary ...
 
 	def synchronizer_append (self):
-		assert None == self.select_trigger.log (
-			'<append count="%d"/>'  % len (
-				self.synchronized_thread_loops
-				)
-			)
-		new_thread = Thread_loop ()
+		assert None == self.log (
+                        'append %d' % len (self.synchronized_thread_loops), 
+                        'synchronizer'
+                        )
+		new_thread = thread_loop.Thread_loop ()
 		new_thread.thread_loop_queue.synchronizer_index = len (
 			self.synchronized_thread_loops
 			)
@@ -62,9 +62,7 @@ class Synchronizer (Select_trigger):
 			].thread_loop_queue
 		self.synchronized_instance_count[index] += 1
                 self.synchronized_count += 1
-		assert None == self.select_trigger.log (
-			'<synchronized/>%r' % instance, ''
-			)
+		assert None == self.log ('%r' % instance, 'synchronized')
 
 	def desynchronize (self, instance):
 		assert hasattr (instance, 'synchronized')
@@ -74,15 +72,16 @@ class Synchronizer (Select_trigger):
                 self.synchronized_count += -1
 		self.synchronized_instance_count[i] += -1
 		if count == 1:
+                        assert None == self.log ('remove %d' % len (
+                                self.synchronized_thread_loops
+                                ), 'synchronizer')
 			self.synchronized_thread_loops[i].thread_loop_stop ()
 			del self.synchronized_thread_loops[i]
 			del self.synchronized_instance_count[i]
-		assert None == self.select_trigger.log (
-			'<desynchronized/>%r' % instance, ''
-			)
+		assert None == self.log ('%r' % instance, 'desynchronized')
 
 
-class Synchronized (Finalization):
+class Synchronized (finalization.Finalization):
         
         synchronizer = None
         
@@ -92,7 +91,14 @@ class Synchronized (Finalization):
                 self.synchronizer.synchronize (self)
                 self.finalization = self.synchronizer.desynchronize
                 
-
+# TODO: add synchronized file and process reactors
+#
+# something like:
+#
+#        fs ('~').read|write ('/name')
+#
+#        ps ('command').stdout|stderr|stdin ()
+#
 # Notes about this implementation
 #
 # The synchronizer is an resizable array of thread loop queues. Synchronized
@@ -123,14 +129,16 @@ class Synchronized (Finalization):
 #
 # Beware!
 #
-# Synchronized methods must be tested separately and that is trivial, because
+# Synchronized methods must be tested separately. Yet it is trivial, because
 # you may either test them asynchronously from within an async_loop host or,
 # since they are synchronous, directly from the Python prompt.
 #
-# My advice is to use synchronized method in two cases: either you don't want
-# to learn asynchronous programming, don't have time for it or perfectly know
-# how to but need to access a blocking API that happens to be thread safe and
-# releases the Python GIL (which means than threading it is faster). Like
+# My advice is to use synchronized method in two cases. Either you don't want
+# to learn asynchronous programming (don't have time for that). Or you know
+# how, but need to access a blocking API that happens to be thread safe and
+# releases the Python GIL.
+#
+# For instance:
 #
 # 	os.open (...).read ()
 #
@@ -138,3 +146,4 @@ class Synchronized (Finalization):
 #
 #	bsddb.db.DB ().open (...)
 #
+# may be blocking and should be synchronized.

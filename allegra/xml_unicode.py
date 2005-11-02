@@ -15,9 +15,9 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-from types import UnicodeType
+import types
 
-from allegra.xml_dom import XML_dom
+from allegra import xml_dom
 
 
 def xml_tag (name):
@@ -27,7 +27,7 @@ def xml_tag (name):
         return name.split (u' ')[1]
 
 def xml_attr (data, encoding='ASCII'):
-        assert type (data) == UnicodeType
+        assert type (data) == types.UnicodeType
         data = data.replace (u"&", u"&amp;")
         data = data.replace (u"'", u"&apos;")
         data = data.replace (u"\"", u"&quot;")
@@ -36,7 +36,7 @@ def xml_attr (data, encoding='ASCII'):
         return data.encode (encoding, 'xmlcharrefreplace')
 
 def xml_cdata (data, encoding='ASCII'):
-        assert type (data) == UnicodeType
+        assert type (data) == types.UnicodeType
         data = data.replace (u"&", u"&amp;")
         data = data.replace (u"<", u"&lt;")
         data = data.replace (u">", u"&gt;")
@@ -164,7 +164,7 @@ def xml_unprefixed (e, xml_attributes='', encoding='ASCII'):
                                                 child.xml_follow, encoding
                                                 )
                         
-                        elif type (child) == UnicodeType:
+                        elif type (child) == types.UnicodeType:
                                 yield xml_cdata (child, encoding)
                                 
                         else:
@@ -212,7 +212,7 @@ def xml_prefixed (e, prefixes, xml_attributes='', encoding='ASCII'):
                                                 child.xml_follow, encoding
                                                 )
                         
-                        elif type (child) == UnicodeType:
+                        elif type (child) == types.UnicodeType:
                                 yield xml_cdata (child, encoding)
                                 
                         else:
@@ -268,7 +268,7 @@ def xml_document (
 
 
 def xml_valid (encoded, prefixes=None, encoding='ASCII'):
-        dom = XML_dom ()
+        dom = xml_dom.XML_dom ()
         dom.xml_parser_reset ()
         root = dom.xml_parse_string (encoded)
         if root:
@@ -296,7 +296,7 @@ if __name__ == '__main__':
         else:
                 encoding = 'ASCII'
         t_parse = allegra_time ()
-        dom = XML_dom ()
+        dom = xml_dom.XML_dom ()
         dom.xml_parser_reset ()
         root = dom.xml_parse_file (sys.stdin)
         t_parsed = allegra_time () - t_parse

@@ -99,28 +99,31 @@ class PRESTo_handler (Loginfo):
                 return reactor.presto_root.http_match (reactor)
 
         def http_continue (self, reactor):
+                # unpack the request's arguments into the reactor's 
+                # presto vector, and set the host and path parameters
+                #
                 method = reactor.http_request[0].upper ()
-                if method == 'GET':
-                        if reactor.http_uri[3] != None:
-                                reactor.presto_vector = presto_decode (
-                                        reactor.http_uri[3][1:], {}
-                                        )
-                        else:
-                                reactor.presto_vector = {}
+                if reactor.http_uri[3] != None:
+                        reactor.presto_vector = presto_decode (
+                                reactor.http_uri[3][1:], {}
+                                )
                 else:
-                        reactor.http_response = 405
-                        reactor.presto_root = reactor.presto_dom = None
-                        return
-                        
+                        reactor.presto_vector = {}
+                reactor.presto_vector[u'presto-host'] = unicode (
+                        reactor.mime_collector_headers.get (
+                                'host', ''
+                                ), 'UTF-8'
+                        )
+                reactor.presto_vector[u'presto-path'] = unicode (
+                        reactor.http_uri[2] or '', 'UTF-8'
+                        )
+                # do the REST of the request ;-)
                 result = presto_rest (reactor, self)
-                if reactor.mime_producer_body == None:
-                        reactor.presto_vector[u'presto-host'] = unicode (
-                                reactor.mime_collector_headers.get ('host', ''),
-                                'UTF-8'
-                                )
-                        reactor.presto_vector[u'presto-path'] = unicode (
-                                reactor.http_uri[2] or '', 'UTF-8'
-                                )
+                if (
+                        reactor.mime_producer_body == None and 
+                        method in ('GET', 'POST')
+                        ):
+                        # if there is no body, supply one PRESTo!
                         if __debug__:
                                 reactor.mime_producer_body = presto_producer (
                                         reactor, result, 'UTF-8',
@@ -133,8 +136,10 @@ class PRESTo_handler (Loginfo):
                         reactor.mime_producer_headers [
                                 'Content-Type'
                                 ] = 'text/xml; charset=UTF-8'
-                        reactor.http_response = 200
-                reactor.presto_root = reactor.presto_dom = None
+                if reactor.http_response == None:
+                        reactor.http_response = 200 # Ok by default
+                #
+                # ? reactor.presto_root = reactor.presto_dom = None
                 #
                 # Note that http_presto.py only supports UTF-8 as encoding
                 # for XML. I don't expect Allegra to be used with something
@@ -144,18 +149,13 @@ class PRESTo_handler (Loginfo):
                 # references).
 
 
-# TODO: add support for POST (URLencoded and MULTIPART) in http_server.py
-#       and reflect changes here.
-
-
 if __name__ == '__main__':
-        import sys
-        sys.stderr.write (
+        assert None == Loginfo.loginfo_logger.log (
                 'Allegra PRESTo'
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0'
-                '\n\n...\n'
                 )
+        import sys
         from allegra import async_loop
         from allegra.http_server import HTTP_server, HTTP_handler
         presto_root = './presto'

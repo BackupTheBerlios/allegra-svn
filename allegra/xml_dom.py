@@ -17,8 +17,8 @@
 
 "my own version of Greg Stein's qp_xml.py original XML object model"
 
-from types import StringTypes
-from weakref import ref
+import weakref
+
 try:
         import pyexpat
 except ImportError:
@@ -31,11 +31,8 @@ class XML_element:
 
         xml_name = u'namespace tag'
         
-        xml_parent = None
-        xml_attributes = None
-        xml_first = None
-        xml_children = None
-        xml_follow = None
+        xml_parent = \
+                xml_attributes = xml_first = xml_children = xml_follow = None
         
         def xml_valid (self, dom):
                 pass # to subclass
@@ -208,7 +205,7 @@ class XML_dom:
                 e = self._curr
                 parent = self._curr = e.xml_parent
                 if parent:
-                        e.xml_parent = ref (parent)
+                        e.xml_parent = weakref.ref (parent)
                         # replace the circular reference by a weak one
                         # making the whole tree dangling from the root
                         # and easy to collect as garbage.

@@ -117,7 +117,7 @@ class PNS_circle (UDP_dispatcher):
 		self.pns_buffer[sp] = model[2]
 		if self.pns_left and self.pns_right:
 			# joined: record as stated, index and relay
-			self.pns_peer.pns_semantic.pns_map (model)
+			self.pns_peer.pns_inference.pns_map (model)
 			self.pns_statements[sp] = model[2]
 			if model[2]:
 				# answer right
@@ -133,7 +133,7 @@ class PNS_circle (UDP_dispatcher):
 		# not relayed
 		if model[3] == self.pns_name:
 			# route named statements that cannot be relayed
-			self.pns_peer.pns_semantic.pns_statement (model[:4])
+			self.pns_peer.pns_inference.pns_statement (model[:4])
 			return
 	
 	def pns_question (self, datagram, peer):
@@ -223,13 +223,8 @@ class PNS_circle (UDP_dispatcher):
 				)
 			return
 			
-		# pass to persistence
-		self.pns_peer.pns_persistence.thread_loop (
-			lambda
-			m=self.pns_peer.pns_persistence.pns_question,
-			q=model:
-			m (q)
-			) # check persistence ...
+		# resolve ...
+		self.pns_peer.pns_resolution.pns_udp_question (model)
 
 	def pns_answer (self, datagram, peer):
 		# handle in-circle and out-of-circle answers
@@ -335,12 +330,8 @@ class PNS_circle (UDP_dispatcher):
 				].pns_protocol_answer (model[2]):
 				return
 				
-		self.pns_peer.pns_persistence.thread_loop (
-			lambda
-			m=self.pns_peer.pns_persistence.pns_answer,
-			q=model:
-			m (q)
-			) # >>> check persistence ...
+		# resolve ...
+		self.pns_peer.pns_resolution.pns_udp_answer (model)
 
 	def pns_timeout (self, sp):
 		if sp == self.PNS_SP:
@@ -384,11 +375,8 @@ class PNS_circle (UDP_dispatcher):
 		self.pns_statements = {}
 		self.pns_buffer = {}
 		self.pns_left = self.pns_right = None
-		self.pns_peer.pns_persistence.thread_loop (
-			lambda
-			p=self.pns_peer,
-			n=self.pns_name:
-			p.pns_persistence.pns_out_of_circle (n)
+		self.pns_peer.pns_resolution.pns_udp_out_of_circle (
+			self.pns_name
 			)
 
 	def pns_join (self, left):
@@ -679,13 +667,10 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 				].pns_joined (peer)
 			return
 			
-		# not subscribed, check persistence for a PIRP answer >>>
+		# not subscribed, resolve a PIRP answer >>>
 		if not self.pns_peers.has_key (peer):
-			self.pns_peer.pns_persistence.thread_loop (
-				lambda
-				m=self.pns_peer.pns_persistence.pns_pirp,
-				n=model[0], p=peer:
-				m (n, p)
+			self.pns_peer.pns_resolution.pns_udp_pirp (
+				model[0], peer
 				)
 
 	def handle_close (self):
@@ -734,60 +719,72 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 				'<![CDATA[%s]]!>' % reference[1], ''
 				)
 
-# Just PNS/UDP with logging stubs for TCP, Persistence and Semantic.
+# Just PNS/UDP with logging stubs for TCP, Resolution and Inference.
 #
 # the fast track for development and implementation of the UDP protocol,
 # then also a nice scriptable test automate. each modules should have
 # one, but only this one is complex enough to require it.
 
 if __name__ == '__main__':
-	import sys
-	sys.stderr.write (
-		'Allegra PNS/UDP - Copyright 2005 Laurent A.V. Szyster\n'
+	from allegra import loginfo, async_loop
+	loginfo.log (
+		'Allegra PNS/UDP'
+		' - Copyright 2005 Laurent A.V. Szyster'
+		' | Copyleft GPL 2.0', 'info'
 		)
-	from allegra import async_loop
-	from allegra.loginfo import Loginfo
-	class PNS_persistence (Loginfo):
+
+	class PNS_resolution (loginfo.Loginfo):
+
 		def __repr__ (self):
-			return '<persistence/>'
-		def thread_loop (self, call):
-			call ()
-		def pns_pirp (self, name, addr):
-			assert None == self.log (
-				'<pirp ip="%s"/>'
-				'<![CDATA[%s]]!>' % (addr[0], name), ''
+			return 'resolution'
+
+		def pns_udp_question (self, model):
+			self.log (
+				netstring.netstrings_encode (model), 
+				'question'
 				)
-		def pns_out_of_circle (self, name):
-			assert None == self.log (
-				'<out-of-circle/><![CDATA[%s]]!>' % name, ''
+
+		def pns_udp_answer (self, model):
+			self.log (
+				netstring.netstrings_encode (model), 
+				'question'
 				)
-	class PNS_semantic (Loginfo):
+
+		def pns_udp_pirp (self, name, addr):
+			self.log (netstring.netstrings_encode ((
+				addr[0], name
+				)), 'pirp')
+
+		def pns_udp_out_of_circle (self, name):
+			self.log (name, 'out-of-circle')
+
+	class PNS_inference (loginfo.Loginfo):
+
 		def __repr__ (self):
-			return '<semantic/>'
+			return 'inference'
+
 		def pns_statement (self, model):
-			assert None == self.log (
-				'<![CDATA[%s]]!'
-				'>' % netstrings_encode (model), ''
-				)
-	class PNS_peer (Loginfo):
+			self.log (netstrings_encode (model), 'statement')
+
+	class PNS_peer (loginfo.Loginfo):
+
 		def __init__ (self, udp_ip):
 			self.pns_name = udp_ip
 			self.pns_sessions = {}
 			self.pns_subscribed = {}
 			self.pns_subscriptions = {}
-			self.pns_persistence = PNS_persistence ()
-			self.pns_semantic = PNS_semantic ()
+			self.pns_resolution = PNS_resolution ()
+			self.pns_inference = PNS_inference ()
 			self.pns_udp = PNS_UDP_peer (self, self.pns_name)
 			self.pns_udp_finalize = self.pns_exit
+
 		def __repr__ (self):
-			return ''
+			return 'pns_peer'
+
 		def pns_subscribe (self, name):
 			# subscribe the peer stub and join
 			if not self.pns_subscribed.has_key (name):
-				assert None == self.log (
-					'<subscribe/>'
-					'<![CDATA[%s]]!>' % name, ''
-					)
+				self.log (name, 'subscribe')
 				self.pns_subscribed[
 					name
 					] = new = self.pns_udp.pns_subscribe (
@@ -796,29 +793,32 @@ if __name__ == '__main__':
 				self.pns_subscriptions[
 					name
 					] = new.pns_subscribers
+
 		def pns_unsubscribe (self, name):
 			# unsubscribe the peer stub and quit
-			assert None == self.log (
-				'<unsubscribe/><![CDATA[%s]]!>' % name, ''
-				)
+			self.log (name, 'unsubscribe')
 			self.pns_subscriptions[name].remove (self)
 			self.pns_subscribed[name].pns_quit ()
 			del self.pns_subscriptions[name]
 			del self.pns_subscribed[name]
+
 		# log PNS/TCP subscription to stdout! so that the log
 		# proper can be saved to a file while debug is echoed
 		# to the console or dropped
-		push = Loginfo.loginfo_log
+		push = loginfo.Loginfo.loginfo_log
+
 		def pns_shutdown (self):
 			self.pns_udp.pns_quit ()
+
 		def pns_exit (self):
-			assert None == self.log ('<quit/>', '')
+			assert None == self.log ('quit', 'debug')
+
 	if '-d' in sys.argv:
 		sys.argv.remove ('-d')
-		from allegra.sync_stdio import Python_prompt
+		from allegra import sync_stdio
 		class PNS_run (PNS_peer):
 			def __init__ (self, udp_ip):
-				self.python_prompt = Python_prompt (
+				self.python_prompt = sync_stdio.Python_prompt (
 					{'pns_peer': self}
 					)
 				self.python_prompt.start ()
@@ -829,10 +829,7 @@ if __name__ == '__main__':
 	else:
 		PNS_run = PNS_peer
 	PNS_run (sys.argv[1])
-	try:
-		async_loop.loop ()
-	except:
-		async_loop.loginfo.loginfo_traceback ()
+	async_loop.loop ()
 		
 # The Longest Modules! PNS/UDP is a nice state machine ;-)
 #

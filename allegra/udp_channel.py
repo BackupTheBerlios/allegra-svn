@@ -17,27 +17,25 @@
 
 ""
 
-import sys
-import socket
-# from errno import ECONNRESET, ENOTCONN, ESHUTDOWN
-from random import random
+import sys, socket, random, asyncore #, errno 
 
-from asyncore import dispatcher as Dispatcher
-from allegra.loginfo import Loginfo
+from allegra import loginfo
 
 
-class UDP_dispatcher (Dispatcher, Loginfo):
+class UDP_dispatcher (asyncore.dispatcher, loginfo.Loginfo):
 
 	udp_datagram_size = 512
 
 	def __init__ (self, ip, port=None):
-		Dispatcher.__init__ (self)
+		asyncore.dispatcher.__init__ (self)
 		self.create_socket (socket.AF_INET, socket.SOCK_DGRAM)
 		# binds a channel to a given ip address, pick a random port
 		# above 8192 if none provided, and handle error.
-		self.addr = ip, port or ((abs (hash (random ())) >> 16) + 8192)
+		self.addr = ip, port or (
+			(abs (hash (random.random ())) >> 16) + 8192
+			)
 		assert None == self.log (
-			'<bind ip="%s" port="%d"/>' % self.addr, ''
+			'<bind ip="%s" port="%d"/>' % self.addr, 'debug'
 			)
 		try:
 			self.bind (self.addr)
@@ -55,11 +53,14 @@ class UDP_dispatcher (Dispatcher, Loginfo):
 	def writable (self):
 		return 0 # UDP protocols are *allways* writable
 
+	# ECONNRESET, ENOTCONN, ESHUTDOWN
+	#
         # catch all socket exceptions for reading and writing, this is UDP
         # and the protocol implementation derived from this dispatcher
-        # should handle error without closing the channel. basically, I don't
-        # know nothing about how UDP sockets behave (less how they do on
-        # various systems ;-)
+        # should handle error without closing the channel.
+	#
+	# basically, I know little about how UDP sockets behave (less how 
+	# they do on various systems ;-)
 
         def sendto (self, data, peer):
 		try:
@@ -78,7 +79,7 @@ class UDP_dispatcher (Dispatcher, Loginfo):
 			return '', None
 
 	def close (self):
-		assert None == self.log ('<close/>', '')
+		assert None == self.log ('<close/>', 'debug')
 		self.del_channel ()
 		self.socket.close ()
 		self.connected = 0
@@ -89,12 +90,13 @@ class UDP_dispatcher (Dispatcher, Loginfo):
 		data, peer = self.recvfrom ()
 		if peer != None:
 			assert None == self.log (
-				'<recvfrom ip="%s" port"%d"/><![CDATA[%s]]!>' % (
+				'<recvfrom ip="%s" port"%d"/>'
+				'<![CDATA[%s]]!>' % (
 					peer[0], peer[1], data
-					), ''
+					), 'debug'
 				)
 		else:
-			assert None == self.log ('<recvfrom/>', '')
+			assert None == self.log ('<recvfrom/>', 'debug')
 
         def handle_error (self):
         	# to subclass
@@ -108,6 +110,6 @@ class UDP_dispatcher (Dispatcher, Loginfo):
 		# to subclass
 		self.close ()
 
-	log = log_info = Loginfo.loginfo_log
+	log = log_info = loginfo.Loginfo.loginfo_log
 
 # TODO: add a UDP pipeline implementation that behaves like asynchat?

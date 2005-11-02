@@ -176,7 +176,7 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster\n'
                 )
         from exceptions import StopIteration
-        from allegra.netstring import netstrings_generator
+        from allegra.netstring import netstrings_pipe
         def benchmark (t, c):
                 t = (time.time () - t)
                 sys.stderr.write ('\n\n%d in %f seconds (%f/sec)\n' % (
@@ -184,7 +184,7 @@ if __name__ == '__main__':
                         ))
         timer = time.time ()
         counter = 0
-        pipe = netstrings_generator (lambda: sys.stdin.read (4096))
+        pipe = netstrings_pipe (lambda: sys.stdin.read (4096))
         while 1:
                 try:
                         encoded = pipe.next ()

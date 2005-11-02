@@ -18,19 +18,17 @@
 ""
 
 from allegra.reactor import Buffer_reactor
-from allegra.collector import Simple_collector
+from allegra.collector import Simple_collector, Length_collector
 
 
 # First a few MIME header parsers, obvious candidate for C implementation
 
 def mime_headers_split (string):
-	# cleanse and split a string of MIME headers into lines
-	#
+	"cleanse and split a string of MIME headers into lines"
 	return string.replace ('\t', ' ').split ('\r\n')
 
 def mime_headers_map (lines):
-	# map a sequence of cleansed MIME header lines into a dictionnary
-	#
+	"map a sequence of cleansed MIME header lines into a dictionnary"
 	headers = {}
         n = None
         v = ''
@@ -84,9 +82,8 @@ def mime_headers_preferences (headers, name):
 	
 
 def mime_headers_value_and_parameters (line):
-        # extract the tuple ('value', {'name'|0..n-1:'parameter'})
-        # from a MIME header line.
-        #
+        """extract the tuple ('value', {'name'|0..n-1:'parameter'}) from a 
+        MIME header line."""
         parameters = {}
         parts = [p.strip () for p in line.split (';')]
         for parameter in parts[1:]:
@@ -101,8 +98,7 @@ def mime_headers_value_and_parameters (line):
         return parts[0], parameters
 
 def mime_headers_get_parameter (line, name):
-	# get the value of a parameter 'name' in a given header line
-	#
+	"get the value of a parameter 'name' in a given header line"
         parts = [p.strip () for p in line.split (';')]
         for parameter in parts[1:]:
                 if parameter.find ('=') > 0:
@@ -119,30 +115,33 @@ def mime_headers_get_parameter (line, name):
 
 class MIME_collector:
 	
-	# A collector implementation for all MIME collectors protocols,
-	# like MULTIPART but also SMTP, HTTP, etc ...
+	"""A collector implementation for all MIME collectors protocols,
+	like MULTIPART but also SMTP, HTTP, etc ..."""
 	
-	collector_is_simple = 0
+	collector_is_simple = False
 	
 	mime_collector_buffer = ''
 	mime_collector_lines = None
 	mime_collector_body = None
 
-	def __init__ (self, headers=None, set_terminator=None):
+	def __init__ (
+		self, headers=None, set_terminator=None, Collector=None
+		):
 		# first maybe attribute another set_terminator method,
 		if set_terminator != None:
 			self.set_terminator = set_terminator
+		self.MIME_collector = Collector or Buffer_reactor
 		if headers == None:
-			# if no headers have been provided, get them by
-			# seting the terminator to '\r\n\r\n'
+			# if no headers have been provided, get them and so
+			# set the terminator to '\r\n\r\n'
+			#
 			self.set_terminator ('\r\n\r\n')
 		else:
-			# or consiser the headers as allready collected and
+			# or consider the headers as allready collected and
 			# immediately set the body collector to the result of
 			# the continuation ...
 			#
 			self.mime_collector_headers = headers
-			self.mime_collector_buffer = ''
 			self.mime_collector_body = \
 				self.mime_collector_continue ()
 		#
@@ -150,8 +149,6 @@ class MIME_collector:
 		# practical application of MULTIPART collector. And it also 
 		# serves decently when mixing with an asynchat channel to
 		# form HTTP or SMTP servers and clients. 
-
-	mime_collector_continue = Buffer_reactor # buffer the mime body
 
 	def collect_incoming_data (self, data):
 		# collect the MIME body or its headers
@@ -178,6 +175,9 @@ class MIME_collector:
 				self.mime_collector_buffer = ''
 				self.set_terminator ('\r\n\r\n')
 
+	def mime_collector_continue (self):
+		return self.MIME_collector ()
+
 	def mime_collector_finalize (self, collector):
 		self.mime_collector_headers = \
 			self.mime_collector_body = \
@@ -186,12 +186,12 @@ class MIME_collector:
 
 class MULTIPART_collector:
 	
-	# This is a complex MIME/MULTIPART collector that collects the parts
-	# encoded in
+	"A recursive MIME/MULTIPART collector wrapper"
 
-	collector_is_simple = 0
+	collector_is_simple = False
 
         def __init__ (self, mime_collector):
+        	self.mime_collector = mime_collector
                 self.multipart_buffer = ''
                 self.multipart_part = None
                 self.multipart_parts = {}
@@ -204,28 +204,12 @@ class MULTIPART_collector:
 		self.set_terminator = mime_collector.set_terminator
 		self.set_terminator (self.multipart_boundary[4:])
 		
-	def multipart_MIME_collector (self, headers):
-		#name = mime_headers_get_parameter (
-		#	headers.setdefault (
-		#		'content-disposition',
-		#		'not available; name="%d"' % len (
-		#			self.multipart_parts
-		#			)
-		#		), 'name'
-		#	)
-		content_type, parameters = mime_headers_value_and_parameters (
-			headers.get ('content-type', 'text/plain')
-			)
-		if content_type == 'mime/multipart':
-			return MULTIPART_collector
-			
-		return MIME_collector
-		
         def multipart_collect (self, data):
 		self.multipart_buffer += data
 
 	def multipart_found_next (self):
 		if self.multipart_buffer == '--':
+			self.set_terminator = self.mime_collector = None
 			return True # end of the mulipart
 		
 		else:
@@ -238,14 +222,31 @@ class MULTIPART_collector:
 		headers = mime_headers_map (
 			mime_headers_split (self.multipart_buffer)
 			)
-		MIME_collector = self.multipart_MIME_collectors (headers)
-		collector = MIME_collector (headers)
-		if not MIME_collector.collector_is_simple:
+		#name = mime_headers_get_parameter (
+		#	headers.setdefault (
+		#		'content-disposition',
+		#		'not available; name="%d"' % len (
+		#			self.multipart_parts
+		#			)
+		#		), 'name'
+		#	)
+		content_type, parameters = mime_headers_value_and_parameters (
+			headers.get ('content-type', 'text/plain')
+			)
+		if content_type == 'mime/multipart':
+			collector = MULTIPART_collector (self)
+		else:
+			collector = MIME_collector (
+				headers, 
+				self.set_terminator,
+				self.mime_collector.mime_collector_continue
+				)
+		if not collector.collector_is_simple:
 			collector = Simple_collector (collector)
 		self.multipart_parts.append (collector)
 		self.collect_incoming_data = collector.collect_incoming_data		
 		self.found_terminator = self.multipart_found_boundary
-		self.set_terminator (self.boundary)
+		self.set_terminator (self.multipart_boundary)
 		return False
 
 	def multipart_found_boundary (self):
@@ -253,3 +254,73 @@ class MULTIPART_collector:
 		self.found_terminator = self.multipart_found_next
 		return False
 
+
+class Chunk_collector:
+
+	"a wrapping collector for chunked transfer encoding"
+
+	collector_is_simple = False
+	
+	chunk_extensions = None
+
+	def __init__ (self, collector, set_terminator, headers=None):
+		"insert a chunked collector between two MIME collectors"
+		self.chunk_collector = collector
+		self.set_terminator = set_terminator
+		self.mime_collector_headers = headers or {}
+		self.collect_incoming_data = self.chunk_collect_size
+		self.chunk_size = ''
+		self.chunk_trailers = None
+		self.chunk_trailer = ''
+		self.set_terminator ('\r\n')
+
+	def chunk_collect_size (self, data):
+		self.chunk_size += data
+
+	def chunk_collect_trailers (self, data):
+		self.chunk_trailer += data
+
+	def found_terminator (self):
+		if self.chunk_size == None:
+			# end of a chunk, get next chunk-size
+			self.set_terminator ('\r\n')
+			self.chunk_size = ''
+			self.collect_incoming_data = self.chunk_collect_size
+			return False # continue ...
+		
+		if self.chunk_size == '0':
+			# last chunk
+			if self.chunk_trailers == None:
+				self.chunk_trailers = []
+				self.collect_incoming_data = \
+					self.chunk_collect_trailers
+				return False # continue ...
+			
+			elif self.chunk_trailer:
+				self.chunk_trailers.append (self.chunk_trailer)
+				self.chunk_trailer = ''
+				return False # continue ...
+			
+			elif self.chunk_trailers:
+				self.mime_collector_headers.update (
+					mime_headers_map (self.chunk_trailers)
+					)
+			self.chunk_collector.found_terminator ()
+			self.set_terminator ('\r\n\r\n')
+			del self.set_terminator
+			return True # final!
+
+		# end of chunk size, collect the chunk with the wrapped 
+		# collector
+		#
+		if self.chunk_size.find (';') > 0:
+			(
+				self.chunk_size, self.chunk_extensions
+				) = self.chunk_size.split (';', 1)
+		self.set_terminator (
+			int (self.chunk_size, 16) + 2
+			)
+		self.chunk_size = None
+		self.collect_incoming_data = \
+			self.chunk_collector.collect_incoming_data
+		return False # continue ...

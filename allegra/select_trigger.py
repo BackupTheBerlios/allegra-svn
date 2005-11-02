@@ -16,21 +16,14 @@
 
 ""
 
-import sys
-import os
-import socket
-import thread
+import sys, os, socket, thread, asyncore
 
-from allegra import async_loop
-from allegra.loginfo import Loginfo
-from allegra.finalization import Finalization
+from allegra import netstring, prompt, loginfo, async_loop, finalization
 
 
 if os.name == 'posix':
 
-	from asyncore import file_dispatcher as File_dispatcher
-
-	class Trigger (File_dispatcher, Loginfo):
+	class Trigger (asyncore.file_dispatcher, loginfo.Loginfo):
 
 		"Wake up a call to select() running in the main thread"
 		
@@ -38,13 +31,13 @@ if os.name == 'posix':
 			self.select_triggers = 0
 			r, w = os.pipe ()
 			self.trigger = w
-			File_dispatcher.__init__ (self, r)
+			asyncore.file_dispatcher.__init__ (self, r)
 			self.lock = thread.allocate_lock ()
 			self.thunks = []
-			assert None == self.log ('<open/>', '')
+			assert None == self.log ('open', 'debug')
 
 		def __repr__ (self):
-			return '<select-trigger/>'
+			return '<select-trigger id="%x"/>' % id (self)
 
 		def __call__ (self, thunk):
 			try:
@@ -67,30 +60,29 @@ if os.name == 'posix':
 			self.recv (8192)
 			try:
 				self.lock.acquire ()
-				for thunk in self.thunks:
-					if thunk == None:
-						self.handle_close ()
-						break
-					
-					try:
-						thunk ()
-					except:
-						self.loginfo_traceback ()
+				thunks = self.thunks
 				self.thunks = []
 			finally:
 				self.lock.release ()
+			for thunk in thunks:
+				if thunk == None:
+					self.handle_close ()
+					break
+				
+				try:
+					thunk[0] (*thunk[1])
+				except:
+					self.loginfo_traceback ()
 				
 		def handle_close (self):
 			self.close ()
-			assert None == self.log ('<close/>', '')
+			assert None == self.log ('close', 'debug')
 
 elif os.name == 'nt':
 
 	# win32-safe version
 
-	from asyncore import dispatcher as Dispatcher
-
-	class Trigger (Dispatcher, Loginfo):
+	class Trigger (asyncore.dispatcher, loginfo.Loginfo):
 
 		address = ('127.9.9.9', 19999)
 
@@ -112,14 +104,14 @@ elif os.name == 'nt':
 			w.setblocking (1)
 			self.trigger = w
 
-			Dispatcher.__init__ (self, r)
+			asyncore.dispatcher.__init__ (self, r)
 			self.lock = thread.allocate_lock ()
 			self.thunks = []
 			self._trigger_connected = 0
-			assert None == self.log ('<open/>', '')
+			assert None == self.log ('open', 'debug')
 
 		def __repr__ (self):
-			return '<select-trigger/>'
+			return '<select-trigger id="%x"/>' % id (self)
 
 		def __call__ (self, thunk):
 			try:
@@ -142,30 +134,31 @@ elif os.name == 'nt':
 			self.recv (8192)
 			try:
 				self.lock.acquire ()
-				for thunk in self.thunks:
-					if thunk == None:
-						self.handle_close ()
-						break
-					
-					try:
-						thunk ()
-					except:
-						self.loginfo_traceback ()
+				thunks = self.thunks
 				self.thunks = []
 			finally:
 				self.lock.release ()
+			for thunk in thunks:
+				if thunk == None:
+					self.handle_close ()
+					break
+				
+				try:
+					thunk[0] (*thunk[1])
+				except:
+					self.loginfo_traceback ()
 
 		def handle_close (self):
 			self.close ()
-			assert None == self.log ('<close/>', '')
+			assert None == self.log ('close', 'debug')
 
 else:
 	raise ImportError ('OS "%s" not supported, sorry :-(' % os.name)
 
-Trigger.log_info = Trigger.log = Loginfo.log
+Trigger.log = Trigger.log_info = loginfo.Loginfo.log
 
 
-class Select_trigger (Loginfo, Finalization):
+class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 
 	select_trigger = None
 
@@ -173,26 +166,34 @@ class Select_trigger (Loginfo, Finalization):
 		if self.select_trigger == None:
 			Select_trigger.select_trigger = Trigger ()
 		self.select_trigger.select_triggers += 1
+		
+	# async_log = loginfo.Loginfo.loginfo_log
 
-	def loginfo_log (self, data, info=None):
-		self.select_trigger (
-			lambda
-			l=self.select_trigger.loginfo_logger,
-			d='%r%s' % (self, data),
-			i=info:
-			l.log (d, i)
-			)
+	def select_trigger_log (self, data, info=None):
+		self.select_trigger ((self.log, (data, info)))
+		
+	def select_trigger_traceback (self):
+		"""return a compact traceback tuple and thunk its log via the
+		select_trigger to the async loop."""
+		ctb = prompt.compact_traceback ()
+		self.select_trigger ((self.loginfo_log, (
+			loginfo.compact_traceback_netstrings (ctb), 
+			'traceback'
+			)))
+		return ctb
 
-	log = loginfo_log
+	# log = loginfo_log
 	
-	def select_trigger_finalized (self, finalized):
-		async_loop.async_finalized.append (
-			lambda s=self.select_trigger, f=finalized:
-			s (f)
-			)
-
 	def finalization (self, finalized):
 		self.select_trigger.select_triggers -= 1
 		if self.select_trigger.select_triggers == 0:
 			self.select_trigger (None)
 		self.select_trigger = None
+
+	#def select_trigger_finalized (self, finalized):
+	#	async_loop.async_finalized.append (
+	#		lambda s=self.select_trigger, f=finalized:
+	#		s (f)
+	#		)
+
+		

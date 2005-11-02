@@ -19,16 +19,13 @@
 
 import time
 
-from allegra import async_loop
-
-from allegra.loginfo import Loginfo
-from allegra.fifo import FIFO_big, FIFO_pipeline
-from allegra.async_limits import Async_limit_in, Async_limit_out
-from allegra.tcp_client import TCP_client_channel
+from allegra import loginfo, async_loop, tcp_client, async_limits, fifo
 
 
 class TCP_pipeline (
-	TCP_client_channel, Async_limit_in, Async_limit_out
+	tcp_client.TCP_client_channel, 
+	async_limits.Async_limit_in, 
+	async_limits.Async_limit_out
 	):
 
 	pipeline_sleeping = False
@@ -36,9 +33,9 @@ class TCP_pipeline (
 	pipeline_inactive = 60	# one minute timeout for inactive pipelines
 
 	def __init__ (self, requests=None, responses=None):
-		self.pipeline_requests = requests or FIFO_big ()
-		self.pipeline_responses = responses or FIFO_big ()
-		TCP_client_channel.__init__ (self)
+		self.pipeline_requests = requests or fifo.FIFO_deque ()
+		self.pipeline_responses = responses or fifo.FIFO_deque ()
+		tcp_client.TCP_client_channel.__init__ (self)
 		self.async_limit_send ()
 		self.async_limit_recv ()
 
@@ -136,7 +133,7 @@ class TCP_pipeline (
 				return self.pipeline_requests
 			
 			else:
-				fifo = FIFO_pipeline ()
+				fifo = fifo.FIFO_pipeline ()
 				fifo.push_fifo (self.pipeline_responses)
 				fifo.push_fifo (self.pipeline_requests)
 				return fifo
@@ -151,7 +148,7 @@ def is_ip (host):
 	except:
 		return False
 
-class TCP_pipeline_cache (Loginfo):
+class TCP_pipeline_cache (loginfo.Loginfo):
 
 	Pipeline = None		# a Pipeline factory to override or subclass
 	
@@ -181,7 +178,7 @@ class TCP_pipeline_cache (Loginfo):
 		if not self.pipeline_cache:
 			# empty cache, defer a recurrent tcp session event
 			assert None == self.log ('<defered-start/>', '')
-			async_loop.async_defer (
+			async_loop.async_schedule (
 				time.time () + self.pipeline_precision,
 				self.pipeline_defer
 				)
@@ -232,7 +229,6 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0\n...\n'
                 )
-        from allegra import async_loop
         try:
         	host, port = sys.argv[1:]
         	addr = (host, int (port))
@@ -245,10 +241,7 @@ if __name__ == '__main__':
         		addr
         		).pipeline_push (
         			)
-        try:
-                async_loop.loop () # ... loop.
-        except:
-                async_loop.loginfo.loginfo_traceback ()
+        async_loop.loop () # ... loop.
 	
 # Note about this implementation
 #

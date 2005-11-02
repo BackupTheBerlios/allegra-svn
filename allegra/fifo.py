@@ -17,149 +17,70 @@
 
 ""
 
-import weakref
+import weakref, collections
 
 
-class FIFO_trunk:
+# The asynchat.py fifo, refactored as "thiner" wrapper and completed
+
+class FIFO_deque:
 	
-	"a fifo to trunk protected queues safely"
-
-	def __repr__ (self): return '<fifo-stop/>'
-
-	def __len__ (self): return 0
-
-	def pop (self): return None
-	
-	def push (self, item): pass
-
-	push_front = push_front_trunk = push
-
-
-class FIFO_small:
-	
-	# TODO: use the asyncore fifo instead.
-
-	"FIFO class for small queues, wrapping a simple list"
+	"FIFO wrapper for a collections.deque instance"
 	
 	def __init__ (self, list=None):
-		self.fifo_list = list or []
-		self.__len__ = self.fifo_list.__len__
-		self.__getitem__ = self.fifo_list.__getitem__
-		self.push = self.fifo_list.append
+		self.fifo_deque = collections.deque (list or [])
+		self.__len__ = self.fifo_deque.__len__
+		self.__getitem__ = self.fifo_deque.__getitem__
+		self.pop = self.fifo_deque.popleft
+		self.push = self.fifo_deque.append
+		self.push_front = self.fifo_deque.appendleft
 		
-	def is_empty (self):
-		return len (self.fifo_list) == 0
-
-	def first (self):
-		return self.fifo_list[0]
-
-	def push_front (self, data):
-		self.fifo_list.insert (0, data)
-
-	def pop (self):
-		return self.fifo_list.pop (0)
-
-
-# Sam Rushing's fifo quick translation of scheme48/big/queue.scm
-	
-class FIFO_big:
-
-	"a fifo class for large queues, implemented with lisp-style pairs."
-
-	def __init__ (self):
-		self.head, self.tail = None, None
-		self.length = 0
-		self.node_cache = None
-		
-	def __len__ (self):
-		return self.length
-
-	def __getitem__ (self, index):
-		if (index < 0) or (index >= self.length):
-			raise IndexError, "index out of range"
-		else:
-			if self.node_cache:
-				j, h = self.node_cache
-				if j == index - 1:
-					result = h[0]
-					self.node_cache = index, h[1]
-					return result
-				else:
-					return self._nth (index)
-			else:
-				return self._nth (index)
-
-	def _nth (self, n):
-		i = n
-		h = self.head
-		while i:
-			h = h[1]
-			i -= 1
-		self.node_cache = n, h[1]
-		return h[0]
+	def __repr__ (self): 
+		return '<fifo-deque queued="%d"/>' % len (self)
 
 	def is_empty (self):
-		return self.length == 0
+		"return True in the FIFO is empty"
+		return len (self.fifo_deque) == 0
 
 	def first (self):
-		if self.head is None:
-			raise ValueError, "first() of an empty queue"
-		else:
-			return self.head[0]
+		"return the first item in the FIFO"
+		return self.fifo_deque[0]
 
-	def push (self, v):
-		self.node_cache = None
-		self.length += 1
-		p = [v, None]
-		if self.head is None:
-			self.head = p
-		else:
-			self.tail[1] = p
-		self.tail = p
 
-	def push_front (self, thing):
-		self.node_cache = None
-		self.length += 1
-		old_head = self.head
-		new_head = [thing, old_head]
-		self.head = new_head
-		if old_head is None:
-			self.tail = new_head
-
-	def pop (self):
-		self.node_cache = None
-		pair = self.head
-		if pair is None:
-			raise ValueError, "pop() from an empty queue"
-		else:
-			self.length -= 1
-			[value, next] = pair
-			self.head = next
-			if next is None:
-				self.tail = None
-			return value
-
+# A variation on the original Output_fifo found in Medusa, refactored to 
+# build or merge pipeline's fifo ...
 
 class FIFO_pipeline:
 	
 	"An embeddable FIFO, usefull to merge diffent fifos into one"
 	
+	fifo_embedded = None
+	
 	def __init__ (self, fifo=None):
-		self.fifo = fifo or FIFO_small ()
-		self.fifo_embedded = None
+		self.fifo = fifo or FIFO_deque ()
+		self.push = fifo.push
+
+	def __repr__ (self): 
+		if self.fifo_embedded == None:
+			return '<fifo-pipeline queued="%d"/>' % len (self)
+		
+		return '<fifo-pipeline embedded="%d"/>' % len (
+			self.fifo_embedded
+			)
 
 	def __len__ (self):
-		# returns the length of the embedding fifo or the current embedded
-		# fifo, not the accurate length of the Output_fifo
-		if self.fifo_embedded is None:
+		"""returns the length of the FIFO queue or the length of
+		the current embedded fifo"""
+		if self.fifo_embedded == None:
 			return len (self.fifo)
 		
 		return len (self.fifo_embedded)
 
 	def is_empty (self):
+		"return True in the FIFO queue is empty"
 		return len (self) == 0
 
 	def first (self):
+		"return the first item in the FIFO queue"
 		if self.fifo_embedded is None:
 			return self.fifo.first ()
 		
@@ -169,22 +90,25 @@ class FIFO_pipeline:
 		self.fifo.push (item)
 
 	def push_fifo (self, fifo):
+		"push an embedded fifo in the FIFO queue"
 		fifo.fifo_parent = weakref.ref (self)
 		self.fifo.push (('FIFO', fifo))
 
 	def push_callable (self, callable):
+		"push a callable in the FIFO queue"
 		self.fifo.push (('CALL', callable))
 
 	def push_eof (self):
+		"push an "
 		self.fifo.push (('EOF', None))
 
 	def pop (self):
-		if self.fifo_embedded is not None:
+		if self.fifo_embedded != None:
 			return self.fifo_embedded.pop ()
 		
 		item = self.fifo.pop ()
 		self.fifo_embedded = None
-		if len (self.fifo):
+		if len (self.fifo) > 0:
 			front = self.fifo.first ()
 			if type (front) is type (()):
 				kind, value = front

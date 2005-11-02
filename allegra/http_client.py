@@ -72,7 +72,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 			reactor.mime_producer_headers[
 				'connection'
 				] = 'Keep-alive'
-		self.http_producer_push (reactor)
+		self.http_producer_continue (reactor)
 		self.initiate_send ()
 
 	def pipeline_wake_up_11 (self):
@@ -96,7 +96,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 			self.http_client_push (reactor)
 		# push the last one, maybe close when done, and iniate send
 		#
-		self.http_producer_push (reactor)
+		self.http_producer_continue (reactor)
 		self.initiate_send ()
 
 	def mime_collector_continue (self):
@@ -142,7 +142,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 	#
 	http_collector_error = TCP_pipeline.handle_close
 
-	def http_producer_push (self, reactor):
+	def http_producer_continue (self, reactor):
 		# push one or two producers in the output fifo ...
 		line = '%s %s HTTP/%s' % (
 			reactor.http_command, 
@@ -174,8 +174,8 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 			else:
 				return
 				#
-				# TODO: add an error condition in s
-				#	elf.http_response or raise an 
+				# TODO: add an error condition in 
+				#	self.http_response or raise an 
 				#	exception?
 
 			self.producer_fifo.push (Simple_producer (
@@ -184,8 +184,6 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 					))
 				))
 			self.producer_fifo.push (reactor.mime_producer_body)
-		#
-		#
 		self.pipeline_responses.push (reactor)
 		#
 		# ready to send.
@@ -202,16 +200,20 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
                 return reactor
 
 	def http_client (self, reactor, instance):
+		# break the circular reference between the reactor and
+		# the channel via the client cache
 		del reactor.__call__
-		#	break the circular reference between the reactor and
-		#	the channel via the client cache
+		# push HEAD, GET, DELETE requests without further process
                 if instance == None:
+                	assert reactor.http_command in (
+                		'HEAD', 'GET', 'DELETE'
+                		)
 	                self.pipeline_push (reactor)
 			return reactor
 
 		assert reactor.http_command in ('POST', 'PUT')
 		if has_attr (instance, 'mime_collector_headers'):
-			# allow to chain MIME reactors
+			# chain MIME reactors
 			reactor.mime_producer_headers.update (
 				instance.mime_collector_headers
 				)
@@ -220,18 +222,14 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 			# accept stallable producers as HTTP body
 			reactor.mime_producer_body = instance
 		elif isinstance (instance, StringTypes):
-			# and accept strings too
-			if len (instance) < 1<<16:
-				reactor.mime_producer_body = \
-					Simple_producer (instance)
-			else:
-				reactor.mime_producer_body = \
-					Composite_producer (instance)
+			# as well as 8-bit and UNICODE strings
+			reactor.mime_producer_body = Simple_producer (instance)
 		else:
 			raise Error (
 				'MIME reactors must be called with a string, '
 				'or a stallable producer as unique argument.'
 				)
+                self.pipeline_push (reactor)
 		return reactor
 		#
 		# return the method bounded instance, so that calling the

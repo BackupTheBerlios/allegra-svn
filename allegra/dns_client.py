@@ -23,9 +23,8 @@
 
 import time
 
-from allegra import async_loop
-from allegra.loginfo import Loginfo
-from allegra.udp_channel import UDP_dispatcher
+from allegra import async_loop, udp_channel
+
 
 # unpack and parse names, ttl and preference from resource DNS records
 
@@ -220,18 +219,18 @@ class DNS_request_MX (DNS_request):
                 return False
                 
         def dns_unpack_end (self):
-                if self.dns_resources:
-                        if len (self.dns_resources) > 1:
-                                self.dns_resources.sort ()
-                                if self.dns_resources[0][0] < self.dns_resources[-1][0]:
-                                        self.dns_resources.reverse ()
-                        self.dns_ttl = self.dns_resources[0][2]
-                        self.dns_resources = tuple ([
-                                rr[1] for rr in self.dns_resources 
-                                ])
-                        return True
-
-                return False
+                if not self.dns_resources:
+                        return False
+                        
+                if len (self.dns_resources) > 1:
+                        self.dns_resources.sort ()
+                        if self.dns_resources[0][0] < self.dns_resources[-1][0]:
+                                self.dns_resources.reverse ()
+                self.dns_ttl = self.dns_resources[0][2]
+                self.dns_resources = tuple ([
+                        rr[1] for rr in self.dns_resources 
+                        ])
+                return True
 
 
 class DNS_request_PTR (DNS_request):
@@ -260,7 +259,7 @@ DNS_requests = {
         }
 
 
-class DNS_client (UDP_dispatcher):
+class DNS_client (udp_channel.UDP_dispatcher):
 
         udp_datagram_size = 512
 
@@ -336,7 +335,7 @@ class DNS_client (UDP_dispatcher):
                 if ip == None:
                         import socket
                         ip = socket.gethostbyname (socket.gethostname ())
-                UDP_dispatcher.__init__ (self, ip)
+                udp_channel.UDP_dispatcher.__init__ (self, ip)
 
         def dns_send (self, request, when):
                 request.dns_when = when
@@ -344,7 +343,7 @@ class DNS_client (UDP_dispatcher):
                 request.dns_peer = (request.dns_servers[0], 53)
                 self.dns_pending[request.dns_uid] = request
                 self.sendto (request.udp_datagram (), request.dns_peer)
-                async_loop.async_defer (
+                async_loop.async_schedule (
                         request.dns_when + self.dns_timeout,
                         request.dns_continue
                         )
@@ -437,10 +436,7 @@ if __name__ == '__main__':
                 dns_resolver.dns_resolve (
                         ('localhost', 'A'), resolve
                         )
-        try:
-                async_loop.loop ()
-        except:
-                async_loop.loginfo.loginfo_traceback ()
+        async_loop.loop ()
         
         
 # Note about this implementation

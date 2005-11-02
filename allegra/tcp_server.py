@@ -17,21 +17,16 @@
 
 ""
 
-import sys
-import socket
-from time import time
+import sys, socket, time, asynchat, asyncore
 
-from asynchat import async_chat as Async_chat
-from asyncore import dispatcher as Dispatcher
+from allegra import loginfo, async_loop
 
-from allegra.loginfo import Loginfo
-from allegra import async_loop
 
-class TCP_server_channel (Async_chat, Loginfo):
+class TCP_server_channel (asynchat.async_chat, loginfo.Loginfo):
 
         def __init__ (self, conn, addr):
                 self.addr = addr               
-                Async_chat.__init__ (self, conn)
+                asynchat.async_chat.__init__ (self, conn)
                 assert None == self.log (
                         '<connected ip="%s" port="%d"/>' % self.addr
                         )
@@ -39,11 +34,11 @@ class TCP_server_channel (Async_chat, Loginfo):
         def __repr__ (self):
                 return '<tcp-server-channel id="%x"/>' % id (self)
 
-	log = log_info = Loginfo.loginfo_log
+	log = log_info = loginfo.Loginfo.loginfo_log
 
         def recv (self, buffer_size):
                 try:
-			data = Async_chat.recv (self, buffer_size)
+			data = asynchat.async_chat.recv (self, buffer_size)
                 except MemoryError:
                         sys.exit ("Out of Memory!") # do not even try to log!
 
@@ -61,7 +56,7 @@ class TCP_server_channel (Async_chat, Loginfo):
 		self.close ()
 
 	def close (self):
-                assert None == self.log ('<close/>', '')
+                assert None == self.log ('<close/>', 'debug')
 		self.del_channel ()
 		self.socket.close ()
 		self.closing = 1
@@ -69,31 +64,31 @@ class TCP_server_channel (Async_chat, Loginfo):
                 self.tcp_server_close (self)
                 
 	def tcp_server_defer (self, when):
-		assert None == self.log ('<defer/>', '')
+		assert None == self.log ('<defer/>', 'debug')
 
 
-class TCP_server (Dispatcher, Loginfo):
+class TCP_server (asyncore.dispatcher, loginfo.Loginfo):
         
         # a simple limited TCP server with an interface for defered
         # inspection of channel state and scavenging. usefull for any
         # peer with limited bandwith.
 
-        TCP_SERVER_LISTEN = 1024		# lower this to 5 if your OS complains
+        TCP_SERVER_LISTEN = 1024 # lower this to 5 if your OS complains
 	TCP_SERVER_CHANNEL = TCP_server_channel # a TCP server channel factory
 	
-        tcp_server_clients_limit = 1 	# a strict limit on the number of connections per IP
-	tcp_server_precision = 10	# a precision of 10 second for the defered events
+        tcp_server_clients_limit = 1 # a strict limit on connections per IP
+	tcp_server_precision = 10 # a precision of 10 second for the defered
 
         def __init__ (self, addr):
                 self.tcp_server_clients = {}
                 self.tcp_server_channels = []
-                Dispatcher.__init__ (self)
+                asyncore.dispatcher.__init__ (self)
                 self.create_socket (socket.AF_INET, socket.SOCK_STREAM)
                 self.set_reuse_addr ()
                 self.bind (addr)
                 self.listen (self.TCP_SERVER_LISTEN)
                 assert None == self.log (
-                        '<start ip="%s" port="%d"/>' % self.addr, ''
+                        '<start ip="%s" port="%d"/>' % self.addr, 'debug'
                         )
 
 	def __repr__ (self):
@@ -106,40 +101,46 @@ class TCP_server (Dispatcher, Loginfo):
                 return 0
 
         def close (self):
-                assert None == self.log ('<close/>', '')
+                assert None == self.log ('<close/>', 'debug')
                 self.del_channel ()
                 self.socket.close ()
                 self.closing = 1
                 self.connected = 0
 
         def handle_read (self):
-                assert None == self.log ('<handle-read/>', '')
+                assert None == self.log ('<handle-read/>', 'debug')
 
         def handle_connect (self):
-                assert None == self.log ('<handle-connect/>', '')
+                assert None == self.log ('<handle-connect/>', 'debug')
 
         def handle_accept (self):
                 try:
                         conn, addr = self.accept ()
                 except socket.error:
-                        # linux: on rare occasions we get a bogus socket back from
-                        # accept.  socketmodule.c:makesockaddr complains that the
-                        # address family is unknown.  We don't want the whole server
-                        # to shut down because of this.
                         assert None == self.log (
-                                '<accept-bogus-socket/>', '<error/>'
+                                '<accept-bogus-socket/>', 'error'
                                 )
                         return
+                        #
+                        # Medusa original comments from Sam Rushing:
+                        #
+                        # linux: on rare occasions we get a bogus socket back 
+                        # from accept. socketmodule.c:makesockaddr complains 
+                        # that the address family is unknown. We don't want 
+                        # the whole server to shut down because of this.
                 
                 except TypeError:
-                        # unpack non-sequence.  this can happen when a read event
-                        # fires on a listening socket, but when we call accept()
-                        # we get EWOULDBLOCK, so dispatcher.accept() returns None.
-                        # Seen on FreeBSD3.
                         assert None == self.log (
-                                '<accept-would-block/>', '<error/>'
+                                '<accept-would-block/>', 'error'
                                 )
                         return
+                        #
+                        # Medusa original comments from Sam Rushing:
+                        #
+                        # unpack non-sequence.  this can happen when a read 
+                        # event fires on a listening socket, but when we call 
+                        # accept() we get EWOULDBLOCK, so dispatcher.accept() 
+                        # returns None. Seen on FreeBSD3.
 
 		self.tcp_server_accept (conn, addr)
                 
@@ -152,9 +153,9 @@ class TCP_server (Dispatcher, Loginfo):
 		self.close ()
 
         def handle_close (self):
-                assert None == self.log ('<handle-close/>', '')
+                assert None == self.log ('<handle-close/>', 'debug')
 
-        log = log_info = Loginfo.loginfo_log
+        log = log_info = loginfo.Loginfo.loginfo_log
 
 	def tcp_server_accept (self, conn, addr):
 		if self.tcp_server_clients.setdefault (
@@ -164,7 +165,8 @@ class TCP_server (Dispatcher, Loginfo):
 		else:
 			conn.close ()
                         assert None == self.log (
-                                '<connection-limit ip="%s"/>' % addr[0], ''
+                                '<connection-limit ip="%s"/>' % addr[0],
+                                'error'
                                 )
 			return
 
@@ -175,11 +177,11 @@ class TCP_server (Dispatcher, Loginfo):
                         self.tcp_server_precision >0 and
                         len (self.tcp_server_channels) == 1
                         ):
-                        async_loop.async_defer (
-                                time () + self.tcp_server_precision,
+                        async_loop.async_schedule (
+                                time.time () + self.tcp_server_precision,
                                 self.tcp_server_defer
                                 )
-                        assert None == self.log ('<defered-start/>', '')
+                        assert None == self.log ('<defered-start/>', 'debug')
 		return channel
 
         def tcp_server_close (self, channel):
@@ -191,7 +193,7 @@ class TCP_server (Dispatcher, Loginfo):
                 del channel.tcp_server_close
 
         def tcp_server_stop (self):
-                assert None == self.log ('<stop/>', '')
+                assert None == self.log ('<stop/>', 'debug')
                 if len (self.tcp_server_channels) > 0:
                         self.accepting = 0
                         for channel in tuple (self.tcp_server_channels):
@@ -204,7 +206,7 @@ class TCP_server (Dispatcher, Loginfo):
                 self.tcp_server_finalize ()
                         
         def tcp_server_finalize (self):
-                assert None == self.log ('<finalize/>')
+                assert None == self.log ('<finalize/>', 'debug')
                         
         def tcp_server_defer (self, when):
                 for channel in self.tcp_server_channels:
@@ -219,7 +221,7 @@ class TCP_server (Dispatcher, Loginfo):
                 return None
                 
         def tcp_server_defer_stop (self):
-                assert None == self.log ('<defered-stop/>', '')
+                assert None == self.log ('<defered-stop/>', 'debug')
 
 
 from allegra.async_limits import Async_limit_in, Async_limit_out
@@ -237,13 +239,15 @@ class TCP_server_limit (TCP_server_channel, Async_limit_in, Async_limit_out):
 		if not self.closing and self.connected and (
 			when - max (self.async_when_in, self.async_when_out)
 			) > self.tcp_inactive_timeout:
-			assert None == self.log ('<inactive/>', '')
+			assert None == self.log ('<inactive/>', 'debug')
 			self.handle_close ()
 			
 
 from allegra.async_limits import Async_throttle_in, Async_throttle_out
 
-class TCP_server_throttle (TCP_server_limit, Async_throttle_in, Async_throttle_out):
+class TCP_server_throttle (
+        TCP_server_limit, Async_throttle_in, Async_throttle_out
+        ):
 
 	tcp_inactive_timeout = 60	# one minute timeout for inactive client
 
@@ -272,11 +276,18 @@ class TCP_throttler (TCP_server):
 		return channel
 
 	def tcp_throttle_in (self):
-		return int (self.async_throttle_in_Bps / len (self.tcp_server_clients))
+		return int (
+                        self.async_throttle_in_Bps / 
+                        len (self.tcp_server_clients)
+                        )
 
 	def tcp_throttle_out (self):
-		return int (self.async_throttle_out_Bps / len (self.tcp_server_clients))
+		return int (
+                        self.async_throttle_out_Bps / 
+                        len (self.tcp_server_clients)
+                        )
 
 	def tcp_server_close (self, channel):
-		del channel.async_throttle_in_Bps, channel.async_throttle_out_Bps
+		del channel.async_throttle_in_Bps
+                del channel.async_throttle_out_Bps
 		TCP_server.tcp_server_close (self, channel)

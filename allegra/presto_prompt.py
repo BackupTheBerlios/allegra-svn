@@ -17,49 +17,13 @@
 
 ""
 
-import re
+import re, types
 
-from allegra.loginfo import compact_traceback
+from allegra.prompt import compact_traceback, python_prompt
 from allegra.producer import Simple_producer
 from allegra.xml_unicode import xml_attr
 from allegra.xml_dom import XML_element
 from allegra.presto import presto_xml, presto_synchronize
-
-
-def python_line (line, env):
-        try:
-                # try eval first. If that fails, try exec.
-                try:
-                        co = compile (line, 'python_line', 'eval')
-                except SyntaxError:
-                        co = compile (line, 'python_line', 'exec')
-                        method, result = python_exec (co, env)
-                else:
-                        method, result = python_eval (co, env)
-        except Exception, excp:
-                # If that fails, hurl.
-                return ('excp', compact_traceback ())
-                
-        else:
-                return (method, result)
-                
-
-def python_eval (co, env):
-        try:
-                return ('eval', eval (co, env))
-
-        except Exception, excp:
-                return ('excp', compact_traceback ())
-
-
-def python_exec (co, env):
-        try:
-                exec co in env
-        except Exception, excp:
-                return ('excp', compact_traceback ())
-                
-        else:
-                return ('exec', None)
 
 
 # The PRESTo XML flavour of Python's builtin dir()
@@ -75,6 +39,8 @@ def python_exec (co, env):
 
 _RE_dir_of = re.compile ('^.*?[(](.*?)[)]$')
 
+PRESTo_types = (types.InstanceType, types.ObjectType,)
+
 class _NO_INSTANCE: pass
 
 def presto_xdir (self, instance):
@@ -86,28 +52,24 @@ def presto_xdir (self, instance):
         e.xml_name = u'http://presto/ dir'
         if instance != _NO_INSTANCE:
                 names = dir (instance)
-                try:
+                if type (instance) in PRESTo_types:
                         names = set (names).difference (
                                 set (instance.__dict__.keys ())
                                 )
-                except:
-                        pass
                 e.xml_attributes = {u'base': _RE_dir_of.match (
                         self.presto_prompt_line
                         ).groups ()[0]}
         else:
                 names = self.presto_prompt_env.keys ()
-        self.presto_prompt_env['__builtins__'] = None
         e.xml_children = [
                 presto_xml (instance, set (walked)),
                 presto_xml (names, set ())
                 ]
-        try:
+        if type (instance) in PRESTo_types:
                 e.xml_children.append (presto_xml (
                         instance.__dict__, set (walked)
                         ))
-        except:
-                pass
+        # self.presto_prompt_env['__builtins__'] = None
         return e
         
         
@@ -135,7 +97,7 @@ def presto_prompt_async (self, reactor):
         # (to prevent circular reference and ensuing memory
         # leak) then return the XML producer.
         #
-        method, result = python_line (
+        method, result = python_prompt (
                 self.presto_prompt_line, self.presto_prompt_env
                 )
         # do not walk the __builtins__ or the prompt environnement
@@ -217,7 +179,7 @@ def presto_prompt_sync (self, reactor):
                 env = {} 
         env['reactor']= reactor
         env['self'] = self
-        method, result = python_line (line, env)
+        method, result = python_prompt (line, env)
         reactor ('<presto:%s xmlns:presto="http://presto/">' % method)
         reactor (presto_xml (result, set ()))
         reactor ('</presto:%s>' % method)

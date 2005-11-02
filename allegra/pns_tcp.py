@@ -15,9 +15,10 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"http://laurentszyster.be/blog/pns-tcp/"
+""
 
-from allegra.netstring import netstrings_decode, Netstring_collector
+from allegra.netstring import netstrings_decode
+from allegra.collector import Netstring_collector
 from allegra.pns_model import pns_quatuor, pns_quintet
 
 
@@ -55,7 +56,7 @@ class PNS_session (Netstring_collector):
 			if model[1] or model[2]:
 				# open command: index, context or route 
 				model.append ('%s:%d' % self.addr)
-				self.pns_peer.pns_semantic.pns_command (model)
+				self.pns_peer.pns_inference.pns_command (model)
 			elif model[3] in self.pns_subscribed:
 				# protocol command: unsubscribe
 				self.pns_subscribed.remove (model[3])
@@ -85,25 +86,15 @@ class PNS_session (Netstring_collector):
 		elif '' == model[3]:
 			model.append ('%s:%d' % self.addr)
 			if model[2]:
-				# infer a context for an open answer >>>
-				self.pns_peer.pns_semantic.pns_statement (
-					model
-					)
+				# infer a context for an open answer ...
+				self.pns_peer.pns_inference.pns_statement (model)
 			else:
 				# resolve an open question ...
-				self.pns_peer.pns_persistence.thread_loop (
-					lambda p=self.pns_peer.pns_persistence,
-					m=model:
-					p.pns_anonymous (m)
-					)
+				self.pns_peer.pns_resolution.pns_tcp_statement (model)
 		else:
 			# resolve contextual statement ...
 			model.append ('%s:%d' % self.addr)
-			self.pns_peer.pns_persistence.thread_loop (
-				lambda p=self.pns_peer.pns_persistence,
-				m=model:
-				p.pns_statement (m)
-				)
+			self.pns_peer.pns_resolution.pns_tcp_anonymous (model)
 			
 	def pns_error (self, encoded, error):
 		# PNS/TCP does support non-compliant articulator that
@@ -148,6 +139,7 @@ class PNS_session (Netstring_collector):
 	
 from allegra.tcp_server import TCP_server_channel, TCP_server
 
+
 class PNS_TCP_channel (TCP_server_channel, PNS_session):
 
 	def __init__ (self, conn, addr):
@@ -158,6 +150,7 @@ class PNS_TCP_channel (TCP_server_channel, PNS_session):
 	
 	found_terminator = Netstring_collector.found_terminator
 	collect_incoming_data = Netstring_collector.collect_incoming_data
+	
 	
 class PNS_TCP_peer (TCP_server):
 

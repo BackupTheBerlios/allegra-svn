@@ -17,18 +17,18 @@
 
 ""
 
-from allegra.tcp_client import TCP_client_channel
-from allegra.netstring import \
-        Netstring_collector, netstrings_encode, netstrings_decode
+from allegra import tcp_client, netstring, collector
 
 
-class PNS_client_channel (TCP_client_channel, Netstring_collector):
+class PNS_client_channel (
+        tcp_client.TCP_client_channel, collector.Netstring_collector
+        ):
         
         # a PNS client to implement multiplexing user agents like a resolver.
         
         def __init__ (self):
-                TCP_client_channel.__init__ (self)
-                Netstring_collector.__init__ (self)
+                tcp_client.TCP_client_channel.__init__ (self)
+                collector.Netstring_collector.__init__ (self)
                 self.pns_commands = {}
                 self.pns_contexts = {}
                 self.pns_subscribed = {}
@@ -60,17 +60,19 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                                 handler (resolved, model)
                 self.pns_commands = None
                 self.pns_peer ('')
-                TCP_client_channel.close (self)
+                tcp_client.TCP_client_channel.close (self)
 
-        collect_incoming_data = Netstring_collector.collect_incoming_data 
-        found_terminator = Netstring_collector.found_terminator 
+        collect_incoming_data = \
+                collector.Netstring_collector.collect_incoming_data 
+        found_terminator = \
+                collector.Netstring_collector.found_terminator 
 
         def netstring_collector_error (self):
                 assert None == self.log ('<netstring-error/>', '')
                 self.close ()
                 
         def netstring_collector_continue (self, encoded):
-                model = netstrings_decode (encoded)
+                model = netstring.netstrings_decode (encoded)
                 if len (model) < 5:
                         assert None == self.log (
                                 '<invalid-peer-statement/>'
@@ -99,7 +101,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                         self.pns_subscribed[context].append (handler)
                 else:
                         self.pns_subscribed[context] = [handler]
-                self.pns_send (netstrings_encode ((
+                self.pns_send (netstring.netstrings_encode ((
                         context, '', ip, context
                         )))
 
@@ -108,7 +110,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                         self.pns_subscribed[context].append (handler)
                 else:
                         self.pns_subscribed[context] = [handler]
-                        self.pns_send (netstrings_encode ((
+                        self.pns_send (netstring.netstrings_encode ((
                                 context, '', '', context
                                 )))
 
@@ -117,7 +119,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                         self.pns_subscribed[context].remove (handler)
                         if len (self.pns_subscribed[context]) == 0:
                                 del self.pns_subscribed[context]
-                                self.pns_send (netstrings_encode ((
+                                self.pns_send (netstring.netstrings_encode ((
                                         '', '', '', context
                                         )))
 
@@ -142,7 +144,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 handlers.append (handler or self.pns_signal)
                 if len (handlers) == 1:
                         # send the statement if it is not redundant
-                        encoded = netstrings_encode (model)
+                        encoded = netstring.netstrings_encode (model)
                         if context:
                                 encoded += '%d:%s,' % (len (context), context)
                         else:
@@ -158,7 +160,7 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                 # validate, the peer *must* anyway.
                 # 
                 self.pns_received += 1
-                model = netstrings_decode (encoded)
+                model = netstring.netstrings_decode (encoded)
                 if len (model) != 5:
                         assert None == self.log (
                                 '<invalid-peer-statement/>'
@@ -232,14 +234,14 @@ class PNS_client_channel (TCP_client_channel, Netstring_collector):
                                 handler (model)
                         
         def pns_signal (self, resolved, model):
-                assert None == self.log (netstrings_encode (model))
+                assert None == self.log (netstring.netstrings_encode (model))
                 if model[4].startswith ('.'):
                         return False
 
                 return True
                 
         def pns_noise (self, model):
-                assert None == self.log (netstrings_encode (model), '')
+                assert None == self.log (netstring.netstrings_encode (model), '')
 
         #
         # This implementation allows several articulators to "speak-over",
@@ -262,7 +264,6 @@ if __name__ == '__main__':
                 ' | Copyleft GPL 2.0\n'
                 ) 
         from exceptions import StopIteration
-        from allegra.netstring import netstrings_generator
         
         class PNS_pipe (PNS_client_channel):
                 
@@ -299,7 +300,7 @@ if __name__ == '__main__':
                                 self.close_when_done ()
                                 return
 
-                        model = netstrings_decode (encoded)
+                        model = netstring.netstrings_decode (encoded)
                         if '' == model[0]:
                                 if '' == model[1] == model[2]:
                                         self.pns_quit (model[3])
@@ -317,7 +318,7 @@ if __name__ == '__main__':
                                 
                 def pns_signal (self, resolved, model):
                         # dump a netstring to STDOUT
-                        encoded = netstrings_encode (model)
+                        encoded = netstring.netstrings_encode (model)
                         sys.stdout.write ('%d:%s,' % (len (encoded), encoded))
                         # waits for the echo to finalize and articulate the
                         # next statement, nicely as the peer sends its echo
@@ -331,7 +332,7 @@ if __name__ == '__main__':
 
                 def pns_noise (self, model):
                         # dump a netstring to STDERR
-                        encoded = netstrings_encode (model)
+                        encoded = netstring.netstrings_encode (model)
                         sys.stderr.write ('%d:%s,' % (len (encoded), encoded))
                         
         if len (sys.argv) > 1:
@@ -341,14 +342,11 @@ if __name__ == '__main__':
                         addr = (sys.argv[1], 3534)
         else:
                 addr = ('127.0.0.1', 3534)
-        PNS_pipe (
-                addr, netstrings_generator (lambda: sys.stdin.read (4096))
-                )
+        PNS_pipe (addr, netstring.netstrings_pipe (
+                lambda: sys.stdin.read (4096)
+                ))
         from allegra import async_loop
-        try:
-                async_loop.loop ()
-        except:
-                async_loop.loginfo.loginfo_traceback ()
+        async_loop.loop ()
         #
         # Allegra PNS/TCP Client
         #

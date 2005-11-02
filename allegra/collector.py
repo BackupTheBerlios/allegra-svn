@@ -19,19 +19,44 @@
 
 from asynchat import find_prefix_at_end
 
+from allegra.loginfo import Loginfo
+
+
+class Loginfo_collector (Loginfo):
+	
+	# collect data to loginfo
+	
+	collector_is_simple = True
+
+	def __init__ (self, info=None):
+		self.loginfo_info = info
+	
+	def collect_incoming_data (self, data):
+		self.log (data, self.loginfo_info)
+		
+	def found_terminator (self):
+		return True # final!
+		
+
+class Null_collector:
+
+	# collect data to /dev/null
+
+	collector_is_simple = True
+
+	def collect_incoming_data (self, data):
+		return
+
+	def found_terminator (self):
+		return True
+
 
 class Simple_collector:
 
-	"wraps a complex collector with a simple interface"
+	# wraps a complex collector with a simple interface
 	
-	# usefull to parse MIME multi-part collected as chunks, but may be
-	# used to wrap other complex collector with a simple interface ...
-	#
-	# this *is* the reference implementation of asynchat's collector
-	# interface, copied from its handle_read method. it is the first
-	# obvious candidate for a C implementation of Allegra's collectors.
-
-	collector_is_simple = 1
+	collector_is_simple = True
+	
 	simple_collector = None
 
 	def __init__ (self, collector):
@@ -47,13 +72,9 @@ class Simple_collector:
 		self.terminator = terminator
 
 	def collect_incoming_data (self, data):
-		# copied from the asynchat.async_chat.handle_read and modified
-		# to loop through the whole data buffer.
-		#
 		if self.simple_collector_buffer:
 			data = self.simple_collector_buffer + data
 			self.simple_collector_buffer = ''
-			
 		collector = self.simple_collector
 		while data:
 			lb = len (data)
@@ -61,7 +82,7 @@ class Simple_collector:
 			if terminator == None:
 				collector.collect_incoming_data (data)
 				return
-
+	
 			elif type (terminator) == type (0):
 				n = terminator
 				if lb < n:
@@ -69,39 +90,50 @@ class Simple_collector:
 					self.terminator -= lb
 					return
 				
-				else:
-					collector.collect_incoming_data (data[:n])
-					data = data[n:]
-					self.terminator = 0
-					collector.found_terminator ()
+				collector.collect_incoming_data (data[:n])
+				data = data[n:]
+				self.terminator = 0
+				collector.found_terminator ()
+				return
+	
+			index = data.find (terminator)
+			if index != -1:
+				if index > 0:
+					collector.collect_incoming_data (
+						data[:index]
+						)
+				data = data[index+len (terminator):]
+				collector.found_terminator ()
+				return
+	
+			index = find_prefix_at_end (data, terminator)
+			if index:
+				if index != lb:
+					collector.collect_incoming_data (
+						data[:-index]
+						)
+				self.simple_collector_buffer = data[-index:]
 			else:
-				index = data.find (terminator)
-				if index != -1:
-					if index > 0:
-						collector.collect_incoming_data (
-							data[:index]
-							)
-					data = data[index+len (terminator):]
-					collector.found_terminator ()
-				else:
-					index = find_prefix_at_end (data, terminator)
-					if index:
-						if index != lb:
-							collector.collect_incoming_data (
-								data[:-index]
-								)
-						self.simple_collector_buffer = data[-index:]
-					else:
-						collector.collect_incoming_data (data)
-					return
-
+				collector.collect_incoming_data (data)
+		#
+		# This *is* the reference implementation of asynchat's 
+		# collector interface, copied from the asynchat.py's
+		# async_chat.handle_read method and modified to loop through 
+		# the whole data buffer at once.
+		#
+		# It is the first obvious candidate for a C implementation of
+		# Allegra's collectors.
+		
+	
 	def found_terminator (self):
-		return 1 # allways final
+		return True # allways final
 	
 
 class Length_collector:
 
-	collector_is_simple = 0
+	# wraps a complex collector with a length collector
+	
+	collector_is_simple = False
 
 	def __init__ (self, collector, size):
 		self.set_terminator = collector.set_terminator
@@ -120,7 +152,8 @@ class Length_collector:
 			self.collector_length_truncate (
 				data[self.length_left:]
 				)
-			self.collect_incoming_data = self.length_collector_truncate
+			self.collect_incoming_data = \
+				self.length_collector_truncate
 		else:
 			self.length_collector.collect_incoming_data (data)
 
@@ -133,31 +166,43 @@ class Length_collector:
 		return self.length_collector_left == 0
 	
 
-class String_collector:
-
-	"collect data as one string"
-
-	def __init__ (self):
-		self.string_collector = []
-		self.collect_incoming_data = self.string_collector.append
-
-	def found_terminator (self):
-		self.string_collector = ''.join (self.string_collector)
-		return 1
+class Netstring_collector:
 	
-
-class Null_collector:
-
-	"collect to /dev/null"
-
-	collector_is_simple = 1
+	collector_is_simple = False
+	
+	def __init__ (self):
+		self.netstring_collector = ''
+		self.set_terminator (':')
 
 	def collect_incoming_data (self, data):
-		pass
+		self.netstring_collector += data
 
 	def found_terminator (self):
-		return 1
+		if self.get_terminator () != ':':
+			if self.netstring_collector[-1] != ',':
+				self.nestring_collector_error ()
+				return
+				
+			self.netstring_collector_continue (
+				self.netstring_collector[:-1]
+				)
+			self.netstring_collector = ''
+			self.set_terminator (':')
+			return
+			
+		if self.netstring_collector.isdigit ():
+			self.set_terminator (
+				int (self.netstring_collector) + 1
+				)
+			self.netstring_collector = ''
+			return
 
+		self.nestring_collector_error ()
+
+	# def nestring_collector_continue (self):
+		
+	# def nestring_collector_error (self):
+		
 
 """
 allegra/collectors.py
@@ -173,24 +218,31 @@ the Medusa asynchat.async_chat interface:
 I though it deserved a module of its own, with null, string, file and
 length collectors. I also added one property to the interface:
 
-	collector_is_simple = 0 | 1
+	collector_is_simple = False or True
 
-and a Simple_collector implementation. the Simple_collector wraps
-around collectors that use their set_terminator interface. it is
-usefull to chain complex collectors together (like Chunked and
-Multipart for chunked HTTP file uploads for instance)
+to signal which collector use their set_terminator interface or leave its
+management to their accessor (usually a TCP channel).
 
-using collectors, an application can process data as it comes with
-optimal buffering and without blocking. suppose for instance that you
+The Simple_collector wraps around complex collectors and provide its accessor
+with a simple interface. The Length_collector simply allow a complex collector
+to simply fed with a given length of data. They are both usefull to chain 
+complex collectors together, like Chunked and Multipart for chunked HTTP file 
+uploads for instance.
+
+
+Blurb
+
+Using collectors, an application can process data as it comes with
+optimal buffering and without blocking. Suppose for instance that you
 want to scan attachements of incoming mails or need to check digital
-signatures of S/MIME envelopes. if you were to collect the whole data
+signatures of S/MIME envelopes. If you were to collect the whole data
 and _then_ process it all, you will more quickly run out of memory for
 buffers and the overall performance will drop fast under high load
-unless you thread. asynchronous processing collectors can help to make
+unless you thread. Asynchronous processing collectors can help to make
 non-blocking peers that conserve memory and can deliver high
 availability, even under very high load.
 
-see the mime_collectors.py module for mime, chunked, multipart, form data,
+See the mime_collectors.py module for mime, chunked, multipart, form data,
 escaping, but also http and mail (smtp/pop) collectors.
 
 """

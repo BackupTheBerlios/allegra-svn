@@ -55,7 +55,8 @@ class PRESTo_root (PRESTo_async):
                 self.xml_dom = dom # circle reference to "stick" on load
 
         presto_interfaces = set ((
-                u'PRESTo', u'filename', u'static', u'dynamic'
+                u'PRESTo', u'presto-host', u'presto-path',
+                u'filename', u'static', u'dynamic'
                 ))
 
         def presto (self, reactor):

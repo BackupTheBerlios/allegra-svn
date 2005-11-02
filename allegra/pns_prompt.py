@@ -53,13 +53,10 @@ class PNS_prompt (Sync_prompt):
                                 model[1] = pns_sat_utf8 (model[1])
                         if model[2]:
                                 model[2] = pns_sat_utf8 (model[2])
-                self.select_trigger (self.sync_prompt)
-                self.select_trigger (
-                        lambda
-                        m=self.pns_client.pns_statement_push, 
-                        d=model:
-                        m (d)
-                        )
+                self.select_trigger ((self.sync_prompt))
+                self.select_trigger ((
+                        self.pns_client.pns_statement_push, (model,)
+                        ))
                 if model[0] == model[1] == model[2] == '':
                         self.pns_client = None
                         

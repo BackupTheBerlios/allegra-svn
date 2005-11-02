@@ -14,27 +14,56 @@
 # along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
+#
 
-""
+__doc__ = """DESCRIPTION
 
-from exceptions import Exception
+This module implements six functions for netstrings encoding and decoding,
+as well as a usefull shell pipe. 
 
-# the netstring definition, a few netstrings encoders and one usefull
-# decoder for buffered sequences of netstrings.
+SINOPSYS
+
+	netstring.py [command] [buffer] < stdin 1> stdout 2> stderr
+
+	If not specified, the default command is 'decode'. The second 
+	optional argument is the size of the decoder's buffer.
+
+EXAMPLES
+
+Decode and beautify a stream of netstrings:
+
+	netstring.py decode < netstrings.net 1> netlines.txt
+
+Encode a stream of lines as safe netstrings:
+
+	netstring.py encode < lines.txt 1> safe.net
+	
+No exceptions are catched and their tracebacks are printed to STDERR."""
+
+
+__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
+
+
+import exceptions
+
 
 def netstring_encode (i):
+	"""encode an instance as a netstring, use its __str__ or __repr__ 
+	method to get the 8-bit byte string representation of the instance."""
 	try:
-		s = '%s' % (i,)
+		s = i.__str__ ()
 	except:
-		s = '%r' % (i,)
+		s = i.__repr__ ()
 	return '%d:%s,' % (len (s), s)
 
 
-def netstrings_encode (n):
-	return ''.join (['%d:%s,' % (len (s), s) for s in n])
+def netstrings_encode (i):
+	"encode an sequence of 8-bit byte strings as netstrings"
+	return ''.join (['%d:%s,' % (len (s), s) for s in i])
 
 
-def netstrings_decoder (buffer):
+def netstrings_buffer (buffer):
+	"decode the netstrings found in the buffer, append garbage at the end"
 	while buffer:
 		pos = buffer.find (':')
 		try:
@@ -61,56 +90,17 @@ def netstrings_decoder (buffer):
 
 
 def netstrings_decode (buffer):
-	return list (netstrings_decoder (buffer))
+	"decode the netstrings found in the buffer and return a list"
+	return list (netstrings_buffer (buffer))
 
 
-# Netstrings Collector and Generator
-
-class Netstring_collector:
-	
-	# a simple netstring collector to mixin with asynchat
-	
-	collector_is_simple = 0
-	
-	def __init__ (self):
-		self.netstring_collector = ''
-		self.set_terminator (':')
-
-	def collect_incoming_data (self, data):
-		self.netstring_collector += data
-
-	def found_terminator (self):
-		if self.get_terminator () != ':':
-			if self.netstring_collector[-1] != ',':
-				self.nestring_collector_error ()
-				return
-				
-			self.netstring_collector_continue (
-				self.netstring_collector[:-1]
-				)
-			self.netstring_collector = ''
-			self.set_terminator (':')
-			return
-			
-		if self.netstring_collector.isdigit ():
-			self.set_terminator (
-				int (self.netstring_collector) + 1
-				)
-			self.netstring_collector = ''
-			return
-
-		self.nestring_collector_error ()
-
-	# def nestring_collector_continue (self):
-		
-	# def nestring_collector_error (self):
-		
-
-class NetstringsError (Exception): pass
+class NetstringsError (exceptions.Exception): pass
 
 
-def netstrings_generator (more):
-	# a simple netstring generator "wrapping" a producer method
+def netstrings_pipe (more):
+	"""decode the stream of netstrings produced by more (), 
+	raise a NetstringsError exception on protocol failure or
+	StopIteration when the producer is exhausted"""
 	buffer = more ()
 	while buffer:
 		pos = buffer.find (':')
@@ -118,23 +108,20 @@ def netstrings_generator (more):
 		try:
 			next = pos + int (length) + 1
 		except:
-			raise NetstringsError, \
-				'1 not a digit at the beginning: %s' % length
+			raise NetstringsError, '1 not a digit'
 	
 		while next >= len (buffer):
 			data = more ()
 			if data:
 				buffer += data
 			else:
-				raise NetstringsError, \
-					'2 premature end of buffer'
+				raise NetstringsError, '2 end of buffer'
 		
 		if buffer[next] == ',':
 			yield buffer[pos+1:next]
 
 		else:
-			raise NetstringsError, \
-				'3 missing coma at the end'
+			raise NetstringsError, '3 missing coma'
 
 		buffer = buffer[next+1:]
 		if buffer.isdigit ():
@@ -142,21 +129,18 @@ def netstrings_generator (more):
 
 
 def netlines (encoded, indent=''):
+	"""Recursively beautify a netstring for display"""
 	netstrings = netstrings_decode (encoded)
 	if len (netstrings) > 1:
-		encoded = ''.join (
+		lines = ''.join (
 			[netlines (e, indent+'  ') for e in netstrings]
 			)
 		return '%s%d:\n%s%s,\n' % (
-			indent, len (encoded), encoded, indent
+			indent, len (encoded), lines, indent
 			)
 			
-	return '%s%d:%s,\n' % (
-		indent, len (encoded), encoded
-		)
+	return '%s%d:%s,\n' % (indent, len (encoded), encoded)
 
-
-# The Netstring Beauty Validator
 
 if __name__ == '__main__':
         import sys
@@ -165,24 +149,50 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0\n'
                 )
-	for n in netstrings_generator (lambda: sys.stdin.read (4096)):
-		sys.stdout.write (netlines (n) + '\n')
-        #
-	# the simpler synchronous pipe, adding a \n for marginal readability
-	# of a netstring dump.
-        #
-        # use -OO to prevent Copyright Message and benchmark
+        if len (sys.argv) > 1:
+        	command = sys.argv[1]
+ 	else:
+		command = 'decode'
+ 	if command == 'decode':
+ 		if len (sys.arv) > 2:
+ 			try:
+ 				buffer_size = int (sys.argv[2])
+			except:
+				sys.stderr.write ('2 invalid buffer size\n')
+				sys.exit (2)
+				
+		else:
+	 		buffer_size = 4096
+		def more ():
+			sys.stdin.read (buffer_size)
+		for n in netstrings_pipe (more):
+			sys.stdout.write (netlines (n) + '\n')
+	elif command == 'encode':
+		for line in sys.stdin.xreadlines ():
+			sys.stdout.write (
+				'%d:%s,' % (len (line)-1, line[:-1])
+				)
+	else:
+		sys.stderr.write ('1 invalid command\n')
+		sys.exit (1)
+		
+	sys.exit (0)
 
-#
 # Note about this implementation
 #
-# I look back with shame on the earlier decoder, I wish there was
-# not even a single bit left of it in this digital age. Yet that
-# simple generator redeems those early days.
+# Programs usually starts as simple shell scripts that dump some their 
+# output to STDOUT and errors to STDERR, like this:
+#	
+#	script < input 1> output 2> errors
 #
-# Yet, the interface was (allmost) right from the start: tolerate
-# garbage at the end to allways return at least en singleton. The
-# "old" code will however be usefull for good-old C optimization.
+# probably consuming input from STDIN. Also, application modules should 
+# provide such simple pipes to test separately the functions implemented.
 #
-# So, all experiences eventually are usefull ;-)
+# Generally such program consume and produce lines delimited by CR or CRLF,
+# using the readline and writeline interfaces provided by the development 
+# environemnt. In Python the infamous print statement or the sys.stdin,
+# -out or -err files methods.
 #
+# However, CR or CRLF lines as an encoding for I/O are too simple. This is
+# a well-known shortcoming of the MIME protocols and netstring protocols like 
+# QMTP have proved to be more efficient and safer than SMTP, for instance.

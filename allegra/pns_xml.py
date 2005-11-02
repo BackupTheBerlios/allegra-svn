@@ -551,9 +551,9 @@ if __name__ == '__main__':
                 # are supported by pns_xml.py: PNS's own and W3C's XHTML.
                 #
                 sys.argv.remove ('-i')
-                from allegra.netstring import netstrings_generator
+                from allegra.netstring import netstrings_pipe
                 t = time.time ()
-                pipe = netstrings_generator (lambda: sys.stdin.read (4096))
+                pipe = netstrings_pipe (lambda: sys.stdin.read (4096))
                 encoding = 'ASCII'
                 stylesheet = ''
                 if len (sys.argv) > 1:

@@ -17,10 +17,9 @@
 
 ""
 
-from time import time
+import time, collections
 
 from allegra import async_loop
-from allegra.fifo import FIFO_big
 
 
 class Timeouts:
@@ -32,22 +31,22 @@ class Timeouts:
 		self.timeouts_timeout = timeout
 		self.timeouts_period = max (period, async_loop.async_timeout)
 		self.timeouts_precision = precision or async_loop.async_timeout
-		self.timeouts_fifo = FIFO_big ()
-		async_loop.async_defer (
-			time () + self.timeouts_precision,
+		self.timeouts_fifo = collections.deque ()
+		async_loop.async_schedule (
+			time.time () + self.timeouts_precision,
 			lambda w, t=self:t.timeouts_defer (w)
 			) # defer ...
 		
         def timeouts_push (self, reference):
-		self.timeouts_fifo.push ((time (), reference))
+		self.timeouts_fifo.append ((time.time (), reference))
 		return reference
 	
 	def timeouts_defer (self, now):
 		then = now - self.timeouts_precision - self.timeouts_period 
-		while not self.timeouts_fifo.is_empty ():
-			when, reference = self.timeouts_fifo.first ()
+		while len (self.timeouts_fifo) > 0:
+			when, reference = self.timeouts_fifo[0]
 			if  when < then:
-				self.timeouts_fifo.pop ()
+				self.timeouts_fifo.popleft ()
 				self.timeouts_timeout (reference)
 			else:
 				break

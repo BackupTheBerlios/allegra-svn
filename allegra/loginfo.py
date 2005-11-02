@@ -17,12 +17,14 @@
 
 ""
 
-import sys
+import sys, types
 
+from allegra import netstring, prompt
 
-# Wrapper class for buffered files that allways flush. 
 
 class Write_and_flush:
+	
+	"Wrapper class for buffered files that allways flush."
 	
 	def __init__ (self, file):
 		self.file = file
@@ -30,185 +32,224 @@ class Write_and_flush:
 	def __call__ (self, data):
 		self.file.write (data)
 		self.file.flush ()
+		
 
 def write_and_flush (file):
+	"maybe wraps a file's write method with a Write_and_flush instance"
 	if hasattr (file, 'flush'):
 		return Write_and_flush (file)
 		
-	return file
+	return file.write
 
-
-# The default logger implementation, logs uncategorized entries like
-#
-#	log ('output')
-#
-# to STDOUT and categorized entries with no handlers, like:
-#
-#	log ('404 Not found', 'HTTP Error')
-#
-# to STDERR.
-#
-# Developers can assign a method of they choice to specific loginfo category,
-# set the logger's STDOUT and STDERR to other file instances.
 
 class Loginfo_stdio:
 
+	"Loginfo's log dispatcher implementation"
+	
 	def __init__ (self, stdout=None, stderr=None):
 		self.loginfo_stdout = write_and_flush (stdout or sys.stdout)
 		self.loginfo_stderr = write_and_flush (stderr or sys.stderr)
-		self.loginfo_loggers = {None: self}
-
-	def __call__ (self, data):
-		self.loginfo_stdout (data)
-
-	def log (self, data, info=None):
-		if self.loginfo_loggers.has_key (info):
-			self.loginfo_loggers[info] (data + '\n')
-		else:
-			self.loginfo_stderr ('%s%s\n' % (info, data))
+		self.loginfo_loggers = {}
 
 	def loginfo_stdio (self, stdout, stderr):
+		"set new STDOUT and STDERR, backup the previous ones"
 		prev = (self.loginfo_stdout, self.loginfo_stderr)
 		(self.loginfo_stdout, self.loginfo_stderr) = (stdout, stderr)
 		return prev
 
-# close all three standard I/O files and instanciate a loginfo_logger
-	
-def loginfo_stdio_detach (stdout, stderr):
-	sys.stdin.close ()
-	sys.stdout.close ()
-	sys.stderr.close ()
-	Loginfo.loginfo_logger = Loginfo_stdio (stdout, stderr)
+	def loginfo_log (self, data, info=None):
+		"log netstrings to STDOUT, a category handler or STDERR"
+		if info == None:
+			self.loginfo_stdout ('%d:%s,' % (len (data), data))
+		elif self.loginfo_loggers.has_key (info):
+			self.loginfo_loggers[info] (
+				'%d:%s,' % (len (data), data)
+				)
+		else:
+			encoded = netstring.netstrings_encode ((info, data))
+			self.loginfo_stderr (
+				'%d:%s,' % (len (encoded), encoded)
+				)
+
+	def loginfo_debug (self, data, info=None):
+		"log netlines to STDOUT, a category handler or STDERR"
+		assert type (data) == types.StringType
+		if info == None:
+			self.loginfo_stdout (netstring.netlines (data))
+		elif self.loginfo_loggers.has_key (info):
+			self.loginfo_loggers[info] (
+				netstring.netlines (data)
+				)
+		else:
+			assert type (info) == types.StringType
+			encoded = netstring.netstrings_encode ((
+				info, data
+				))
+			self.loginfo_stderr (
+				netstring.netlines (encoded)
+				)
+
+	if __debug__:
+		log = loginfo_debug
+	else:
+		log = loginfo_log
 
 
-# produce a compact traceback data structure, ready to be serialized ...
+def compact_traceback_netstrings (ctb):
+	"encode a compact traceback tuple as netstrings"
+ 	return netstring.netstrings_encode ((
+ 		'%s' % ctb[0], '%s' % ctb[1], 
+ 		netstring.netstrings_encode (['|'.join (x) for x in ctb[2]])
+ 		))
 
-def compact_traceback ():
-        t, v, tb = sys.exc_info ()
-        tbinfo = []
-        # assert tb # Must have a traceback
-        while tb:
-                tbinfo.append ((
-                        tb.tb_frame.f_code.co_filename,
-                        tb.tb_frame.f_code.co_name,
-                        str (tb.tb_lineno)
-                        ))
-                tb = tb.tb_next
-        # just to be safe
-        del tb
-        return t, v, tbinfo
-
-def compact_traceback_str (cbt):
- 	return ctb[0], ctb[1], ''.join (['[%s|%s|%s]' % x for x in ctb[2]])
-
-
-# The Loginfo class implementation
 
 class Loginfo:
 
-        loginfo_logger = None # can be overriden by instances or by classes
-
+	loginfo_logger = Loginfo_stdio ()
+	
 	def __repr__ (self):
 		return '<%s pid="%x"/>' % (
 			self.__class__.__name__, id (self)
 			)
 
 	def loginfo_log (self, data, info=None):
-                """log the message with an optional category, prefixed
-                with the instance __repr__
-                """
-		if Loginfo.loginfo_logger == None:
-			Loginfo.loginfo_logger = Loginfo_stdio ()
-		self.loginfo_logger.log ('%r%s' % (self, data), info)
+		"""log a message with this instance's __repr__ and an 
+		optional category"""
+		self.loginfo_logger.log (netstring.netstrings_encode ((
+			'%r' % self, '%s' % data
+			)), info)
 
 	log = loginfo_log
 
 	def loginfo_null (self, data, info=None):
-                'drop the message to log'
+                "drop the message to log"
                 pass
+                
+        def loginfo_logging (self):
+        	"return True if the instance is logging"
+        	return self.log != self.loginfo_null
 
-	def loginfo_toggle (self):
-		'toggle loginfo on/off for this instance'
-		if self.log == self.loginfo_null:
-			try:
-				del self.log
-			except:
-				self.log = self.loginfo_log
-		else:
-			try:
-				del self.log
-			except:
-				self.log = self.loginfo_null
-		return self.log != self.loginfo_null
+	def loginfo_toggle (self, logging=None):
+		"toggle logging on/off for this instance"
+		if logging == None:
+			if self.log == self.loginfo_null:
+				try:
+					del self.log
+				except:
+					self.log = self.loginfo_log
+			else:
+				try:
+					del self.log
+				except:
+					self.log = self.loginfo_null
+			return self.log != self.loginfo_null
+			
+		if logging == True and self.log == self.loginfo_null:
+			self.log = self.loginfo_log
+		elif logging == False and self.log == self.loginfo_log:
+			self.log = self.loginfo_null
+		return logging
 
 	def loginfo_traceback (self):
-		'logs as <traceback /> and return a compact traceback tuple'
-		cbt = compact_traceback ()
+		"""return a compact traceback tuple and log it encoded as 
+		netstrings, along with this instance's __repr__, in the
+		'traceback' category"""
+		ctb = prompt.compact_traceback ()
 		self.loginfo_log (
-			'<![CDATA[%s:%s%s]]!>' % compact_traceback_str (cbt),
-			'<traceback />'
+			compact_traceback_netstrings (ctb), 'traceback'
 			)
-		return cbt
+		return ctb
 
 
-# A simple collector that logs all collected data (to STDOUT or any output
-# method set for the Loginfo.loginfo_logger instance.
-
-class Loginfo_collector (Loginfo):
-	
-	simple_collector = None
-
-	def __init__ (self, info=None):
-		self.loginfo_info = info
-	
-	def collect_incoming_data (self, data):
-		self.log (data, self.loginfo_info)
-		
-	def found_terminator (self):
-		return True # final!
-		
-
-# The Loginfo module implementation
-
-def loginfo_toggle (Class=Loginfo):
-	'toggle loginfo on/off for this Class'
-	if Class.log == Loginfo.loginfo_null:
-		Class.log = Class.loginfo_log
-		return 1
-	
-	else:
-		Class.log = Class.loginfo_null
-		return 0
-
-def loginfo_log (data, info=None):
-	if Loginfo.loginfo_logger == None:
-		Loginfo.loginfo_logger = Loginfo_stdio ()
+def log (data, info=None):
+	"log a message with an optional category"
 	Loginfo.loginfo_logger.log (data, info)
 
-log = loginfo_log
+def loginfo_toggle (logging=None, Class=Loginfo):
+	"toggle logging on/off for the Class specified or Loginfo"
+	if logging == None:
+		if Class.log == Class.loginfo_null:
+			Class.log = Class.loginfo_log
+			return True
+			
+		Class.log = Class.loginfo_null
+		return False
+		
+	if logging == True and Class.log == Class.loginfo_null:
+		Class.log = Class.loginfo_log
+	elif logging == False and Class.log == Class.loginfo_log:
+		Class.log = Class.loginfo_null
+	return logging
 	
-def loginfo_null (data, info=None): pass
-
 def loginfo_traceback ():
-	ctb = compact_traceback ()
-	loginfo_log (
-		'<![CDATA[%s:%s%s]]!>' % compact_traceback_str (cbt),
-		'<traceback />'
+	"return a traceback and log it in the 'traceback' category"
+	ctb = prompt.compact_traceback ()
+	Loginfo.loginfo_logger.log (
+		compact_traceback_netstrings (ctb), 'traceback'
 		)
 	return ctb
-	
-	
-# Note about this implementation
-#
-# No care about encoding is taken here. This is an 8bit clean strings
-# implementation. It will raise exceptions when passed unicode objects
-# that cannot be encoded with the default encoding.
-#
-# If you need to log unicode strings, encode them first, preferrably as
-# UTF-8. It makes no sense to implement encoding with Loginfo interfaces
-# simply because one may require to log XML and therefore prefer to use
-# ASCII and XML character references, while another logs text to a cp1252
-# console (you know which one!).
 
-"""
-"""
+
+assert None == log ('loginfo', 'debug')
+
+
+# DESCRIPTION
+#
+# The Loginfo interface and implementation provide a simpler, yet more
+# powerfull and practical logging facility than the one currently integrated
+# with Python.
+#
+# First is uses netstrings instead of CR or CRLF delimeted lines for I/O
+# encoding, solving ahead many problems of the log consumers. Second it
+# is well adapted to a practical development cycle and by defaults implement
+# a simple scheme that suites well a shell pipe like:
+#
+#	pipe < input 1> output 2> errors
+#
+#
+# Last but not least, the loginfo_log is compatible with asyncore logging 
+# interfaces (which is no wonder, it is inspired from Medusa's original
+# logging facility module).
+#
+# EXAMPLE
+#
+# 	>>> from allegra import loginfo
+#	18:
+#	  5:debug,
+#	  7:loginfo,
+#	,
+#
+#	>>> loginfo.log ('data')
+#	4:data,
+#	>>> loginfo.log ('data', 'info')
+#	14:
+#	  4:info,
+#	  4:data,
+#	,
+#	>>> try:
+#		foobar ()
+#	except:
+#		ctb = loginfo.loginfo_traceback ()
+#	91:
+#	  9:traceback,
+#	  75:
+#	    20:exceptions.NameError,
+#	    28:name 'foobar' is not defined,
+#	    15:11:<stdin>|?|2,,
+#	  ,
+#	,
+#
+#	>>> logged = loginfo.Loginfo ()
+#	>>> logged.log ('data')
+#	34:
+#	  23:<Loginfo pid="8da4e0"/>,
+#	  4:data,
+#	,
+#	>>> logged.log ('data', 'info')
+#	45:
+#	  4:info,
+#	  34:
+#	    23:<Loginfo pid="8da4e0"/>,
+#	    4:data,
+#	  ,
+#	,
