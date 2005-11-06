@@ -14,7 +14,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
 # USA
 
-""
+"A practical interface to Sam Rushing's select_trigger implementation"
 
 import sys, os, socket, thread, asyncore
 
@@ -37,7 +37,7 @@ if os.name == 'posix':
 			assert None == self.log ('open', 'debug')
 
 		def __repr__ (self):
-			return '<select-trigger id="%x"/>' % id (self)
+			return 'trigger id="%x"' % id (self)
 
 		def __call__ (self, thunk):
 			try:
@@ -111,7 +111,7 @@ elif os.name == 'nt':
 			assert None == self.log ('open', 'debug')
 
 		def __repr__ (self):
-			return '<select-trigger id="%x"/>' % id (self)
+			return 'trigger id="%x"' % id (self)
 
 		def __call__ (self, thunk):
 			try:
@@ -156,20 +156,41 @@ else:
 	raise ImportError ('OS "%s" not supported, sorry :-(' % os.name)
 
 Trigger.log = Trigger.log_info = loginfo.Loginfo.log
+Trigger.select_triggers = 0
 
 
 class Select_trigger (loginfo.Loginfo, finalization.Finalization):
+	
+	"""A base class that implements the select_trigger interface
+	
+		select_trigger((function, args))
+	
+	to thunk function and method calls from one thread into the main
+	asynchronous loop. Select_trigger implements thread-safe and
+	practical loginfo interfaces:
+		
+		select_trigger_log(data, info=None)
+		
+	to log information, and
+		
+		select_trigger_traceback(ctb=None)
+		
+	to log traceback asynchronously from a distinct thread."""
 
 	select_trigger = None
 
 	def __init__ (self):
+		"""open a Trigger for the Select_trigger class if none has
+		been yet and increase the Tigger reference count by one"""
 		if self.select_trigger == None:
 			Select_trigger.select_trigger = Trigger ()
 		self.select_trigger.select_triggers += 1
 		
-	# async_log = loginfo.Loginfo.loginfo_log
-
+	def __repr__ (self):
+		return 'select-trigger id="%x"' % self (id)
+		
 	def select_trigger_log (self, data, info=None):
+		"thunk a log call to the async loop via the select trigger"
 		self.select_trigger ((self.log, (data, info)))
 		
 	def select_trigger_traceback (self):
@@ -182,9 +203,8 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 			)))
 		return ctb
 
-	# log = loginfo_log
-	
 	def finalization (self, finalized):
+		"decrease the Trigger's reference count and close it if zero"
 		self.select_trigger.select_triggers -= 1
 		if self.select_trigger.select_triggers == 0:
 			self.select_trigger (None)

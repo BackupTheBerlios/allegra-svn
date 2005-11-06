@@ -16,9 +16,7 @@
 # USA
 #
 
-__doc__ = """DESCRIPTION
-
-This module implements six functions for netstrings encoding and decoding,
+"""This module implements six functions for netstrings encoding and decoding,
 as well as a usefull shell pipe. 
 
 SINOPSYS

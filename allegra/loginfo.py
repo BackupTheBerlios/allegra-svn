@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/loginfo/"
 
 import sys, types
 
@@ -34,27 +34,36 @@ class Write_and_flush:
 		self.file.flush ()
 		
 
-def write_and_flush (file):
-	"maybe wraps a file's write method with a Write_and_flush instance"
-	if hasattr (file, 'flush'):
-		return Write_and_flush (file)
+def write_and_flush (instance):
+	"""return a callable: maybe wraps a file's write method with a 
+	Write_and_flush instance; a non-buffered file write method; or
+	the instance itself otherwise"""
+	if hasattr (instance, 'flush'):
+		return Write_and_flush (instance)
 		
-	return file.write
+	if hasattr (instance, 'write'):
+		return instance.write
+		
+	return instance
 
 
 class Loginfo_stdio:
 
 	"Loginfo's log dispatcher implementation"
 	
+	loginfo_stdout = loginfo_stderr = None
+	
 	def __init__ (self, stdout=None, stderr=None):
-		self.loginfo_stdout = write_and_flush (stdout or sys.stdout)
-		self.loginfo_stderr = write_and_flush (stderr or sys.stderr)
+		self.loginfo_stdio (
+			stdout or sys.stdout, stderr or sys.stderr
+			)
 		self.loginfo_loggers = {}
 
 	def loginfo_stdio (self, stdout, stderr):
 		"set new STDOUT and STDERR, backup the previous ones"
 		prev = (self.loginfo_stdout, self.loginfo_stderr)
-		(self.loginfo_stdout, self.loginfo_stderr) = (stdout, stderr)
+		self.loginfo_stdout = write_and_flush (stdout)
+		self.loginfo_stderr = write_and_flush (stderr)
 		return prev
 
 	def loginfo_log (self, data, info=None):
@@ -98,7 +107,7 @@ class Loginfo_stdio:
 def compact_traceback_netstrings (ctb):
 	"encode a compact traceback tuple as netstrings"
  	return netstring.netstrings_encode ((
- 		'%s' % ctb[0], '%s' % ctb[1], 
+ 		ctb[0], ctb[1], 
  		netstring.netstrings_encode (['|'.join (x) for x in ctb[2]])
  		))
 
@@ -150,11 +159,12 @@ class Loginfo:
 			self.log = self.loginfo_null
 		return logging
 
-	def loginfo_traceback (self):
+	def loginfo_traceback (self, ctb=None):
 		"""return a compact traceback tuple and log it encoded as 
 		netstrings, along with this instance's __repr__, in the
 		'traceback' category"""
-		ctb = prompt.compact_traceback ()
+		if ctb == None:
+			ctb = prompt.compact_traceback ()
 		self.loginfo_log (
 			compact_traceback_netstrings (ctb), 'traceback'
 			)
@@ -181,20 +191,16 @@ def loginfo_toggle (logging=None, Class=Loginfo):
 		Class.log = Class.loginfo_null
 	return logging
 	
-def loginfo_traceback ():
+def loginfo_traceback (ctb=None):
 	"return a traceback and log it in the 'traceback' category"
-	ctb = prompt.compact_traceback ()
+	if ctb == None:
+		ctb = prompt.compact_traceback ()
 	Loginfo.loginfo_logger.log (
 		compact_traceback_netstrings (ctb), 'traceback'
 		)
 	return ctb
 
 
-assert None == log ('loginfo', 'debug')
-
-
-# DESCRIPTION
-#
 # The Loginfo interface and implementation provide a simpler, yet more
 # powerfull and practical logging facility than the one currently integrated
 # with Python.

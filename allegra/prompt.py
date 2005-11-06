@@ -15,13 +15,23 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
+"""The minimal Python program, an interpreter prompt. See allegra.loginfo,
+allegra.sync_stdio and allegra.presto_prompt for applications of its
+interfaces."""
+
 import sys
 
 
-# produce a compact traceback data structure, ready to be serialized ...
-
 def compact_traceback ():
-        "return a compact traceback tuple"
+        """return a compact traceback tuple from sys.exc_info(), like:
+        
+        ('exception', 'message', [
+                ('filename','function','lineno'),
+                ...
+                ])
+                
+        a compact traceback is a simple data structure made of 8-bit byte 
+        strings, ready to be serialized."""
         t, v, tb = sys.exc_info ()
         tbinfo = []
         assert tb # Must have a traceback ?
@@ -33,7 +43,7 @@ def compact_traceback ():
                         ))
                 tb = tb.tb_next
         del tb # just to be safe ?
-        return t, v, tbinfo
+        return '%s' % t, '%s' % v, tbinfo
 
 
 def python_eval (co, env):

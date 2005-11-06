@@ -15,7 +15,10 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"""A marginally extended asyncore.loop implementation,, with finalizations 
+and scheduled events. Cheap asynchronous continuations are provided by a 
+piggy-back of the CPython GIL and the simplest event scheduler possible is
+implemented as a heap queue (also a CPyton feature)."""
 
 import gc, time, collections, heapq
 
@@ -41,10 +44,13 @@ async_timeout = 0.1
 async_finalized = collections.deque ()
 
 def async_finalize ():
+	"collect garbage and call all finalization queued"
 	garbage = gc.collect ()
 	if garbage > 0:
 		assert None == loginfo.log (
-			'async_finalize %d' % garbage, 'debug'
+			'async_finalize garbage="%d" count="%d"' % (
+				garbage, len (async_finalized)
+				), 'debug'
 			)
 	while True:
 		try:
@@ -61,9 +67,11 @@ def async_finalize ():
 async_scheduled = []
 
 def async_schedule (when, defered):
+	"schedule a call to defered for when"
 	heapq.heappush (async_scheduled, (when, defered))
 	
 def async_clock ():
+	"call all defered whose time have come"
 	if not async_scheduled:
 		return
 		
@@ -90,11 +98,13 @@ def async_clock ():
 async_Exception = KeyboardInterrupt
 
 def async_catch ():
+	"catch or throw an async_Exception"
 	assert None == loginfo.log ('async_catch', 'debug')
 	return False
 
 
 def loop ():
+	"the asynchronous loop: finalize, clock and poll; finaly finalize."
 	assert None == loginfo.log ('async_loop_start', 'debug')
 	gc.disable ()
 	while async_map:
@@ -118,9 +128,7 @@ def loop ():
 
 # Note about this implementation
 #
-# A marginaly extended asyncore loop, with finalizations and scheduled, 
-# asynchronous continuations as a piggy-back of the CPython GIL and the 
-# simplest event scheduler possible, a heap queue (also a CPyton feature). 
+# A marginaly extended asyncore loop
 #
 # Expanding to more asynchronous event stacks is not a "good thing" IMHO, 
 # and certainly not to integrated peer networking with a GUI. This simple

@@ -19,32 +19,37 @@
 
 import sys
 
-from allegra import loginfo, async_loop, thread_loop
+from allegra import prompt, loginfo, async_loop, thread_loop
 
 
-#class Sync_stdio_file:
-#
-#	def __init__ (self, async_write):
-#		self.write = async_write
+class Sync_stdio_file:
+
+	def __init__ (self, async_write):
+		self.write = async_write
 		
+	def writelines (self, lines):
+		for line in lines:
+			self.write (line)
+			
 
 class Sync_stdio (thread_loop.Thread_loop):
 
 	def __init__ (self):
+		stdout, stderr = (
+			Sync_stdio_file (self.async_stdout),
+			Sync_stdio_file (self.async_stderr)
+			)
 		(
 			self.sync_stdout, self.sync_stderr
 			) = loginfo.Loginfo.loginfo_logger.loginfo_stdio (
-				self.async_stdout, self.async_stderr
+				stdout, stderr
 				)
-		#self.sys_stdout, self.sys_stderr = sys.stdout, sys.stderr
-		#sys.stdout, sys.stderr = (
-		#	Sync_stdio_file (self.async_stdout),
-		#	Sync_stdio_file (self.async_stderr)
-		#	)
+		self.sys_stdout, self.sys_stderr = sys.stdout, sys.stderr
+		sys.__stdout__, sys.__stderr__ = stdout, stderr
 		thread_loop.Thread_loop.__init__ (self)
 
 	def __repr__ (self):
-		return '<sync-stdio id="%x"/>' % id (self)
+		return 'sync-stdio'
 
 	def async_stdout (self, data):
 		self.thread_loop_queue ((self.sync_stdout, (data,)))
@@ -53,18 +58,25 @@ class Sync_stdio (thread_loop.Thread_loop):
 		self.thread_loop_queue ((self.sync_stderr, (data,)))
 
 	def async_stdio_stop (self):
-		# sys.stdout, sys.stderr = self.sys_stdout, self.sys_stderr
+		sys.__stdout__, sys.__stderr__ = (
+			self.sys_stdout, self.sys_stderr
+			)
+		del self.sys_stdout, self.sys_stderr
 		try:
 			del self.log
 		except:
 			pass
 		loginfo.Loginfo.loginfo_logger.loginfo_stdio (
-			self.sync_stdout, self.sync_stderr
+			loginfo.write_and_flush (sys.stderr), 
+			loginfo.write_and_flush (sys.stdout)
 			)
-		self.thread_loop_stop ()
+		self.thread_loop_queue (None)
 
 
 class Sync_stdoe (Sync_stdio):
+
+	def __repr__ (self):
+		return 'sync-stdoe'
 
 	def thread_loop_init (self):
 		self.thread_loop_queue ((self.sync_stdin, ()))
@@ -114,52 +126,33 @@ class Sync_prompt (Sync_stdio):
 
 	def async_stdio_stop (self):
 		async_loop.async_catch = self.async_catch
+		self.async_catch = None
 		Sync_stdio.async_stdio_stop (self)
 
 
 class Python_prompt (Sync_prompt):
 
 	def __init__ (self, env=None):
-		self.python_prompt_env = env or {'self': self}
+		self.python_prompt_env = env or {'prompt': self}
 		Sync_prompt.__init__ (self)
 
+	def __repr__ (self):
+		return 'python-prompt'
+
 	def sync_readline (self, line):
-		try:
-			# try eval first.
-			try:
-				co = compile (line, repr (self), 'eval')
-				self.select_trigger ((
-					self.async_python_eval, (co,)
-					))
-			except SyntaxError:
-				# If that fails, try exec.  
-				co = compile (line, repr (self), 'exec')
-				self.select_trigger ((
-					self.async_python_exec, (co,)
-					))
-		except:
-			# If that fails, hurl ...
-			self.select_trigger_traceback ()
-
-	def async_python_eval (self, co):
-		try:
-			data = eval (co, self.python_prompt_env)
-			if data != None:
-				data = data.__repr__()
-		except:
-			self.loginfo_traceback ()
-		else:
-			if data:
-				self.async_stderr (data + '\n')
-
-	def async_python_exec (self, co):
-		try:
-			exec co in self.python_prompt_env
-		except:
-			self.loginfo_traceback ()
+		self.select_trigger ((self.python_prompt, (line, )))
+			
+	def python_prompt (self, line):
+		method, result = prompt.python_prompt (
+			line, self.python_prompt_env
+			)
+		if method == 'excp':
+			self.loginfo_traceback (result)
+		elif result != None:
+			self.async_stderr ('%r\n' % result)
 
 	def async_stdio_stop (self):
-		del self.python_prompt_env # break circular reference
+		self.python_prompt_env = None # break circular reference
 		Sync_prompt.async_stdio_stop (self)
 		
 
