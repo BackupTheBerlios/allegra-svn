@@ -180,7 +180,7 @@ class Thread_loop (threading.Thread, select_trigger.Select_trigger):
                 """
 		if self.thread_loop_init ():
 			while True:
-				queued = self.thread_loop_queue.pop ()
+				queued = self.thread_loop_queue.popleft ()
 				if queued == None:
 					break
 
