@@ -22,7 +22,7 @@ from allegra import \
 	pns_resolution, pns_inference, pns_tcp, pns_udp
 
 
-class PNS_peer (async_loop.loginfo.Loginfo):
+class PNS_peer (loginfo.Loginfo):
 	
         def __init__ (self, udp_ip, tcp_ip, root):
         	self.pns_root = root
@@ -44,14 +44,11 @@ class PNS_peer (async_loop.loginfo.Loginfo):
 		self.pns_udp = pns_udp.PNS_UDP_peer (self, self.pns_name)
 			
 	def __repr__ (self):
-		return '<pns-peer/>'
+		return 'pns-peer'
 		
 	def pns_subscribe (self, subscriber, name):
 		# subscribe to a PNS/UDP circle, and start one if necessary
-		assert None == subscriber.log (
-			'<subscribe/>'
-			'<![CDATA[%s]]!>' % name, ''
-			)
+		assert None == subscriber.log (name, 'subscribe')
 		if not self.pns_subscribed.has_key (name):
 			self.pns_subscribed[
 				name
@@ -61,10 +58,7 @@ class PNS_peer (async_loop.loginfo.Loginfo):
 
 	def pns_unsubscribe (self, subscriber, name):
 		# unsubscribe from a PNS/UDP circle, quit one if needs be
-		assert None == subscriber.log (
-			'<unsubscribe/>'
-			'<![CDATA[%s]]!>' % name, ''
-			)
+		assert None == subscriber.log (name, 'unsubscribe')
 		self.pns_subscriptions[name].remove (subscriber)
 		if not self.pns_subscriptions[name]:
 			self.pns_subscribed[name].pns_quit ()
@@ -118,36 +112,49 @@ class PNS_peer (async_loop.loginfo.Loginfo):
 		# 	python pns_peer.py 1> "python pns_client.py"
 		#
 			
-	# error conditions
+	# error conditions and shutdown process
 
 	def pns_tcp_finalize (self):
-		assert None == self.log ('<tcp-finalize/>', '')
+		# when the PNS/TCP server dies, shutdown the peer
 		self.pns_shutdown ()
 
 	def pns_udp_finalize (self):
-		assert None == self.log ('<udp-finalize/>', '')
+		# when the PNS/UDP peer dies, revive a new one
 		self.pns_udp = pns_udp.PNS_UDP_peer (self, self.pns_name)
 		
 	def pns_resolution_finalize (self):
+		# when the Resolution thread dies, revive a new one
 		self.pns_resolution = pns_resolution.PNS_resolution (self)
 		
 	def pns_inference_finalize (self):
+		# when the Inference thread dies, revive a new one
 		self.pns_inference = pns_inference.PNS_inference (self)
 		
 	def pns_shutdown (self):
-		assert None == self.log ('<shutdown/>', '')
+		# A practical and safe shutdown procedure
+		#
+		# 1. stop the PNS/TCP server first, closing all sessions
+		# 2. then stop the PNS/UDP peer once all circles have
+		#    been quitted (or timed-out)
+		# 3. stop the inference thread
+		# 4. stop the resolution thread
+		#
+		self.log ('shutdown', 'info')
 		self.pns_tcp_finalize = self.pns_udp.pns_quit
 		self.pns_udp_finalize = self.pns_inference.thread_loop_stop
 		self.pns_inference_finalize = \
 			self.pns_resolution.thread_loop_stop
 		self.pns_resolution_finalize = self.pns_finalize
-		self.pns_tcp.tcp_server_stop ()
+		self.pns_tcp.handle_close ()
 	
 	def pns_finalize (self):
+		# 5. delete all circular references
+		#
 		self.pns_tcp_finalize = self.pns_tcp = None
 		self.pns_udp_finalize = self.pns_udp = None
 		self.pns_inference_finalize = self.pns_inference = None
 		self.pns_resolution_finalize = self.pns_resolution = None
+		self.log ('stopped', 'info')
 		
 	# some debugging utilities
 
@@ -191,15 +198,16 @@ class PNS_peer (async_loop.loginfo.Loginfo):
 	
 
 if __name__ == '__main__':
-	loginfo.log (
-		'Allegra PNS Peer'
-		' - Copyright 2005 Laurent A.V. Szyster'
-		' | Copyleft GPL 2.0', 'info'
-		)
 	import sys
 	if '-d' in sys.argv:
 		sys.argv.remove ('-d')
 		from allegra import sync_stdio
+		loginfo.Loginfo_stdio.log = loginfo.Loginfo_stdio.loginfo_debug
+		loginfo.log (
+			'Allegra PNS Dev'
+			' - Copyright 2005 Laurent A.V. Szyster'
+			' | Copyleft GPL 2.0', 'info'
+			)
 		class PNS_run (PNS_peer):
 			def __init__ (self, udp, tcp, root):
 				self.python_prompt = sync_stdio.Python_prompt (
@@ -211,6 +219,11 @@ if __name__ == '__main__':
 				self.python_prompt.async_stdio_stop ()
 				self.python_prompt = None
 	elif __debug__:
+		loginfo.log (
+			'Allegra PNS Debug'
+			' - Copyright 2005 Laurent A.V. Szyster'
+			' | Copyleft GPL 2.0', 'info'
+			)
 		class PNS_run (PNS_peer):
 			def __init__ (self, udp, tcp, root):
 				self.async_catch = async_loop.async_catch
@@ -222,6 +235,11 @@ if __name__ == '__main__':
 				self.async_catch = None
 				return 1
 	else:
+		loginfo.log (
+			'Allegra PNS Peer'
+			' - Copyright 2005 Laurent A.V. Szyster'
+			' | Copyleft GPL 2.0', 'info'
+			)
 		from allegra import sync_stdio
 		class PNS_run (PNS_peer):
 			def __init__ (self, udp, tcp, root):
@@ -232,13 +250,11 @@ if __name__ == '__main__':
 				async_loop.async_catch = self.pns_shutdown
 				PNS_peer.__init__ (self, udp, tcp, root)
 			def pns_shutdown (self):
-				self.log ('shutdown', 'info')
 				PNS_peer.pns_shutdown (self)
 				async_loop.async_catch = self.async_catch
 				self.async_catch = None
 				return 1
 			def pns_finalize (self):
-				self.log ('stopped', 'info')
 				PNS_peer.pns_finalize (self)
 				self.sync_stdoe.async_stdio_stop ()
 				self.sync_stdoe = None

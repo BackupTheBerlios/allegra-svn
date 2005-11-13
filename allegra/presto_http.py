@@ -17,14 +17,10 @@
 
 ""
 
-import os, glob
+import os, glob, urllib
 from urllib import unquote, unquote_plus
 
-from allegra.loginfo import Loginfo
-from allegra.producer import Simple_producer
-from allegra.mime_collector import mime_headers_options
-from allegra.http_server import HTTP_root
-from allegra.presto import PRESTo_root, presto_rest, presto_producer
+from allegra import loginfo, producer, mime_reactor, http_server, presto
 
 
 def presto_decode (urlencoded_form_data, result, encoding='UTF-8'):
@@ -33,25 +29,26 @@ def presto_decode (urlencoded_form_data, result, encoding='UTF-8'):
                 if param.find ('=') > -1:
                         name, value = param.split ('=', 1)
                         result[unicode (
-                                unquote (name), encoding, 'replace'
+                                urllib.unquote (name), encoding, 'replace'
                                 )] = unicode (
-                                        unquote (value), encoding, 'replace'
+                                        urllib.unquote (value), encoding,
+                                        'replace'
                                         )
                 elif param:
                         result[unicode (
-                                unquote (param), encoding, 'replace'
+                                urllib.unquote (param), encoding, 'replace'
                                 )] = u''
         return result
 
 
-class PRESTo_http_root (PRESTo_root, HTTP_root):
+class PRESTo_http_root (presto.PRESTo_root, http_server.HTTP_root):
         
         def __init__ (self, path):
-                PRESTo_root.__init__ (self, path)
-                HTTP_root.__init__ (self, path)
+                http_server.HTTP_root.__init__ (self, path)
+                presto.PRESTo_root.__init__ (self, path)
                 
         def __repr__ (self):
-                return '<presto-http-root path="%s"/>' % self.presto_path
+                return 'presto-http-root host="%s"' % self.http_host
 
         def http_match (self, reactor):
                 # Direct Cache "Hit"
@@ -63,7 +60,7 @@ class PRESTo_http_root (PRESTo_root, HTTP_root):
                         return True
                 
                 # Persistent HTTP root filesystem match, load to cache
-                if HTTP_root.http_match (self, reactor, ''): # no default!
+                if http_server.HTTP_root.http_match (self, reactor, ''): 
                         self.presto_cache (
                                 reactor,
                                 reactor.http_uri[2],
@@ -74,7 +71,7 @@ class PRESTo_http_root (PRESTo_root, HTTP_root):
                 return False
                 
         
-class PRESTo_handler (Loginfo):
+class PRESTo_handler (loginfo.Loginfo):
         
         def __init__ (self, root):
                 paths = [r.replace ('\\', '/') for r in glob.glob (root+'/*')]
@@ -87,7 +84,7 @@ class PRESTo_handler (Loginfo):
                         ])
 
         def __repr__ (self):
-                return '<presto-handler/>'
+                return 'presto-handler id="%x"' % id (self)
                                 
         def http_match (self, reactor):
                 reactor.presto_root = self.presto_roots.get (
@@ -118,21 +115,23 @@ class PRESTo_handler (Loginfo):
                         reactor.http_uri[2] or '', 'UTF-8'
                         )
                 # do the REST of the request ;-)
-                result = presto_rest (reactor, self)
+                result = presto.presto_rest (reactor, self)
                 if (
                         reactor.mime_producer_body == None and 
                         method in ('GET', 'POST')
                         ):
                         # if there is no body, supply one PRESTo!
                         if __debug__:
-                                reactor.mime_producer_body = presto_producer (
-                                        reactor, result, 'UTF-8',
-                                        reactor.http_request_time
-                                        )
+                                reactor.mime_producer_body = \
+                                        presto.presto_producer (
+                                                reactor, result, 'UTF-8',
+                                                reactor.http_request_time
+                                                )
                         else:
-                                reactor.mime_producer_body = presto_producer (
-                                        reactor, result, 'UTF-8'
-                                        )
+                                reactor.mime_producer_body = \
+                                        presto.presto_producer (
+                                                reactor, result, 'UTF-8'
+                                                )
                         reactor.mime_producer_headers [
                                 'Content-Type'
                                 ] = 'text/xml; charset=UTF-8'
@@ -150,28 +149,24 @@ class PRESTo_handler (Loginfo):
 
 
 if __name__ == '__main__':
-        assert None == Loginfo.loginfo_logger.log (
-                'Allegra PRESTo'
-                ' - Copyright 2005 Laurent A.V. Szyster'
-                ' | Copyleft GPL 2.0'
-                )
         import sys
         from allegra import async_loop
-        from allegra.http_server import HTTP_server, HTTP_handler
+        loginfo.log (
+                'Allegra PRESTo'
+                ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
+                'info'
+                )
         presto_root = './presto'
         http_root = './http'
         if len (sys.argv) > 1:
                 ip, port = sys.argv[1].split (':')
         else:
                 ip, port = ('127.0.0.1', '80')
-        HTTP_server (
-                [PRESTo_handler (presto_root), HTTP_handler (http_root)],
-                ip, int (port)
-                )
-        try:
-                async_loop.loop ()
-        except:
-                async_loop.loginfo.loginfo_traceback ()
+        http_server.HTTP_server ([
+                PRESTo_handler (presto_root), 
+                http_server.HTTP_handler (http_root)
+                ], ip, int (port))
+        async_loop.loop ()
 
 
 # Note about this implementation
@@ -247,12 +242,12 @@ if __name__ == '__main__':
 # instances that manage their own collection of instances, like
 # a BSDDB database or a PNS metabase.
 #
-#        /~component        # asynchronous, disk I/O, may be blocking
+#        /~component        # asynchronous, disk I/O is blocking
 #        /pns/~component    # asynchronous, network I/O, not blocking
-#        /bsddb/~component  # synchronized, disk I/O, may be slowing
+#        /bsddb/~component  # synchronized, disk I/O may be slowing
 #
-# Those three kind of persistence are enough to provide a PRESTo peer
-# with support for a broad range of applications. BSDDB can manage huge
-# databases (backups) and PNS delivers distributed persistence and semantic
-# on top of the same industrial-strength C library.
+# Those three kind of persistence are enough to support a broad range of 
+# applications. BSDDB can manage huge databases (backups) and PNS delivers 
+# distributed persistence and semantic on top of the same industrial-strength
+# C library.
 #

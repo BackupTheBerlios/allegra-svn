@@ -70,7 +70,7 @@ class PNS_resolution (thread_loop.Thread_loop):
                         
                 else:
                         assert None == self.select_trigger_log (
-                        	'open', 'debug'
+                        	'opened', 'debug'
                         	)
                 return True
 
@@ -83,7 +83,7 @@ class PNS_resolution (thread_loop.Thread_loop):
                         else:
                                 del self.pns_statements
                         	assert None == self.select_trigger_log (
-                        		'close', 'debug'
+                        		'closed', 'debug'
                         		)
                 self.select_trigger ((
                 	self.pns_peer.pns_resolution_finalize, ()
@@ -108,8 +108,11 @@ class PNS_resolution (thread_loop.Thread_loop):
                 sp = netstring.netstrings_encode (model[:2])
                 stored = self.pns_statements.get (sp)
                 if stored == None:
-                	# new (subject, predicate), maybe log, store and pass
-                	assert None == self.pns_log (model)
+                	# new (subject, predicate): log, store and pass
+                	assert None == self.select_trigger_log (
+                		netstring.netstrings_encode (model), 'new'
+                		)
+                	self.pns_log (model)
 			self.pns_statements [sp] = cPickle.dumps (
 				{model[3]: model[2]}
 				)
@@ -119,12 +122,18 @@ class PNS_resolution (thread_loop.Thread_loop):
 		persistents = cPickle.loads (stored)
 		o = persistents.get (model[3])
 		if o == model[2]:
-			# redundant contextual statement, block
+			# redundant contextual statement: block
+                	assert None == self.select_trigger_log (
+                		netstring.netstrings_encode (model), 'block'
+                		)
 			return False, None
 			
 		if model[2] != '':
-			# dissent, maybe log, update answer and pass
-                	assert None == self.pns_log (model)
+			# dissent: log, update answer and pass
+                	assert None == self.select_trigger_log (
+                		netstring.netstrings_encode (model), 'update'
+                		)
+                	self.pns_log (model)
 			persistents[model[3]] = model[2]
 			self.pns_statements[sp] = cPickle.dumps (persistents)
 		return True, o

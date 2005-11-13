@@ -17,7 +17,7 @@
 
 ""
 
-from allegra import tcp_client, netstring, collector
+from allegra import netstring, tcp_client, collector
 
 
 class PNS_client_channel (
@@ -34,7 +34,7 @@ class PNS_client_channel (
                 self.pns_subscribed = {}
                 
         def __repr__ (self):
-                return '<pns-client/>'
+                return 'pns-client id="%x"' % id (self)
 
         def close (self):
                 # callback all pending statement handlers with echo, command
@@ -68,15 +68,14 @@ class PNS_client_channel (
                 collector.Netstring_collector.found_terminator 
 
         def netstring_collector_error (self):
-                assert None == self.log ('<netstring-error/>', '')
+                assert None == self.log ('netstring-error', 'debug')
                 self.close ()
                 
         def netstring_collector_continue (self, encoded):
                 model = netstring.netstrings_decode (encoded)
                 if len (model) < 5:
                         assert None == self.log (
-                                '<invalid-peer-statement/>'
-                                '<![CDATA[%s]]]!>' % encoded, ''
+                                encoded, 'invalid-peer-statement'
                                 )
                         self.close ()
                         return
@@ -89,7 +88,7 @@ class PNS_client_channel (
         
         def pns_peer (self, ip):
                 assert None == self.log (
-                        '<peer ip="%s"/>' % ip, ''
+                        'peer ip="%s"' % ip, 'debug'
                         )
                         
         def pns_send (self, encoded):
@@ -163,8 +162,7 @@ class PNS_client_channel (
                 model = netstring.netstrings_decode (encoded)
                 if len (model) != 5:
                         assert None == self.log (
-                                '<invalid-peer-statement/>'
-                                '<![CDATA[%s]]]!>' % encoded, ''
+                                encoded, 'invalid-peer-statement'
                                 )
                         self.close ()
                         return
@@ -180,8 +178,8 @@ class PNS_client_channel (
                         handlers = self.pns_commands.get (resolved)
                         if handlers == None:
                                 assert None == self.log (
-                                        '<unsollicited-command-response/>'
-                                        '<![CDATA[%s]]>' % encoded, ''
+                                        encoded, 
+                                        'unsollicited-command-response'
                                         )
                                 self.close ()
                                 return
@@ -224,7 +222,7 @@ class PNS_client_channel (
                         len (self.pns_contexts) == 0 and
                         len (self.pns_subscribed) == 0
                         ):
-                        assert None == self.log ('<done/>', '')
+                        assert None == self.log ('done', 'debug')
                         self.close ()
                         
         def pns_multiplex (self, model):
@@ -241,7 +239,9 @@ class PNS_client_channel (
                 return True
                 
         def pns_noise (self, model):
-                assert None == self.log (netstring.netstrings_encode (model), '')
+                assert None == self.log (
+                        netstring.netstrings_encode (model), 'noise'
+                        )
 
         #
         # This implementation allows several articulators to "speak-over",
@@ -283,11 +283,11 @@ if __name__ == '__main__':
                                 return
                                 
                         assert None == self.log (
-                                '<close sent="%d" received="%d" seconds="%f"'
-                                '/>' % (
+                                'close'
+                                ' sent="%d" received="%d" seconds="%f"' % (
                                         self.pns_sent, self.pns_received,
                                         time.time () - self.pns_start
-                                        ), ''
+                                        ), 'debug'
                                 )
                         
                 def pns_articulate (self):

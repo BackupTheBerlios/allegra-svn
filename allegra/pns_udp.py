@@ -58,7 +58,7 @@ class PNS_circle (UDP_dispatcher):
 		self.pns_out_of_circle ()
 
 	def __repr__ (self):
-		return '<circle name="%s"/>' % self.pns_name
+		return 'circle name="%s"' % self.pns_name
 
 	# asyncore dispatcher's methods 
 	
@@ -67,7 +67,7 @@ class PNS_circle (UDP_dispatcher):
 	def handle_read (self):
 		datagram, peer = self.recvfrom ()
 		if peer == None:
-			assert None == self.log ('<nop/>', '')
+			assert None == self.log ('nop', 'debug')
 			return
 			#
 			# bogus UDP read event triggered by errors like 
@@ -77,8 +77,8 @@ class PNS_circle (UDP_dispatcher):
 			
 		if peer != (self.pns_left, 3534):
 			assert None == self.log (
-				'<wrong-left-peer ip="%s" port="%d"/>' % peer,
-				''
+				'wrong-left-peer ip="%s" port="%d"' % peer,
+				'error'
 				)
 			return
 
@@ -146,8 +146,7 @@ class PNS_circle (UDP_dispatcher):
 				return
 
 			assert None == self.log (
-				'<invalid-protocol-command/>'
-				'<![CDATA[%s]]!>' % datagram, ''
+				datagram, 'invalid-protocol-command'
 				)
 			self.pns_quitted ()
 			return
@@ -175,9 +174,7 @@ class PNS_circle (UDP_dispatcher):
 			model[0] != pns_name (model[0])
 			):
 			assert None == self.log (
-				'<invalid-question ip="%s"/>'
-				'<![CDATA[%s]]!>' % (peer[0], datagram),
-				''
+				datagram, 'invalid-question'
 				)
 			# TODO: ban IP addresses that send invalid datagrams!
 			self.pns_quit ()
@@ -189,10 +186,7 @@ class PNS_circle (UDP_dispatcher):
 			not self.pns_statements.has_key (sp)
 			):
 			# buffered not stated, drop
-			assert None == self.log (
-				'<question-drop>'
-				'<![CDATA[%s]]!>' % sp, ''
-				)
+			assert None == self.log (datagram, 'drop')
 			return
 			
 		# echo the statement to the PNS/TCP subscribers
@@ -202,10 +196,7 @@ class PNS_circle (UDP_dispatcher):
 		if self.pns_statements.get (sp) == '':
 			# question circled, clear the statement, do not relay
 			del self.pns_statements[sp]
-			assert None == self.log (
-				'<question-circle>'
-				'<![CDATA[%s]]!>' % sp, ''
-				)
+			assert None == self.log (datagram, 'circle')
 			return
 
 		# relay left
@@ -242,7 +233,7 @@ class PNS_circle (UDP_dispatcher):
 					return
 					
 			assert None == self.log (
-				'<invalid-command-answer/>'
+				datagram, 'invalid-command-answer'
 				)
 			self.pns_quit ()
 			return
@@ -254,8 +245,7 @@ class PNS_circle (UDP_dispatcher):
 				model[2] == '' or is_ip (model[2])
 				)):
 				assert None == self.log (
-					'<invalid-protocol-answer>'
-					'<![CDATA[%s]]!>' % sp, ''
+					datagram, 'invalid-protocol-answer'
 					)
 				self.pns_quit ()
 				return
@@ -284,9 +274,7 @@ class PNS_circle (UDP_dispatcher):
         		model[0] != pns_name (model[0])
         		):
 			assert None == self.log (
-				'<invalid-question ip="%s"/>'
-				'<![CDATA[%s]]!>' % (peer[0], datagram),
-				''
+				datagram, 'invalid-question'
 				)
 			self.pns_quit ()
 			return
@@ -297,11 +285,7 @@ class PNS_circle (UDP_dispatcher):
 			not self.pns_statements.has_key (sp)
 			):
 			# buffered not stated, drop
-			assert None == self.log (
-				'<drop-answer-buffered>'
-				'<![CDATA[%s]]!>' % netstrings_encode (model),
-				''
-				) # ... drop.
+			assert None == self.log (datagram, 'drop')
 			return
 
 		# echo to all subscribers
@@ -310,10 +294,7 @@ class PNS_circle (UDP_dispatcher):
 		if self.pns_statements.get (sp) == model[2]:
 			# answer circled, clear the statement, do not relay
 			del self.pns_statements [sp]
-			assert None == self.log (
-				'<answer-circle>'
-				'<![CDATA[%s]]!>' % sp, ''
-				)
+			assert None == self.log (datagram, 'circle')
 			return
 
 		# relay right
@@ -371,7 +352,7 @@ class PNS_circle (UDP_dispatcher):
 	# States
 
 	def pns_out_of_circle (self):
-		assert None == self.log ('<out-of-circle/>', '')
+		assert None == self.log ('out-of-circle', 'debug')
 		self.pns_statements = {}
 		self.pns_buffer = {}
 		self.pns_left = self.pns_right = None
@@ -380,7 +361,7 @@ class PNS_circle (UDP_dispatcher):
 			)
 
 	def pns_join (self, left):
-		assert None == self.log ('<join ip="%s"/>' % left, '')
+		assert None == self.log ('join ip="%s"' % left, 'debug')
 		if not self.connected:
 			UDP_dispatcher.__init__ (
 				self, self.pns_peer.pns_udp.addr[0]
@@ -401,8 +382,9 @@ class PNS_circle (UDP_dispatcher):
 			if self.pns_statements.has_key (self.PNS_SP):
 				# quitting or joined, bounce (,,R) to I
 				assert None == self.log (
-					'<joined-bounce-right '
-					'ip="%s" port="%d"/>' % right, ''
+					'joined-bounce-right'
+					' ip="%s" port="%d"/>' % right,
+					'debug'
 					)
 				if self.pns_sendto_right ('0:,0:,%d:%s,' % (
 					len (self.pns_right[0]),
@@ -415,8 +397,8 @@ class PNS_circle (UDP_dispatcher):
 			# accepting, send (S,,I) to R and (S,,R) to I as,
 			# telling I it is accepted between L and R
 			assert None == self.log (
-				'<joined-accept '
-				'ip="%s" port="%d"/>' % right, ''
+				'joined-accept'
+				' ip="%s" port="%d"' % right, 'debug'
 				)
 			if self.pns_sendto_right (self.PNS_SP + '%d:%s,' % (
 				len (self.pns_right[0]), self.pns_right[0]
@@ -435,8 +417,8 @@ class PNS_circle (UDP_dispatcher):
 		if self.pns_left:
 			# joining, bounce (,,L) to I
 			assert None == self.log (
-				'<joined-bounce-left '
-				'ip="%s" port="%d"/>' % right, ''
+				'joined-bounce-left'
+				' ip="%s" port="%d"' % right, 'debug'
 				)
 			if self.pns_sendto_right ('0:,0:,%d:%s,' % (
 				len (self.pns_left), self.pns_left
@@ -450,14 +432,14 @@ class PNS_circle (UDP_dispatcher):
 			self.pns_root (right)
 		else:
 			assert None == self.log (
-				'<joined-root-fail '
-				'ip="%s" port="%d"/>' % right, ''
+				'joined-root-fail'
+				' ip="%s" port="%d"' % right, 'debug'
 				)
 			
 	def pns_root (self, right):
 		# set the L=R, bind a UDP port if joined and set the 
 		# state to in-circle
-		assert None == self.log ('<root ip="%s"/>' % right[0], '')
+		assert None == self.log ('root ip="%s"' % right[0], 'debug')
 		self.pns_left = right[0]
 		if not self.connected:
 			UDP_dispatcher.__init__ (
@@ -468,7 +450,7 @@ class PNS_circle (UDP_dispatcher):
 	def pns_in_circle (self, right):
 		# set R, register the circle as joined
 		assert None == self.log (
-			'<in-circle ip="%s" port="%d"/>' % right, ''
+			'in-circle ip="%s" port="%d"' % right, 'debug'
 			)
 		self.pns_right = right
 		self.pns_peer.pns_udp.pns_joined[right] = self
@@ -477,8 +459,8 @@ class PNS_circle (UDP_dispatcher):
 			# if quit has been stated, quit now
 			if self.pns_statements.pop (self.PNS_SP) == '':
 				assert None == self.log (
-					'<in-circle-quit '
-					'ip="%s" port="%d"/>' % right, ''
+					'in-circle-quit'
+					' ip="%s" port="%d"' % right, 'debug'
 					)
 				self.pns_quit ()
 					
@@ -487,7 +469,7 @@ class PNS_circle (UDP_dispatcher):
 			if self.pns_statements[self.PNS_SP]:
 				# joining
 				assert None == self.log (
-					'<quit-joining/>', ''
+					'quit-joining', 'debug'
 					)
 			else:
 				pass # quitting
@@ -495,7 +477,7 @@ class PNS_circle (UDP_dispatcher):
 			
 		if not self.pns_right:
 			# out-of-circle
-			assert None == self.log ('<quit-out-of-cicle/>', '')
+			assert None == self.log ('quit-out-of-cicle', 'debug')
 			return
 
 		# in-circle, notice subscribers, set a timeout,
@@ -503,7 +485,7 @@ class PNS_circle (UDP_dispatcher):
 		# substitutes a new circle to the one subscribed if
 		# there are at least one subscriber.
 		#
-		assert None == self.log ('<quit/>', '')
+		assert None == self.log ('quit', 'debug')
 		self.pns_statements[self.PNS_SP] = ''
 		self.pns_peer.pns_udp.timeouts_push (
 			(self.pns_right, self.PNS_SP)
@@ -566,16 +548,14 @@ class PNS_axis (PNS_circle):
 		PNS_circle.__init__ (self, pns_peer, name, subscribers)
 
 	def __repr__ (self):
-		return '<axis name="%s"/>' % self.pns_name
+		return 'pns-udp-axis name="%s"' % self.pns_name
 		
 	def pns_join (self, left):
 		if ip_long (left) & self.pns_netmask == self.pns_netmask:
 			PNS_circle.pns_join (self, left)
 			return
 			
-		assert None == self.log (
-			'<pns-join-drop ip="%s"/>' % left, ''
-			)
+		self.log ('pns-join-drop ip="%s"' % left, 'error')
 
 	def pns_joined (self, right):
 		if ip_long (right[0]) & self.pns_netmask == self.pns_netmask:
@@ -583,9 +563,7 @@ class PNS_axis (PNS_circle):
 			return
 
 		# TODO: ban ?
-		assert None == self.log (
-			'<joined-drop ip="%s"/>' % right[0], ''
-			)
+		self.log ('joined-drop ip="%s"' % right[0], 'error')
 
 
 class PNS_UDP_peer (UDP_dispatcher, Timeouts):
@@ -623,14 +601,14 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 					)
 
 	def __repr__ (self):
-		return '<udp/>'
+		return 'pns-udp'
 
 	udp_datagram_size = 512
 			
 	def handle_read (self):
 		datagram, peer = self.recvfrom ()
 		if peer == None:
-			assert None == self.log ('<nop/>', '')
+			assert None == self.log ('nop', 'debug')
 			return
 		
 		if self.pns_joined.has_key (peer):
@@ -653,10 +631,8 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 			model[0] != pns_name (model[0])
 			):
 			# log and drop invalid out-of-circle question ...
-			assert None == self.log (
-				'<invalid ip="%s"/><![CDATA[%s]]!>' % (
-					peer[0], datagram
-					), ''
+			self.log (
+				'invalid-peer ip="%s"' % peer[0], 'error'
 				)
 			return
 
@@ -691,7 +667,7 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 		return PNS_circle (self.pns_peer, name, subscribers)
 		
 	def pns_quit (self):
-		assert None == self.log ('<quit/>', '')
+		assert None == self.log ('quit', 'debug')
 		for circle in self.pns_joined.values ():
 			circle.pns_quit ()
 		self.timeouts_push ((None, ''))
@@ -715,8 +691,7 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 				].pns_timeout (reference[1]) 
 		else:
 			assert None == self.log (
-				'<timeout-drop/>'
-				'<![CDATA[%s]]!>' % reference[1], ''
+				'%s' % reference[1], 'timeout-drop'
 				)
 
 # Just PNS/UDP with logging stubs for TCP, Resolution and Inference.

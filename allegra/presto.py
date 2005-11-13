@@ -114,7 +114,7 @@ def presto_xml (
                         )
 
         instance_id = id (instance)
-        if issubclass (t, PRESTo_Iterable) and not instance_id in walked:
+        if isinstance (instance, PRESTo_Iterable) and not instance_id in walked:
                 # 3. simple iterables: tuple, list, etc ...
                 walked.add (instance_id)
                 if len (walked) > horizon:
@@ -132,7 +132,7 @@ def presto_xml (
                                         ])
                                 )
         
-        elif issubclass (t, types.DictType) and not instance_id in walked:
+        elif isinstance (instance, dict) and not instance_id in walked:
                 walked.add (instance_id)
                 if len (walked) > horizon:
                         attributes += ' horizon="%d"' % horizon
@@ -214,16 +214,23 @@ def presto_async_commit (self, reactor):
 class PRESTo_async (
         loginfo.Loginfo, finalization.Finalization, xml_dom.XML_element
         ):
+                
+        def __repr__ (self):
+                return '%s id="%x"' % (
+                        self.xml_name.encode ('UTF-8', 'ignore'), id (self)
+                        )
 
         def finalization (self, instance):
-                self.log ('<finalized />')
+                self.log ('finalized')
 
         xml_name = u'http://presto/ async'
 
         presto_interfaces = set ((u'presto-host', u'presto-path'))
         
         def presto (self, reactor):
-                assert None == self.log ('<presto/>', '')
+                assert None == self.log (
+                        '%r' % reactor.presto_vector, 'presto'
+                        )
 
         presto_methods = {u'commit': presto_async_commit}
         
@@ -245,29 +252,6 @@ class PRESTo_sync (PRESTo_async, synchronizer.Synchronized):
 
         xml_name = u'http://presto/ sync'
 
-        def presto_synchronized (self, reactor, method):
-                # instanciate a new reactor, with a copy of the PRESTo request
-                # state and thunk through the synchronized thread loop queue
-                # a call to the class method named.
-                #
-                xml_reactor = PRESTo_reactor_sync (
-                        self.synchronizer.select_trigger
-                        )
-                xml_reactor.presto_vector = reactor.presto_vector.copy ()
-                self.synchronized ((
-                        x.__class__.__dict__[method], (self, reactor)
-                        ))
-                return xml_reactor
-                #
-                # returns the stallable buffer reactor that can be safely
-                # accessed from the synchronized (threaded) method.
-                
-        # Note that synchronized methods *must* be class-methods.
-        #
-        # TODO: add support for synchronized unbound and instance methods
-        #       checking the x instance first instead, or should synchronized
-        #       methods allways be class-bound?
-        
         # Note also that there are two logging interfaces for a synchronized
         # PRESTo instance, asynchronous and synchronous:
         #
@@ -297,7 +281,16 @@ class PRESTo_sync (PRESTo_async, synchronizer.Synchronized):
 
         
 def presto_synchronize (method):
-        return lambda s, r, m=method: s.presto_synchronized (r, m)
+        #def presto_synchronized (self, reactor, m=method):
+        #        self.presto_synchronized (reactor, m)
+        #return presto_synchronized
+        def synchronized (self, reactor):
+                xml_reactor = PRESTo_reactor_sync (self.select_trigger)
+                xml_reactor.presto_vector = reactor.presto_vector.copy ()
+                self.synchronized ((method, (self, xml_reactor)))
+                return xml_reactor
+                
+        return synchronized
         #
         # a lambda factory to wrap PRESTo methods with an appropriate
         # synchronizer, the PRESTo_sync.presto_synchronized method.
@@ -321,7 +314,7 @@ class PRESTo_root (loginfo.Loginfo):
                         self.presto_module_load (filename)
                 
         def __repr__ (self):
-                return '<presto-root path="%s"/>' % self.presto_path
+                return 'presto-root path="%s"' % self.presto_path
 
         # What's *specially* nice with the asynchronous design is that Python
         # modules reload is both efficient (reloading an identical module is
@@ -360,9 +353,9 @@ class PRESTo_root (loginfo.Loginfo):
                 # with any module's name that has an 'xml_name' attribute.
                 #
                 assert None == self.log (
-                        '<load-module filename="%s" id="%x"/>' % (
+                        'load-module filename="%s" id="%x"' % (
                                 filename, id (presto_module)
-                                ), ''
+                                ), 'debug'
                         )
                 self.presto_modules[filename] = presto_module
                 if not hasattr (presto_module, 'presto_components'):
@@ -378,9 +371,9 @@ class PRESTo_root (loginfo.Loginfo):
                         return
                         
                 assert None == self.log (
-                        '<unload-module filename="%s" id="%x"/>' % (
+                        'unload-module filename="%s" id="%x"' % (
                                 filename, id (presto_module)
-                                ), ''
+                                ), 'debug'
                         )
                 for item in presto_module.presto_components:
                         del self.presto_classes[item.xml_name]
@@ -399,7 +392,7 @@ class PRESTo_root (loginfo.Loginfo):
                 
         # In order to limit the possible damage of broken/malicious
         # URLs, a strict depth limit of 2 is set by default. Raise
-        # to a 4 for support of a "/model/controller/view" scheme.
+        # to a 4 for support of a "/model/controller/view" syntax.
         #
         PRESTo_FOLDER_DEPTH = 2
                 
@@ -409,11 +402,11 @@ class PRESTo_root (loginfo.Loginfo):
                 # containing "folder" DOM instance.
                 #
                 depth = 0
-                base, path = path.rsplit (separator, 1)
+                base, name = path.rsplit (separator, 1)
                 while base and depth < self.PRESTo_FOLDER_DEPTH:
                         depth += 1
                         presto_dom = self.presto_cached.get (
-                                path, _None_factory
+                                base + separator, _None_factory
                                 ) ()
                         if (
                                 presto_dom != None and
@@ -438,7 +431,7 @@ class PRESTo_root (loginfo.Loginfo):
                                         return True
                                 
                         base, name = base.rsplit (separator, 1)
-                        path = separator.join ((path, name))
+                        # path = separator.join ((path, name))
                 return False
                 #
                 # As its many levels of indentation show, this may be a
@@ -457,8 +450,8 @@ class PRESTo_root (loginfo.Loginfo):
                 # to create the DOM instance, the XML string is optional.
                 #
                 assert None == self.log (
-                        '<cached count="%d"'
-                        '/>' % len (self.presto_cached), ''
+                        'cached count="%d"' % len (self.presto_cached), 
+                        'debug'
                         )
                 reactor.presto_dom = xml_dom.XML_dom ()
                 reactor.presto_dom.xml_classes = self.presto_classes
@@ -487,6 +480,58 @@ class PRESTo_root (loginfo.Loginfo):
                 open (dom.presto_path, 'w').write (
                         ''.join (xml_prefixed (dom.xml_root))
                         )
+
+
+class PRESTo_benchmark:
+        
+        def __init__ (self, t):
+                self.presto_request_time = t 
+                self.presto_benchmark = allegra_time () - t
+        
+        def more (self):
+                if self.presto_request_time == None:
+                        return ''
+                        
+                t = allegra_time () - self.presto_request_time
+                self.presto_request_time = None
+                return (
+                        '<!-- it took PRESTo %f seconds'
+                        ' to handle this request and %f seconds'
+                        ' to deliver this response -->' % (
+                                self.presto_benchmark, 
+                                t - self.presto_benchmark
+                                )
+                        )
+                        
+        def producer_stalled (self):
+                return False
+
+
+def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
+        # return one single Composite_producer with a simplistic PRESTo
+        # envelope made of two elements: the accessed DOM root and the 
+        # byte string, unicode string, xml element or producer returned by
+        # a call to presto_rest.
+        #
+        e = xml_dom.XML_element ()
+        e.xml_name = u'http://presto/ PRESTo'
+        e.xml_attributes = reactor.presto_vector
+        e.xml_children = [result, reactor.presto_dom.xml_root]
+        if benchmark != None:
+                e.xml_children.append (PRESTo_benchmark (benchmark))
+        head = '<?xml version="1.0" encoding="%s"?>' % encoding
+        if reactor.presto_dom.xml_pi:
+                head += xml_unicode.xml_pi (
+                        reactor.presto_dom.xml_pi, encoding
+                        )
+        return producer.Composite_producer (
+                head, xml_unicode.xml_prefixed (
+                        e, 
+                        reactor.presto_dom.xml_prefixes, 
+                        xml_unicode.xml_ns (reactor.presto_dom.xml_prefixes), 
+                        encoding
+                        )
+                )
 
 
 # the core PRESTo interface/implementation itself, just REST
@@ -591,351 +636,68 @@ def presto_rest (reactor, handler):
         return presto_xml (result, set ())
                                              
 
-class PRESTo_benchmark:
-        
-        def __init__ (self, t):
-                self.presto_request_time = t 
-                self.presto_benchmark = allegra_time () - t
-        
-        def more (self):
-                if self.presto_request_time == None:
-                        return ''
-                        
-                t = allegra_time () - self.presto_request_time
-                self.presto_request_time = None
-                return (
-                        '<!-- it took PRESTo %f seconds'
-                        ' to handle this request and %f seconds'
-                        ' to deliver this response -->' % (
-                                self.presto_benchmark, 
-                                t - self.presto_benchmark
-                                )
-                        )
-                        
-        def producer_stalled (self):
-                return False
-
-
-def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
-        # return one single Composite_producer with a simplistic PRESTo
-        # envelope made of two elements: the accessed DOM root and the 
-        # byte string, unicode string, xml element or producer returned by
-        # a call to presto_rest.
-        #
-        e = xml_dom.XML_element ()
-        e.xml_name = u'http://presto/ PRESTo'
-        e.xml_attributes = reactor.presto_vector
-        e.xml_children = [result, reactor.presto_dom.xml_root]
-        if benchmark != None:
-                e.xml_children.append (PRESTo_benchmark (benchmark))
-        head = '<?xml version="1.0" encoding="%s"?>' % encoding
-        if reactor.presto_dom.xml_pi:
-                head += xml_unicode.xml_pi (
-                        reactor.presto_dom.xml_pi, encoding
-                        )
-        return producer.Composite_producer (
-                head, xml_unicode.xml_prefixed (
-                        e, 
-                        reactor.presto_dom.xml_prefixes, 
-                        xml_unicode.xml_ns (reactor.presto_dom.xml_prefixes), 
-                        encoding
-                        )
-                )
-
-
-# Five Points of Articulation, Five Degrees of Freedom
+# Seven Points of Articulations, Eight Degrees of Freedom
 #
-# Allegra's PRESTo adds PNS to the standard three points of articulation in
+# Allegra's PRESTo adds PNS to the standard six points of articulation in
 # web development and integrates that stack for application peers:
 #
-# 1. PNS               Semantic Model | Distribution, Inference, ...
+# 1. PNS               Semantic Metabase | Distribution, Inference, ...
 # 2. XML               Data Model | Aggregation, Persistence, ...
-# 3. HTTP              API | Network Interfaces, ...
-# 4. XSLT+CSS          Look & Feel | Themes, Localization, ...
+# 3. HTTP              The Network API for all services
+# 4. XSLT              Display | Localisation, Local Transformation, ...
+# 5. CSS               Look & Feel | Themes, Animation, ...
+# 6. HTML              Web Integration | 
+# 7. JavaScript        Local Interactivity | AJAX, Greasemonkey
 #
-# in Python, of course.
+# and provide a host for the first three. You can use Eclipse and various free
+# pluggins to integrate development with the last four. And with Allegra's
+# practical logging and prompt interfaces, it proves to be a very effective
+# workbench for network applications development.
 #
-# Although there is no such thing as a "common" web application, those four
+# Although there is no such thing as a "common" web application, those seven
 # points provide enough degrees of freedom to develop the most complex
 # statefull web peer applications you can dream of ... or write a quick and
 # dirty CGI script (which is what you should do first, of course).
 #
 #
-# Purpose: To Implement Asynchronous/Synchronized Instance Methods
-#
-# This design supposes that there will be two broad kind of interfaces
-# implemented for each XML document type: long-running process, much like
-# an old synchronous script associated at first with that "page", and
-# then a set of asynchronous and/or properly synchronized new interfaces,
-# possibly common to many different "pages", like for instance DB functions.
-#
-#
-# Not Just HTTP
-#
-# PRESTo is not necessarily an HTTP protocol. Nothing prevents this module to
-# be used to develop other persistent statefull network peer, for instance
-# SMTP agents and other MIME protocols. PRESTo is just a Python implementation
-# of a simple Persistent REST Object interface. There is nothing "HTTP"
-# specific about that interface (TODO: smtp_presto.py, etc ...).
-#
-# You may very well implement XML/RPC or SOAP "over" PRESTo, and possibly a
-# lot simpler and faster than using a general purpose serializer. But only
-# when http_server and http_presto handle POST methods methods ...
-#
-#
-# Python API
-#
-# PRESTo is very much a practical protocol, and a very opportunistic one.
-#
-# Instead of complex Interface/Component model, I just used two simple
-# class properties:
-#
-#        presto_interfaces = set ()
-#        presto_methods = {}
-#
-# a "default" method and a single CGI-like interface:
-#
-#        presto (self, reactor)
-#
-# mixed with Loginfo, Finalization and XML_element interfaces, "managed" by
-# a multi-purpose handler and "hosted" by a generic, filesystem-like
-# interface with a filesystem implementation.
-#
-# A vector of UNICODE strings as input:
-#
-#        (u'key': u'value', ...)
-#
-# for instance an HTTP urlencoded (in UTF-8) GET form request like:
-#
-#        GET /path?key=value HTTP/1.1\r\n
-#        Host: 127.0.0.1
-#
-# is translated as a call to the 'presto' method of the instance serialized
-# as the root element from the XML document named '/path' in the root
-# filesystem associated with host "127.0.0.1" (by default it is found
-# in "~allegra/presto/127.0.0.1/path").
-#
-# The method invoked may set its own . If it does not the instance returned by
-# the methodResults is considered as:
-#
-#         XML (instance.state) + XML(instance.function (REST))
-#
-# What Allegra's add to that simple REST specification is a bit of
-# namespace for another response enveloppe than SOAP or XML/RPC to bundle
-# the bounded instance state and the result of the function called.
-#
-# Plus persistence for Python object instances (the P and o in PRESTo).
-#
-# The default implementation of persistence uses a filesystem, but such
-# interface may be easely developped for a BSDDB, a la ZODB. A simple
-# roadmap is to provide an interface compatible with os.stat (). Obviously
-# access to a single BSDDB file may be faster than a complete filesystem.
-# See the BSDDB_folder example for a modular implementation of a trivial XML
-# Object Database. Instead of forcing to choose between a practical filesystem
-# and a fast database file, Allegra offers both, mixing them gracefully.
-#
-#
-# Encodings
-#
-# PRESTo uses the default encodings of xml_dom.py: instanciate UNICODE
-# strings and serialize to any UNICODE codec provided by Python and
-# supported by the accessor (or ASCII by default).
-#
-# Aside the fact that not all PRESTo accessors should be expected to support
-# anything else than ASCII, there is a practical opportunity to make a
-# distinction between input data. In a PRESTo applications, UNICODE strings
-# can be identified as beeing instanciated from an XML document or a
-# PRESTo request, they are "public" resources, directly accessible by the
-# application user. They are "original" input and state. Other types are more
-# likely to be "private" or "derived" and inaccessible state. 
-#
-# As implemented by presto_prompt.py's, "browsing" PRESTo instances from a
-# browser makes it clear what the user inputed and what the program
-# instanciated.
-#
-# 
-# Synchronize
-#
-# Synchronized methods are passed a callable instance that behaves much like
-# the print statement
-#
-# import time
-#
-# class Hello_world_sync (PRESTo_sync):
-#
-#        presto_interfaces = Set (('PRESTo', ))
-#
-#        def hello_world (reactor):
-#                reactor ("hello ...")
-#                time.sleep (3)
-#                reactor (" world")
-#                reactor ("")
-#
-#        presto_methods = {
-#                'HelloWorld': presto_synchronize ('hello_world')
-#                }
-#
-# the presto method is where to implement the synchronous
-# function, that is any blocking function like access to
-# synchronous API's, etc ...
-#
-# besides filesystem and DB access, the most common
-# application of this interface is ... CGI scripting, or
-# any other form of synchronous code that is not broken and
-# should not be fixed. Just replace "print" with the
-# "reactor ()" method, et "voila!", presto.
-#
-# to thunk back to the async_loop.loop, use the select_trigger
-# attached to the reactor parameter:
-#
-#        ractor.select_trigger ()
-#
-#
-# XML to Python serialization (xml_dom)
-#
-# Python to XML serialization
-#
-# The presto_xml function is a generic way to represent a Python instance
-# *tree* as an XML string.
-#
-# This is a "bullet-proof" implementation that uses the Python
-# serialization interfaces, that does not raise exceptions and
-# allways returns a valid XML string. The purpose is not to
-# provide another pickling implementation (you can't instanciate
-# back the instance serialized) but to produce XML usefull for
-# presentation, XSL transformation or some form of XML/RPC.
-#
-# See presto_prompt.py for sample applications.
-#
-# There is *one* right way to do it.
-#
-# This way produces practical "flat" XML trees for Python instance
-# used to hold state, yet can also serialize collections of nested
-# but simple datastructures. One thing it will not do is dump "deep"
-# states and recurse dangerously. Statefull datastructures tend to
-# establish circular links, and are not safe to recurse without
-# checking for circular references. On the other end, function
-# results may reference the same instance and yet require them to
-# be serialized repeatedly.
-#
-# Last but not least, this way allows developpers to reflect the
-# attributes assigned to instance transparently in the XML string
-# produced.
-#
-#
-# Persistence
-#
-# Note that this is an asynchronous (ie blocking) persistence
-# implementation, as it should actually be. Instances should
-# be fast to instanciate, not slow or stalling! Move the
-# long-running and blocking process to synchronized method invoked
-# thereafter, don't keep them in the __new__, __init__ or xml_valid
-# methods.
-#
-# The benefit of keeping *all* instanciations asynchronous
-# is a much simpler design and implementation of the application
-# peer. The cost is two blocking system call to a synchronous
-# file system. Yet an application peer is expected to do a lot more
-# "view" of its cache than persistence "read" or "write" of the
-# objects it hosts.
-#
-# If however you absolutely need to provide your own persistence - 
-# for instance threaded synchronous access to a BSDDB - implement
-# a folder interface and subclass the 'load' and 'save' interfaces
-# of the XML root elements attached by their "containing" folder.
-#
-# Or see 
-#
-#        bsddb_presto.BSDDB_folder
-#
-# for an implementation of a persistent folder stored synchronously
-# (queued in the same thread loop, that is) in a BSDDB hash table.
-# 
-#                
-# Performances
-#
-# Once optimized PRESTo should be a *fast* and *scalable* solution.
-#
-# Cached PRESTo doclets that are handled asynchronously are as fast as pushing
-# a short XML message back to the browser. An HTTP response can also stall a
-# session waiting for some asynchronous continuation or a threaded response,
-# but it will not block requests of other sessions or any other tasks performed
-# by the peer.
-#
-# It is debattable wether a Python peer can outperform a J2EE, .NET or even
-# a LAMP implementation, but the fact remains that an asynchronous PRESTo peer
-# can manage its memory a lot more efficiently, and also provide an integraded
-# development environnement with a safe runtime host, in the sense that all
-# data structures are instanciated and accessed asynchronously. And fast.
-#
-# Real fast, when properly cached, which is quite easy when all memory
-# is available to the application itself and not globbed by it host ;-)
-#
-#
-# Finalizations
-#
-# XML peerlets are also asynchronous Finalizations holded by a simple session
-# cache. Peerlets are finalized when not more session that accessed it is
-# holding its reference. When you close your browser's session to Allegra's
-# web server, all the XML objects you accessed will be finalized and released
-# from memory if no other reference to it is holded (for instance by a defered
-# event like a POP mailbox recurrent check).
-# 
-# The default finalization of XML peerlet instances is to serialize itself
-# to the debug log. In effect, any XML document "published" acts as a template
-# for a transient instance in memory as long as the session stays open. But
-# it is a trivial task to add persistence to it (just serialize it to another
-# file than STDERR, or to bsddb, or MySQL, or ... etc).
-#
-#
-# Make No Mistake! PRESTo is not a toy.
+# Make No Mistake ...
 #
 # This is a simple, robust, productive, proven, cross-plateform development
 # platform and runtime host for distributed applications. Allegra's PRESTo
 # has all it takes to be an "industrial strength" infrastructure for the
 # development and deployement of entreprise internet applications.
 #
-# No kinding?
+# And more ...
 #
-# Well, check it out by yourself. It has:
-
-# 0. High Performances - High Availability
+#
+# Check It Out!
+#
+# Allegra PRESTo delivers:
+#
+# 1. High Performances and High Availability
 #
 #    Distributed Web Application Peers scale better than Web Application
 #    Servers like IIS or the many J2EE implementations. And they perform
-#    better if properly cached. A lot better.
+#    better if properly cached.
+#
+#    A lot better.
 #
 #    Instead of one thread/process per request/session, and all the memory
-#    and CPU cycle that consume *synchronously*, there is one process with
-#    a large pool of memory available to cache asynchronous states.
+#    and CPU cycle this consumes *concurrently*, there is one process with
+#    a large pool of memory available to cache *asynchronous* states. 
 #
-#    You may mix-in synchronized methods, easely audit their thread-safety
-#    and restrict their CPU resources to an array of threads.
+#    A lot of them.
 #
-#    The result is an application peer that his more resilient in the face
-#    of flooding and breaks only when it runs out of memory. Distributed on
+#    An asynchronous application peer is more resilient in the face of 
+#    flooding and breaks only when it runs out of memory. Distributed on
 #    a network, such application is practically resilient, or Highly
 #    Available.
 #
+#    And damn fast.
 #
-# 1. The best programming language implementation available today.
-#
-#    As an application host and network peer, the CPython VM as a proven track
-#    record of reliability, performance and portability. Unlike Java, and
-#    much like C#, Python is a C implementation, not a formal specification
-#    (there is a "standard programming language", it's called LISP, and there
-#    is a "standard operating system language implementation" and it's that
-#    good old "C" ;-). Beeing also free software, Python has the advantage of
-#    both Java and C#: it is not suprising that - unlike Perl - Python has
-#    been reimplemented in Java and C#.
-#
-#    Perl has no equivalent, yet its Regular Expression (RE) language has
-#    been ported to most development platforms, including Python. 
-#
-#    Python combines the power of RE, comes with first-class UNICODE support
-#    (Adobe Acrobat 7.? appear to includes some 1999 Python codecs ;-) and
-#    integrates the BSDDB and expat libraries, the de-facto public standards
-#    implementation of relational databases and XML applications.
+#    Finally, to access blocking API you can easely mix-in synchronized
+#    methods, audit their thread-safety and restrict their CPU resources 
+#    to a managed array of threads.
 #
 #
 # 2. Simplicity.
@@ -949,6 +711,17 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
 #    that is what "entreprise software" is all about: a higher ROI and
 #    lower capital risks. 
 #
+#    From top to toe, the library is as simple as practically possible. 
+#
+#    Starting from simple 8-bit Byte encoding up to complete network peer 
+#    application, I tried to do remove as much as possible from the usual
+#    set of features provided by industry solutions. And implement only the
+#    one strictly required in the simplest possible way.
+#
+#    A remarkable feature of Allegra's simplicity is its logging facility,
+#    which has a very practical API but also produces a simpler and better
+#    encoding for Standard I/O than lines.
+#
 #
 # 3. Productivity.
 #
@@ -960,6 +733,65 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
 #    functional interfaces, possibly made of components, and presented
 #    with style.
 #
+#    Allegra's PRESTo development stack is fully supported by Eclipse
+#    and its Python, XML, CSS and JavaScript pluggins. It blends beautifully
+#    in the stack of defacto open source standards for web development.
 #
-# 4. IDE. Allegra's PRESTo development stack is fully supported by Eclipse
-#    and its Python, XML, CSS and JavaScript pluggins. 
+#
+# 4. For the best programming language implementation available today.
+#
+#    As an application host and network peer, the CPython VM as a proven track
+#    record of reliability, performance and portability. Unlike Java, and
+#    much like C#, Python is a C implementation, not a formal specification
+#    (there is a "standard programming language", it's called LISP, and there
+#    is a "standard operating system language implementation" and it's that
+#    good old "C/C++" ;-). Beeing also free software, Python has the advantage
+#    of both Java and C#: it is not suprising that - unlike Perl - Python has
+#    been reimplemented in Java and C#.
+#
+#    Python combines the power of RE, comes with first-class UNICODE support
+#    (Adobe Acrobat 7.? appear to includes some 1999 Python codecs ;-) and
+#    integrates the BSDDB and expat libraries, the de-facto public standards
+#    implementation of relational databases and XML applications.
+#
+#    Remarkably, the CPython has been ported from Cell phones to AS/400
+#    and has integrated most desktop and server OS, including Windows, MacOSX
+#    and Linux and provides excellent support for each plateform specific
+#    features, including native non-blocking I/O interfaces.
+#
+#
+# 5. Various Objections
+#
+#    "Python is an scripting language, you can't possibly run an
+#     application server like that!"
+#
+#    In this asynchronous architecture, the main two bottleneck of CPython
+#    for network application servers all of a sudden become features. The
+#    CPython VM is known to be slow to instanciate objects and its Global 
+#    Interpreter Lock (GIL)impair concurrencies of threads in order to
+#    ensures reliable memory access and allocation.
+#
+#    From the perspective of an asynchronous loop, there are no concurrent 
+#    threads and therefore, the GIL is not a problem it turns out to provide
+#    a solution. The CPython VM has matured a good memory garbage collector
+#    on top of this strict and lengthy allocation scheme that requires a GIL.
+#    This garbage collector is used by Allegra's finalization as another
+#    asynchronous event loop to implement a "cheap" but very practical 
+#    programmatic effect of continuation. 
+#
+#    Finally, slow instanciation does matters a lot less for a statefull
+#    server that can easely hold the state of thousands of users concurrently
+#    without actually spending a single CPU cycle of its own.
+#
+#    "An asynchronous component could bring the whole server down, or do
+#    many other malicious things!"
+#
+#    So what? Do you integrate a new component in your production run without
+#    testing it first somewhere else? Do you allow to run code that has not
+#    been audited as safe in your mission critical system? No, you don't.
+#
+#    PRESTo is as safe as you develop and implement, no more and no less. 
+#
+#    On the other hand, support for asynchrony provides developpers with 
+#    smaller, simpler and more efficient implemtations, that are also less
+#    expensive to test and to audit. Just because they are shorter.

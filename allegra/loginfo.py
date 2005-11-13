@@ -46,6 +46,16 @@ def write_and_flush (instance):
 		
 	return instance
 
+def netlog (encoded):
+	"""Beautify a netstring as a CRLF outline ready to log"""
+	netstrings = netstring.netstrings_decode (encoded)
+	if len (netstrings) > 1:
+		return ''.join ([
+			netstring.netoutlines (e, '%s\n') 
+			for e in netstrings
+			]) + '\n'
+			
+	return '%s\n' % encoded
 
 class Loginfo_stdio:
 
@@ -81,22 +91,18 @@ class Loginfo_stdio:
 				)
 
 	def loginfo_debug (self, data, info=None):
-		"log netlines to STDOUT, a category handler or STDERR"
+		"log netoutlines to STDOUT, a category handler or STDERR"
 		assert type (data) == types.StringType
 		if info == None:
-			self.loginfo_stdout (netstring.netlines (data))
+			self.loginfo_stdout (netlog (data))
 		elif self.loginfo_loggers.has_key (info):
-			self.loginfo_loggers[info] (
-				netstring.netlines (data)
-				)
+			self.loginfo_loggers[info] (netlog (data))
 		else:
 			assert type (info) == types.StringType
 			encoded = netstring.netstrings_encode ((
 				info, data
 				))
-			self.loginfo_stderr (
-				netstring.netlines (encoded)
-				)
+			self.loginfo_stderr (netlog(encoded))
 
 	if __debug__:
 		log = loginfo_debug
@@ -112,7 +118,7 @@ def compact_traceback_netstrings (ctb):
  		))
 
 
-class Loginfo:
+class Loginfo (object):
 
 	loginfo_logger = Loginfo_stdio ()
 	
@@ -220,42 +226,30 @@ def loginfo_traceback (ctb=None):
 # EXAMPLE
 #
 # 	>>> from allegra import loginfo
-#	18:
-#	  5:debug,
-#	  7:loginfo,
-#	,
-#
 #	>>> loginfo.log ('data')
-#	4:data,
+#	data
 #	>>> loginfo.log ('data', 'info')
-#	14:
-#	  4:info,
-#	  4:data,
-#	,
+#	info
+#	data
+#	
 #	>>> try:
 #		foobar ()
 #	except:
 #		ctb = loginfo.loginfo_traceback ()
-#	91:
-#	  9:traceback,
-#	  75:
-#	    20:exceptions.NameError,
-#	    28:name 'foobar' is not defined,
-#	    15:11:<stdin>|?|2,,
-#	  ,
-#	,
+#	traceback,
+#	  exceptions.NameError,
+#	  name 'foobar' is not defined,
+#	  11:<stdin>|?|2,
 #
 #	>>> logged = loginfo.Loginfo ()
 #	>>> logged.log ('data')
-#	34:
-#	  23:<Loginfo pid="8da4e0"/>,
-#	  4:data,
-#	,
+#	Loginfo pid="8da4e0"
+#	data
+#	
 #	>>> logged.log ('data', 'info')
-#	45:
-#	  4:info,
-#	  34:
-#	    23:<Loginfo pid="8da4e0"/>,
-#	    4:data,
-#	  ,
-#	,
+#	info,
+#	  Loginfo pid="8da4e0"
+#	  data
+#
+#	>>>
+#

@@ -67,7 +67,7 @@ class PNS_inference (thread_loop.Thread_loop):
                         
                 else:
                         assert None == self.select_trigger_log (
-                                'open', 'debug'
+                                'opened', 'debug'
                                 )
                         return True
                         
@@ -82,7 +82,7 @@ class PNS_inference (thread_loop.Thread_loop):
                 else:
                         del self.pns_routes, self.pns_index
                         assert None == self.select_trigger_log (
-                                'close', 'debug'
+                                'closed', 'debug'
                                 )
 		self.select_trigger ((
 			self.pns_peer.pns_inference_finalize, ()
@@ -172,6 +172,9 @@ class PNS_inference (thread_loop.Thread_loop):
 
         def pns_command (self, model):
                 # handle a command from a PNS/TCP session
+                assert None == self.log (
+                        netstring.netstrings_encode (model), 'command'
+                        )
                 if model[1]:
                         if model[2]:
                                 # walk subject down to contexts, let the user

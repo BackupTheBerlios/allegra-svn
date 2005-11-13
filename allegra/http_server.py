@@ -17,53 +17,50 @@
 
 ""
 
-import time, mimetypes, re, types, os, stat, glob
+import types, time, os, stat, glob, mimetypes, urllib, re
+
+from allegra import \
+        loginfo, async_chat, producer, tcp_server, \
+        mime_headers, mime_reactor, http_reactor
+        
+
 if os.name == 'nt':
         allegra_time = time.clock
 else:
         allegra_time = time.time
 
-from urllib import unquote, quote, unquote_plus, quote_plus
 
-from allegra.loginfo import Loginfo
-from allegra.producer import Simple_producer, File_producer
-from allegra.tcp_server import TCP_server_channel, TCP_server
-from allegra.mime_collector import MIME_collector, mime_headers_map
-from allegra.mime_producer import \
-        MIME_producer, Chunked_producer, mime_producer_lines
-from allegra import http_collector
-
+class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
+        
+        def __repr__ (self):
+                return 'http-server-reactor id="%x"' % id (self)
+        
 
 # split a URL into ('http://hostname', '/path', '?query', '#fragment')
 #
 HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)([?][^#]+)?(#.+)?')
 
-class HTTP_server_channel (TCP_server_channel, MIME_collector):
+class HTTP_server_channel (
+        async_chat.Async_chat, mime_reactor.MIME_collector
+        ):
 
-        ac_out_buffer_size = 1<<16 # use a larger default output buffer
+        ac_out_buffer_size = 1<<16 # 64KB use a larger default output buffer?
 
 	# HTTP_server_channel
 
 	http_version = '1.0'
 
 	def __init__ (self, conn, addr):
-		TCP_server_channel.__init__ (self, conn, addr)
-                MIME_collector.__init__ (self)
+                self.addr = addr
+		async_chat.Async_chat.__init__ (self, conn)
+                mime_reactor.MIME_collector.__init__ (self)
 
         def __repr__ (self):
-                return '<http-server-channel id="%x"/>' % id (self)                
+                return 'http-server-channel id="%x"' % id (self)                
                 
-        # adds support for stalled producers to an asynchat channel.
+        # adds support for stalled producers to an async_chat channel.
 
-        def writable (self):
-                return not (
-                        (self.ac_out_buffer == '') and
-                        (
-                                self.producer_fifo.is_empty () or
-                                self.producer_fifo.first ().producer_stalled ()
-                                ) and
-                        self.connected
-                        )
+        writable = async_chat.Async_chat.writable_for_stalled
 
         # Support for stalled producers is a requirement for programming
         # asynchronous peer. It is also a practical solution for simple 
@@ -72,8 +69,10 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
         # producer back to the browser that will "produce" as the request
         # progresses, as it thunks data to produce via the select_trigger.
 
-        collect_incoming_data = MIME_collector.collect_incoming_data
-        found_terminator = MIME_collector.found_terminator
+        collect_incoming_data = \
+                mime_reactor.MIME_collector.collect_incoming_data
+        found_terminator = \
+                mime_reactor.MIME_collector.found_terminator
 
 	def mime_collector_continue (self):
                 # handle the HTTP request line and MIME headers
@@ -91,11 +90,11 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                 if not self.mime_collector_lines:
                         return
 
-                assert None == self.log (self.mime_collector_lines[0])
-                # instanciate a reactor (a collector/producer/finalization)
-                # that will hold all states for the HTTP request and response.
+                # instanciate a reactor that will hold all states for the 
+                # HTTP request and response.
                 #
-		reactor = MIME_producer ()
+		reactor = HTTP_server_reactor ()
+                reactor.log (self.mime_collector_lines[0], 'request')
                 reactor.http_channel = self
                 reactor.http_request_time = allegra_time ()
                 try:
@@ -132,7 +131,7 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                 reactor.mime_collector_lines = self.mime_collector_lines
 		reactor.mime_collector_headers = \
                         self.mime_collector_headers = \
-			        mime_headers_map (self.mime_collector_lines)
+			        mime_headers.map (self.mime_collector_lines)
                 # prepares the producer headers and set the channel's version
                 # of the HTTP protocol declared by the client (1.0 or 1.1)
                 reactor.mime_producer_headers = {} # TODO: complete?
@@ -164,7 +163,7 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                 #
                 return self.http_collector_continue (reactor)
                         
-        http_collector_continue = http_collector.http_collector_continue
+        http_collector_continue = http_reactor.http_collector_continue
 
         def mime_collector_finalize (self, reactor):
                 # set a response entity if one is required for the request's
@@ -173,7 +172,7 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                 if reactor.http_request[0] in (
                         'GET', 'POST'
                         ) and  reactor.mime_producer_body == None:
-                        reactor.mime_producer_body = Simple_producer (
+                        reactor.mime_producer_body = producer.Simple_producer (
                                 self.HTTP_SERVER_RESPONSE % (
                                         reactor.http_response,
                                         self.HTTP_SERVER_RESPONSES[
@@ -192,9 +191,10 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                         reactor.mime_producer_headers[
                                 'Transfer-Encoding'
                                 ] = 'chunked'
-                        reactor.mime_producer_body = Chunked_producer (
-                                reactor.mime_producer_body
-                                )
+                        reactor.mime_producer_body = \
+                                http_reactor.Chunk_producer (
+                                        reactor.mime_producer_body
+                                        )
                 # Do not keep-alive without chunk-encoding
                 if reactor.mime_producer_headers.get (
                         'Transfer-Encoding'
@@ -206,7 +206,7 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                 # the channel's HTTP version the reactor's HTTP response
                 # code.
                 #
-                reactor.mime_producer_lines = mime_producer_lines (
+                reactor.mime_producer_lines = mime_headers.lines (
                         reactor.mime_producer_headers
                         )
                 reactor.mime_producer_lines.insert (0, 'HTTP/%s %d %s\r\n' % (
@@ -217,17 +217,17 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                 # channel's output fifo, then decide wether or not to close 
                 # when done ...
                 #
-                self.producer_fifo.push (Simple_producer (
+                self.producer_fifo.append (
                         ''.join (reactor.mime_producer_lines)
-                        ))
+                        )
                 if reactor.mime_producer_body != None:
-                        self.producer_fifo.push (reactor.mime_producer_body)
+                        self.producer_fifo.append (reactor.mime_producer_body)
                 if reactor.mime_collector_headers.get (
                         'connection'
                         ) != 'keep-alive':
                         self.close_when_done ()
-                self.initiate_send ()
-                assert None == self.log (reactor.mime_producer_lines[0], '')
+                self.handle_write ()
+                reactor.log (reactor.mime_producer_lines[0], 'response')
 
         HTTP_SERVER_RESPONSE = (
                 '<html>'
@@ -280,29 +280,28 @@ class HTTP_server_channel (TCP_server_channel, MIME_collector):
                 }
             
 
-class HTTP_server (TCP_server):
+class HTTP_server (tcp_server.TCP_server):
 
         tcp_server_clients_limit = 16
-        tcp_server_precision = 0
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
 
         def __init__ (self, handlers, ip, port):
                 self.http_handlers = handlers
-                TCP_server.__init__ (self, (ip, port))
+                tcp_server.TCP_server.__init__ (self, (ip, port))
 
         def __repr__ (self):
-                return '<http-server/>'
+                return 'http-server id="%x"' % id (self)
 
         def tcp_server_accept (self, conn, addr):
-                channel = TCP_server.tcp_server_accept (self, conn, addr)
+                channel = tcp_server.TCP_server.tcp_server_accept (self, conn, addr)
                 if channel:
                         channel.http_continue = self.http_continue
                 return channel
 
         def tcp_server_close (self, channel):
                 del channel.http_continue
-                TCP_server.tcp_server_close (self, channel)
+                tcp_server.TCP_server.tcp_server_close (self, channel)
 
         def http_continue (self, reactor):
                 for handler in self.http_handlers:
@@ -323,22 +322,22 @@ class HTTP_server (TCP_server):
                 # 404 - Not Found
 
 
-class HTTP_root (Loginfo):
+class HTTP_root (loginfo.Loginfo):
         
         def __init__ (self, path, host=None):
                 self.http_path = path
                 self.http_host = host or os.path.basename (
                         path
                         ).replace ('-', ':')
-                assert None == self.log ('<loaded/>', '')
-                
-        def __repr__ (self):
-                return '<http-root path="%s" host="%s"/>' % (
-                        self.http_path, self.http_host
+                assert None == self.log (
+                        'loaded path="%s"' % path, 'debug'
                         )
                 
+        def __repr__ (self):
+                return 'http-root host="%s"' % self.http_host
+                
         def http_match (self, reactor, default='index.html'):
-                uri = unquote (reactor.http_uri[2])
+                uri = urllib.unquote (reactor.http_uri[2])
                 if uri[-1] == '/':
                         uri += default
                 reactor.http_handler_filename = self.http_path + uri
@@ -354,7 +353,7 @@ class HTTP_root (Loginfo):
                 return stat.S_ISREG (reactor.http_handler_stat[0])
 
 
-class HTTP_handler (Loginfo):
+class HTTP_handler (loginfo.Loginfo):
 
 	def __init__ (self, root):
                 paths = [r.replace ('\\', '/') for r in glob.glob (root+'/*')]
@@ -367,10 +366,9 @@ class HTTP_handler (Loginfo):
                         ])
                         
         def __repr__ (self):
-                return '<http-handler/>'
+                return 'http-handler'
                 
 	def http_match (self, reactor):
-                self.log (reactor.mime_collector_headers.get ('host'))
                 http_root = self.http_handler_roots.get (
                         reactor.mime_collector_headers.get ('host')
                         )
@@ -386,7 +384,7 @@ class HTTP_handler (Loginfo):
                 #       methods ...
                 #
                 if reactor.http_request[0].upper () == 'GET':
-                        reactor.mime_producer_body = File_producer (
+                        reactor.mime_producer_body = producer.File_producer (
                                 open (reactor.http_handler_filename, 'rb')
                                 ) # TODO: implement gzip, deflate, ...
                 else:
@@ -416,19 +414,18 @@ class HTTP_handler (Loginfo):
 
 
 if __name__ == '__main__':
-	import sys
-        sys.stderr.write (
-                'Allegra HTTP/1.1 Server - Copyleft GPL 2.0\n\n'
+        import sys
+        from allegra import loginfo, async_loop
+        loginfo.log (
+                'Allegra HTTP/1.1 Server'
+                ' - Coyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
+                'info'
                 )
-        from allegra import async_loop
         root, ip, port = ('./http', '127.0.0.1', 80)
         if len (sys.argv) > 1:
                 root = sys.argv[1]
 	HTTP_server ([HTTP_handler (root)], ip, port)
-        try:
-                async_loop.loop ()
-        except:
-                async_loop.loginfo.loginfo_traceback ()
+        async_loop.loop ()
 
 
 # A Simple HTTP/1.1 Server that handles only GET requests for static files,

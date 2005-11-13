@@ -17,19 +17,20 @@
 
 ""
 
-from allegra import finalization, select_trigger, thread_loop 
+import collections
+
+from allegra import loginfo, finalization, thread_loop 
 
 
-class Synchronizer (select_trigger.Select_trigger):
+class Synchronizer (loginfo.Loginfo):
 
         def __init__ (self):
-        	select_trigger.Select_trigger.__init__ (self)
 		self.synchronized_thread_loops = []
 		self.synchronized_instance_count = []
                 self.synchronized_count = 0
 
 	def __repr__ (self):
-		return '<synchronizer pid="%x" count="%d"/>' % (
+		return 'synchronizer pid="%x" count="%d"' % (
                         id (self), self.synchronized_count
                         )
 
@@ -57,9 +58,10 @@ class Synchronizer (select_trigger.Select_trigger):
 		index = self.synchronized_instance_count.index (
 			min (self.synchronized_instance_count)
 			)
-		instance.synchronized = self.synchronized_thread_loops[
-			index
-			].thread_loop_queue
+                t = self.synchronized_thread_loops[index]
+		instance.synchronized = t.thread_loop_queue
+                instance.select_trigger = t.select_trigger 
+                instance.finalization = self.desynchronize
 		self.synchronized_instance_count[index] += 1
                 self.synchronized_count += 1
 		assert None == self.log ('%r' % instance, 'synchronized')
@@ -67,17 +69,17 @@ class Synchronizer (select_trigger.Select_trigger):
 	def desynchronize (self, instance):
 		assert hasattr (instance, 'synchronized')
 		i = instance.synchronized.synchronizer_index
-		del instance.synchronized
 		count = self.synchronized_instance_count[i]
                 self.synchronized_count += -1
 		self.synchronized_instance_count[i] += -1
-		if count == 1:
-                        assert None == self.log ('remove %d' % len (
+                instance.select_trigger = instance.synchronized = None
+		if self.synchronized_count == 0:
+                        assert None == self.log ('stop %d threads' % len (
                                 self.synchronized_thread_loops
                                 ), 'synchronizer')
-			self.synchronized_thread_loops[i].thread_loop_stop ()
-			del self.synchronized_thread_loops[i]
-			del self.synchronized_instance_count[i]
+                        for t in self.synchronized_thread_loops:
+                                t.thread_loop_queue (None)
+			self.synchronized_thread_loops = []
 		assert None == self.log ('%r' % instance, 'desynchronized')
 
 
@@ -85,12 +87,87 @@ class Synchronized (finalization.Finalization):
         
         synchronizer = None
         
-        def __init__ (self):
+        def __init__ (self):                        
                 if self.synchronizer == None:
-                        Synchronized.synchronizer = Synchronizer ()
+                        self.__class__.synchronizer = Synchronizer ()
                 self.synchronizer.synchronize (self)
-                self.finalization = self.synchronizer.desynchronize
                 
+                
+class Synchronized_open (Synchronized):
+        
+        synchronizer = None
+        
+        closed = False
+
+        def __init__ (self, filename, mode='r', buffer=4096):
+                self.filename = filename
+                self.mode = mode
+                self.buffered = -buffer
+                if mode[0] == 'r':
+                        self.deque = collections.deque([])
+                Synchronized.__init__ (self)
+                self.synchronized ((self.sync_open, (filename, mode)))
+                        
+        def __repr__ (self):
+                return 'synchronized-open filename="%s" mode="%s"' % (
+                        self.filename, self.mode
+                        )
+                        
+        # a reactor interface
+                
+        def collect_incoming_data (self, data):
+                self.synchronized ((self.sync_write, (data,)))
+                
+        def found_terminator (self):
+                self.synchronized ((self.sync_close, ()))
+                
+        def more (self):
+                try:
+                        data = self.deque.popleft ()
+                        self.buffered -= len (data)
+                        return data
+                        
+                except:
+                        return ''
+                        
+        def producer_stalled (self):
+                return not (self.closed or len (self.read) > 0)
+                        
+        # >>> Synchronized methods
+
+        def sync_open (self, filename, mode):
+                self.file = open (filename, mode)
+                if mode[0] == 'r':
+                        self.sync_read ()
+                
+        def sync_write (self, data):
+                self.file.write (data)
+                
+        def sync_read (self):
+                data = self.file.read (self.buffer)
+                if data:
+                        self.select_trigger ((self.async_read, (data, )))
+                else:
+                        self.sync_close ()
+                
+        def sync_close (self):
+                self.file.close ()
+                self.file = None
+                self.select_trigger ((self.async_close, ()))
+                
+        # ... asynchronous continuations
+                
+        def async_read (self, data):
+                self.deque.append (data)
+                self.buffered += len (data)
+                if self.buffered < 0:
+                        self.synchronized ((self.sync_read, ()))
+                
+        def async_close (self):
+                self.closed = True
+                
+
+        
 # TODO: add synchronized file and process reactors
 #
 # something like:

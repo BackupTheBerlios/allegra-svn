@@ -17,29 +17,17 @@
 
 ""
 
-import re
-from types import StringTypes
+import re, types
 
-from allegra.finalization import Finalization
-from allegra.producer import \
-	Simple_producer, Composite_producer, Chunked_producer
-from allegra.mime_producer import MIME_producer
-from allegra.mime_collector import \
-	MIME_collector, mime_headers_split, mime_headers_map
-from allegra.http_collector import HTTP_collector
-from allegra.tcp_pipeline import \
-	TCP_pipeline, TCP_pipeline_cache
-from allegra.dns_client import DNS_client, dns_servers
+from allegra import \
+	producer, tcp_pipeline, mime_headers, mime_reactor, http_reactor
 
-
-class HTTP_client_reactor (Finalization, MIME_producer, MIME_collector):
-
-	__init__ = MIME_collector.__init__
-		
 
 HTTP_RESPONSE_RE = re.compile ('.+?/([0-9.]+) ([0-9]{3}) (.*)')
 
-class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
+class HTTP_client_pipeline (
+	tcp_pipeline.TCP_pipeline, mime_reactor.MIME_collector
+	):
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
 
@@ -56,7 +44,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 					'418 Unknown DNS host name'
 		else:
 			# broken connection ...
-			TCP_pipeline.pipeline_error (self)
+			tcp_pipeline.TCP_pipeline.pipeline_error (self)
 			
 	def pipeline_wake_up (self):
 		# HTTP/1.0, push one at a time, maybe keep-alive or close
@@ -73,7 +61,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 				'connection'
 				] = 'Keep-alive'
 		self.http_producer_continue (reactor)
-		self.initiate_send ()
+		self.handle_write ()
 
 	def pipeline_wake_up_11 (self):
 		# HTTP/1.1 pipeline, send all at once and maybe close when
@@ -97,7 +85,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 		# push the last one, maybe close when done, and iniate send
 		#
 		self.http_producer_continue (reactor)
-		self.initiate_send ()
+		self.handle_write ()
 
 	def mime_collector_continue (self):
 		reactor = self.pipeline_responses_fifo.first ()
@@ -120,7 +108,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 			self.pipeline_wake_up ()
 		reactor.mime_collector_headers = \
 			self.mime_collector_headers = \
-			mime_headers_map (self.mime_collector_lines)
+			mime_headers.map (self.mime_collector_lines)
 		if (
 			reactor.http_command == 'HEAD' or
 			reactor.http_response[:3] in ('204', '304', '305')
@@ -129,7 +117,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 			return False
 
 		return self.http_collector_continue (reactor)
-
+		
 	def mime_collector_finalize (self, collector):
 		self.pipeline_responses.pop ()
 		if (
@@ -140,7 +128,9 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 
 	# close the channel when there is an in the HTTP collector!
 	#
-	http_collector_error = TCP_pipeline.handle_close
+	http_collector_error = tcp_pipeline.TCP_pipeline.handle_close
+
+	http_collector_continue = http_reactor.http_collector_continue
 
 	def http_producer_continue (self, reactor):
 		# push one or two producers in the output fifo ...
@@ -152,18 +142,21 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 		if reactor.mime_producer_body == None:
 			# GET, HEAD, DELETE, ...
 			#
-			self.producer_fifo.push (Simple_producer (
-				'\r\n'.join (mime_header_lines (
-					reactor.mime_producer_headers, [line]
-					))
-				))
+			lines = mime_headers.lines (
+				reactor.mime_producer_headers
+				)
+			lines.insert (0, line)
+			self.producer_fifo.push (
+				producer.Simple_producer (''.join (lines))
+				)
 		else:
 			# POST and PUT ...
 			#
 			if self.http_version == '1.1':
-				reactor.mime_producer_body = Chunked_producer (
-					reactor.mime_producer_body
-					)
+				reactor.mime_producer_body = \
+					http_reactor.Chunk_producer (
+						reactor.mime_producer_body
+						)
 				reactor.mime_producer_headers[
 					'transfer-encoding'
 					] = 'chunked'
@@ -178,18 +171,20 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 				#	self.http_response or raise an 
 				#	exception?
 
-			self.producer_fifo.push (Simple_producer (
-				'\r\n'.join (mime_header_lines (
-					reactor.mime_producer_headers, [line]
-					))
-				))
+			lines = mime_headers.lines (
+				reactor.mime_producer_headers
+				)
+			lines.insert (0, line)
+			self.producer_fifo.push (
+				producer.Simple_producer (''.join (lines))
+				)
 			self.producer_fifo.push (reactor.mime_producer_body)
 		self.pipeline_responses.push (reactor)
 		#
 		# ready to send.
 
 	def http_client_reactor (self, url, headers, command):
-                reactor = HTTP_client_reactor (headers)
+                reactor = mime_reactor.MIME_reactor (headers)
                 reactor.http_command = command
                 reactor.http_urlpath = url
                 reactor.mime_producer_headers = headers
@@ -212,6 +207,7 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 			return reactor
 
 		assert reactor.http_command in ('POST', 'PUT')
+		
 		if has_attr (instance, 'mime_collector_headers'):
 			# chain MIME reactors
 			reactor.mime_producer_headers.update (
@@ -221,14 +217,16 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
 		elif hasattr (instance, 'producer_stalled'):
 			# accept stallable producers as HTTP body
 			reactor.mime_producer_body = instance
-		elif isinstance (instance, StringTypes):
+		elif isinstance (instance, types.StringTypes):
 			# as well as 8-bit and UNICODE strings
-			reactor.mime_producer_body = Simple_producer (instance)
+			reactor.mime_producer_body = \
+				producer.Simple_producer (instance)
 		else:
 			raise Error (
-				'MIME reactors must be called with a string, '
-				'or a stallable producer as unique argument.'
+				'MIME reactors must be called with a string,'
+				' or a stallable producer as unique argument.'
 				)
+				
                 self.pipeline_push (reactor)
 		return reactor
 		#
@@ -258,12 +256,14 @@ class HTTP_client_pipeline (TCP_pipeline, MIME_collector, HTTP_collector):
                 return self.http_client_reactor (url, headers, 'PUT')
 		
 		
-class HTTP_client (TCP_pipeline_cache):
+class HTTP_client (tcp_pipeline.TCP_pipeline_cache):
 
 	Pipeline = HTTP_client_pipeline
 
 	def pipeline_init (self, addr):
-		pipeline = TCP_pipeline_cache.pipeline_init (self, addr)
+		pipeline = tcp_pipeline.TCP_pipeline_cache.pipeline_init (
+			self, addr
+			)
                 if addr[1] == 80:
 			pipeline.http_host = addr[0]
          	else:
@@ -276,12 +276,12 @@ class HTTP_client (TCP_pipeline_cache):
 
 if __name__ == '__main__':
         import sys
-        assert None == sys.stderr.write (
+        from allegra import loginfo, async_loop, dns_client
+        loginfo.log (
                 'Allegra HTTP/1.1 Client'
                 ' - Copyright 2005 Laurent A.V. Szyster'
-                ' | Copyleft GPL 2.0\n...\n'
+                ' | Copyleft GPL 2.0', 'info'
                 )
-        from allegra import async_loop
         try:
         	command, url = sys.argv[1:]
         	protocol, url = url.split ('//')
@@ -297,23 +297,20 @@ if __name__ == '__main__':
  	# close when done ...
  	#
         HTTP_client (
-        	DNS_client (dns_servers ())
+        	dns_client.DNS_client (dns_client.dns_servers ())
         	).http (
         		addr[0], int (addr[1])
         		).http_client_reactor (
         			'/' + path, {}, command
         			) (async_loop.loginfo.Loginfo_collector ())
-        try:
-                async_loop.loop () # ... loop.
-        except:
-                async_loop.loginfo.loginfo_traceback ()
+        async_loop.loop ()
 	#
 	# Note:
 	#
 	# Network latency is usually so high that the DNS response will
 	# come back long after the program entered the async_loop. So it is
 	# safe to instanciate a named TCP pipeline and trigger asynchronous
-	# DNS resolution.
+	# DNS resolution before entering the loop.
 
 """
 http_client.py

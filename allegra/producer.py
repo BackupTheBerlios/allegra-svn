@@ -17,11 +17,10 @@
 
 "A fork of the original Medusa's collection of producers"
 
-from types import StringType, GeneratorType
-from exceptions import StopIteration	
+import types, exceptions
 
 
-class Simple_producer:
+class Simple_producer (object):
 	
 	"producer for a string"
 
@@ -47,16 +46,18 @@ class Simple_producer:
 		return False
 
 
-class Composite_producer:
+class Composite_producer (object):
+	
+	# TODO: fix a bug in this producer, and make it work again!
 	
 	# This is a more "modern" composite producer than the original
 	# one, with support for stalled producers and generators. it is the
 	# bread & butter of Allegra's PRESTo! with the Buffer_reactor.
 	
-        def __init__ (self, head, body, glob=16384):
+        def __init__ (self, head, body, glob=1<<16):
         	assert (
-        		type (head) == StringType and 
-        		type (body) == GeneratorType
+        		type (head) == types.StringType and 
+        		type (body) == types.GeneratorType
         		)
         	self.composite_current = head
                 self.composite_generator = body
@@ -68,15 +69,17 @@ class Composite_producer:
 	        	try:
 	        		self.composite_current = \
 	        			self.composite_generator.next ()
-	  		except StopIteration:
+	  		except exceptions.StopIteration:
 	  			self.composite_current = ''
 	  			break
 
-	        	if hasattr (self.composite_current, 'more'):
-	        		self.more = self.composite_more_producer
-	        		break
-	        		
-	  		data += self.composite_current
+			if type (self.composite_current) == types.StringType:
+				data += self.composite_current
+				continue
+				
+        		self.more = self.composite_more_producer
+        		break
+	  		
  		return data
 
 	more = composite_more_string
@@ -93,8 +96,8 @@ class Composite_producer:
 	  		except StopIteration:
 	  			self.composite_current = ''
 	  			return ''
-	  			
-	        	if not hasattr (self.composite_current, 'more'):	
+	  		
+	  		if type (self.composite_current) == types.StringType:
 	        		self.more = self.composite_more_string
 	 			return self.more ()
 	               
@@ -105,10 +108,17 @@ class Composite_producer:
 			)
 
 	# Note that this class also makes the original Medusa's lines, buffer 
-	# and globbing producer redundant.
+	# and globbing producer redundant. What this class does it to glob
+	# as much strings as possible from a MIME like data structure:
+	#
+	#	head = 'string'
+	#	body = (generator of 'string' or producer ())
+	#
+	# In effect, if you can generate only strings (like xml_utf.py can)
+	# a composite producer will glob more or less precise chunks to fill
+	# the accessor's buffer.
 
-
-class File_producer:
+class File_producer (object):
 	
 	"producer wrapper for file[-like] objects"
 
@@ -123,7 +133,7 @@ class File_producer:
 		return False
 	
 
-class Encoding_producer:
+class Encoding_producer (object):
 
 	"a producer that encodes a UNICODE producer's data in a given charset"
 

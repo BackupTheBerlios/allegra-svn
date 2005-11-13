@@ -17,22 +17,26 @@
 
 ""
 
-from allegra.netstring import netstrings_decode
-from allegra.collector import Netstring_collector
-from allegra.pns_model import pns_quatuor, pns_quintet
+from allegra import netstring, async_chat, collector, tcp_server, pns_model
 
 
-class PNS_session (Netstring_collector):
+class PNS_session (async_chat.Async_chat, collector.Netstring_collector):
 	
-	def __init__ (self):
+	def __init__ (self, conn, addr):
 		self.pns_subscribed = []
-		Netstring_collector.__init__ (self)
+		collector.Netstring_collector.__init__ (self)
+		self.addr = addr
+		async_chat.Async_chat.__init__ (self, conn)
 
 	def __repr__ (self):
-		return '<session id="%x"/>' % id (self)
+		return 'session id="%x"' % id (self)
+
+	found_terminator = collector.Netstring_collector.found_terminator
+	collect_incoming_data = \
+		collector.Netstring_collector.collect_incoming_data
 
 	def netstring_collector_error (self):
-		assert None == self.log ('<netstring-error/>', '')
+		self.log ('netstring-error', 'error')
 		self.close ()
 		#
 		# just close if netstring encoding is wrong, do not even
@@ -41,14 +45,13 @@ class PNS_session (Netstring_collector):
 	def netstring_collector_continue (self, encoded):
 		if encoded.startswith ('0:,0:,0:,0:,'):
 			# user agent closing
-			assert None == self.log (
-				'<pns-user-close/>'
-				'<![CDATA[%s]]>' % encoded, ''
-				)
+			self.log ('pns-user-close', 'info')
 			self.close ()
 			return
 			
-		model, error = pns_quatuor (encoded, self.pns_subscribed)
+		model, error = pns_model.pns_quatuor (
+			encoded, self.pns_subscribed
+			)
 		if model == None:
 			# invalid PNS model, log an error
 			self.pns_error (encoded, error)
@@ -90,22 +93,20 @@ class PNS_session (Netstring_collector):
 				self.pns_peer.pns_inference.pns_statement (model)
 			else:
 				# resolve an open question ...
-				self.pns_peer.pns_resolution.pns_tcp_statement (model)
+				self.pns_peer.pns_resolution.pns_tcp_anonymous (model)
 		else:
 			# resolve contextual statement ...
 			model.append ('%s:%d' % self.addr)
-			self.pns_peer.pns_resolution.pns_tcp_anonymous (model)
+			self.pns_peer.pns_resolution.pns_tcp_statement (model)
 			
 	def pns_error (self, encoded, error):
-		# PNS/TCP does support non-compliant articulator that
-		# produce invalid public names or statements.
-		#
 		encoded = '%s%d:.%s,' % (encoded, len (error)+1, error)
-		assert None == self.log (
-			'<model-error/><![CDATA[%r]]>' % encoded, ''
-			)
+		self.log (encoded, 'pns-error')
 		self.push ('%d:%s,' % (len (encoded), encoded))
+		#
 		# self.close_when_done ()
+		# PNS/TCP does tolerate non-compliant articulator that
+		# produce invalid public names or statements.
         
 	def pns_join (name, left):
 		# handle a protocol answer, join if not joined or joining.
@@ -116,120 +117,113 @@ class PNS_session (Netstring_collector):
 		#
 		# TODO: move to pns_peer.pns_udp.pns_join and make sure ... ?
 
-	def pns_tcp_accept (self, pns_peer):
-		assert None == self.log ('<pns-tcp-accept/>', '')
-		pns_peer.pns_sessions['%s:%d' % self.addr] = self
-		self.pns_peer = pns_peer
-		self.pns_tcp_continue (
-			(pns_peer.pns_name, '', '', ''), '_'
-			)
-
 	def pns_tcp_continue (self, model, direction):
-		self.push (pns_quintet (model, direction))
-
-	def pns_tcp_close (self):
-		assert None == self.log ('<pns-tcp-close/>', '')
-		del self.pns_peer.pns_sessions['%s:%d' % self.addr]
-		for name in self.pns_subscribed:
-			self.pns_peer.pns_unsubscribe (self, name)
-		self.pns_peer = None
+		self.push (pns_model.pns_quintet (model, direction))
 
 
-# The TCP peer listening on 127.0.0.1
+def pns_tcp_accept (pns_peer, channel):
+	assert None == channel.log ('pns-tcp-accept', 'debug')
+	#
+	# set the accepted channel's peer; add it to the peer's hash
+	# of channels; and push the PNS/TCP server greetings to the client
+	#
+	channel.pns_peer = pns_peer
+	pns_peer.pns_sessions['%s:%d' % channel.addr] = channel
+	channel.pns_tcp_continue (
+		(pns_peer.pns_name, '', '', ''), '_'
+		)
+
+
+def pns_tcp_close (channel):
+	assert None == channel.log ('pns-tcp-close', 'debug')
+	#
+	# remove the channel from the peer's hash table and unsubscribe
+	# all the closed channel's subscriptions, and finally break the
+	# circular reference between the channel and the peer.
+	#
+	del channel.pns_peer.pns_sessions['%s:%d' % channel.addr]
+	for name in channel.pns_subscribed:
+		channel.pns_peer.pns_unsubscribe (channel, name)
+	channel.pns_peer = None
+
+
+def pns_tcp_stopped (server):
+	assert None == server.log ('pns-tcp-stopped', 'debug')
+	#
+	# close the server once all its channels have been closed,
+	# let the PNS peer handle that event and finally break the 
+	# circular reference between the server and the peer.
+	#
+	server.pns_peer.pns_tcp_finalize ()
+	server.pns_peer = None
 	
-from allegra.tcp_server import TCP_server_channel, TCP_server
 
-
-class PNS_TCP_channel (TCP_server_channel, PNS_session):
-
-	def __init__ (self, conn, addr):
-		PNS_session.__init__ (self)
-		TCP_server_channel.__init__ (self, conn, addr)
-
-	__repr__ = PNS_session.__repr__
+# The TCP peer listening on 127.0.0.1, the simplest case.
 	
-	found_terminator = Netstring_collector.found_terminator
-	collect_incoming_data = Netstring_collector.collect_incoming_data
-	
-	
-class PNS_TCP_peer (TCP_server):
+class PNS_TCP_peer (tcp_server.TCP_server_limit):
 
-	TCP_SERVER_CHANNEL = PNS_TCP_channel
+	TCP_SERVER_CHANNEL = PNS_session
 
-        tcp_server_clients_limit = 128	# ? find out about select/poll limit
-        tcp_server_precision = 0
+        tcp_server_clients_limit = 65536 # ? find out about select/poll limit
+	tcp_inactive_timeout = 3600 # one hour timeout for inactive client
+	tcp_server_precision = 6	# six seconds precision for defered
 
 	def __init__ (self, pns_peer, ip):
 		self.pns_peer = pns_peer
-		TCP_server.__init__ (self, (ip, 3534))
+		tcp_server.TCP_server_limit.__init__ (self, (ip, 3534))
 
 	def __repr__ (self):
-		return '<tcp/>'
+		return 'pns-tcp'
 
 	def tcp_server_accept (self, conn, addr):
-		channel = TCP_server.tcp_server_accept (self, conn, addr)
-		if not channel:
-			return
-
-		channel.pns_tcp_accept (self.pns_peer)
-		return channel
+		channel = tcp_server.TCP_server_limit.tcp_server_accept (
+			self, conn, addr
+			)
+		if channel != None:
+			pns_tcp_accept (self.pns_peer, channel)
+			return channel
 
 	def tcp_server_close (self, channel):
-		channel.pns_tcp_close ()
-		TCP_server.tcp_server_close (self, channel)
+		pns_tcp_close (channel)
+		tcp_server.TCP_server_limit.tcp_server_close (self, channel)
 
-	def tcp_server_finalize (self):
-		self.close ()
-		self.pns_peer.pns_tcp_finalize ()
-		del self.pns_peer
+	tcp_server_stopped = pns_tcp_stopped
 
 
 # The TCP server listening on another address than the UDP peer
 	
-from allegra.tcp_server import TCP_server_limit
+class PNS_TCP_server (tcp_server.TCP_server_limit):
 
-class PNS_TCP_limit (TCP_server_limit, PNS_session):
-
-	tcp_inactive_timeout = 3600 # one hour timeout for inactive client
-        tcp_server_precision = 600  # checked every ten minutes
-
-	def __init__ (self, conn, addr):
-		PNS_session.__init__ (self)
-		TCP_server_limit.__init__ (self, conn, addr)
-
-	__repr__ = PNS_session.__repr__
+	TCP_SERVER_CHANNEL = PNS_session
 	
-	found_terminator = Netstring_collector.found_terminator
-	collect_incoming_data = Netstring_collector.collect_incoming_data
-	
-class PNS_TCP_server (PNS_TCP_peer):
+        tcp_server_clients_limit = 1 # a decent limit ;-)
+	tcp_inactive_timeout = 30 # thirty seconds timeout for inactive client
+	tcp_server_precision = 3 # one seconds precision for defered
 
-	TCP_SERVER_CHANNEL = PNS_TCP_limit
+	def __repr__ (self):
+		return 'pns-tcp'
 
-        tcp_server_clients_limit = 32	# ? find out about select/poll limit
-	tcp_server_precision = 6	# six seconds precision for defered
+	def tcp_server_accept (self, conn, addr):
+		channel = tcp_server.TCP_server_limit.tcp_server_accept (
+			self, conn, addr
+			)
+		if channel != None:
+			pns_tcp_accept (self.pns_peer, channel)
+			return channel
+
+	def tcp_server_close (self, channel):
+		pns_tcp_close (channel)
+		tcp_server.TCP_server_limit.tcp_server_close (self, channel)
+
+	tcp_server_stopped = pns_tcp_stopped
 
 
 # The Public PNS/TCP Proxy, the seeds of the network, things people can
 # run to give public access to the network, complete with throttling for
-# TCP and a strict limit of one session per IP address.
+# TCP and a strict limit of one session per IP address. This is what will
+# resist best to DDoS (as well as success for its host ;-)
 
-
-from allegra.tcp_server import TCP_server_throttle, TCP_throttler
-
-class PNS_TCP_throttle (TCP_server_throttle, PNS_session):
-
-	tcp_inactive_timeout = 6 # minimal timeout for inactive sessions
-	tcp_server_precision = 6 # checked evey six seconds, quite fuzzy
-
-	def __init__ (self, conn, addr):
-		PNS_session.__init__ (self)
-		TCP_server_throttle.__init__ (self, conn, addr)
-	
-	__repr__ = PNS_session.__repr__
-
-	found_terminator = Netstring_collector.found_terminator
-	collect_incoming_data = Netstring_collector.collect_incoming_data
+class PNS_TCP_seed_session (PNS_session):
 
 	def netstring_collector_continue (self, encoded):
 		if (
@@ -263,34 +257,36 @@ class PNS_TCP_throttle (TCP_server_throttle, PNS_session):
 		# statements with authority.
 		
 
-class PNS_TCP_seed (TCP_throttler, PNS_TCP_server):
+class PNS_TCP_seed (tcp_server.TCP_server_throttle):
 
-	TCP_SERVER_CHANNEL = PNS_TCP_throttle
+	TCP_SERVER_CHANNEL = PNS_TCP_seed_session
 
-        tcp_server_clients_limit = 1	# one connection per IP address
-	tcp_server_precision = 3	# three seconds precision for defered
+        tcp_server_clients_limit = 1 # one connection per IP address
+	tcp_inactive_timeout = 6 # minimal timeout for inactive sessions
+	tcp_server_precision = 6 # checked evey six seconds, quite fuzzy
 
 	def __init__ (self, pns_peer, ip):
 		self.pns_peer = pns_peer
-		TCP_throttler.__init__ (self, (ip, 3534))
+		tcp_server.TCP_server_throttle.__init__ (self, (ip, 3534))
 
 	def __repr__ (self):
-		return '<tcp-seed/>'
+		return 'pns-tcp'
 
 	def tcp_server_accept (self, conn, addr):
-		channel = TCP_throttler.tcp_server_accept (self, conn, addr)
+		channel = tcp_server.TCP_server_throttle.tcp_server_accept (
+			self, conn, addr
+			)
 		if not channel:
 			return
 			
-		channel.pns_tcp_accept (self.pns_peer)
+		pns_tcp_accept (self.pns_peer, channel)
 		return channel
 
 	def tcp_server_close (self, channel):
-		channel.pns_tcp_close ()
-		TCP_throttler.tcp_server_close (self, channel)
+		pns_tcp_close (channel)
+		tcp_server.TCP_server_throttle.tcp_server_close (
+			self, channel
+			)
 		
-	def tcp_server_finalize (self):
-		self.close ()
-		self.pns_peer.pns_tcp_finalize ()
-		del self.pns_peer
+	tcp_server_stopped = pns_tcp_stopped
 

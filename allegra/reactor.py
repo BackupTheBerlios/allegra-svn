@@ -16,9 +16,9 @@
 # USA
 #
 
-class Buffer_reactor:
+class Buffer_reactor (object):
 
-	"a buffer reactor, usefull for many kind of asynchronous/synchronous proxy"
+	"a buffer reactor, usefull for asynchronous/synchronous proxy"
 
         collector_is_simple = 1
         buffer_reactor_complete = 0
@@ -65,6 +65,7 @@ class Buffer_reactor:
 			
 	def buffer_react (self):
 		pass # to subclass
+			
 			
 # Note about this implementation
 #

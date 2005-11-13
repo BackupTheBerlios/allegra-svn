@@ -17,28 +17,26 @@
 
 ""
 
-from asynchat import find_prefix_at_end
-
-from allegra.loginfo import Loginfo
+from allegra import async_chat, loginfo
 
 
-class Loginfo_collector (Loginfo):
+class Loginfo_collector (object):
 	
 	# collect data to loginfo
 	
 	collector_is_simple = True
 
 	def __init__ (self, info=None):
-		self.loginfo_info = info
+		self.info = info
 	
 	def collect_incoming_data (self, data):
-		self.log (data, self.loginfo_info)
+		loginfo.log (data, self.info)
 		
 	def found_terminator (self):
 		return True # final!
 		
 
-class Null_collector:
+class Null_collector (object):
 
 	# collect data to /dev/null
 
@@ -51,7 +49,7 @@ class Null_collector:
 		return True
 
 
-class Simple_collector:
+class Simple_collector (object):
 
 	# wraps a complex collector with a simple interface
 	
@@ -60,10 +58,11 @@ class Simple_collector:
 	simple_collector = None
 
 	def __init__ (self, collector):
-		self.simple_collector_buffer = ''
 		collector.set_terminator = self.set_terminator
 		collector.get_terminator = self.get_terminator
+		self.collector = collector
 		self.terminator = None
+		self.ac_in_buffer = ''
 
 	def get_terminator (self):
 		return self.terminator
@@ -72,64 +71,15 @@ class Simple_collector:
 		self.terminator = terminator
 
 	def collect_incoming_data (self, data):
-		if self.simple_collector_buffer:
-			data = self.simple_collector_buffer + data
-			self.simple_collector_buffer = ''
-		collector = self.simple_collector
-		while data:
-			lb = len (data)
-			terminator = collector.get_terminator ()
-			if terminator == None:
-				collector.collect_incoming_data (data)
-				return
-	
-			elif type (terminator) == type (0):
-				n = terminator
-				if lb < n:
-					collector.collect_incoming_data (data)
-					self.terminator -= lb
-					return
-				
-				collector.collect_incoming_data (data[:n])
-				data = data[n:]
-				self.terminator = 0
-				collector.found_terminator ()
-				return
-	
-			index = data.find (terminator)
-			if index != -1:
-				if index > 0:
-					collector.collect_incoming_data (
-						data[:index]
-						)
-				data = data[index+len (terminator):]
-				collector.found_terminator ()
-				return
-	
-			index = find_prefix_at_end (data, terminator)
-			if index:
-				if index != lb:
-					collector.collect_incoming_data (
-						data[:-index]
-						)
-				self.simple_collector_buffer = data[-index:]
-			else:
-				collector.collect_incoming_data (data)
-		#
-		# This *is* the reference implementation of asynchat's 
-		# collector interface, copied from the asynchat.py's
-		# async_chat.handle_read method and modified to loop through 
-		# the whole data buffer at once.
-		#
-		# It is the first obvious candidate for a C implementation of
-		# Allegra's collectors.
-		
-	
+                self.ac_in_buffer = self.ac_in_buffer + data
+                while async_chat.consume_buffer (self.collector):
+                        pass
+			
 	def found_terminator (self):
 		return True # allways final
 	
 
-class Length_collector:
+class Length_collector (object):
 
 	# wraps a complex collector with a length collector
 	
@@ -166,7 +116,7 @@ class Length_collector:
 		return self.length_collector_left == 0
 	
 
-class Netstring_collector:
+class Netstring_collector (object):
 	
 	collector_is_simple = False
 	

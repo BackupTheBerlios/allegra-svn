@@ -39,36 +39,42 @@ from allegra.presto import presto_xml, presto_synchronize
 
 _RE_dir_of = re.compile ('^.*?[(](.*?)[)]$')
 
-PRESTo_types = (types.InstanceType, types.ObjectType,)
+PRESTo_types = (types.InstanceType, object)
 
 class _NO_INSTANCE: pass
 
 def presto_xdir (self, instance):
+        e = XML_element ()
+        e.xml_name = u'http://presto/ dir'
+        if instance == _NO_INSTANCE:
+                e.xml_children = [
+                        presto_xml (None, set ()),
+                        presto_xml (self.presto_prompt_env.keys (), set ())
+                        ]
+                return e
+
+        e.xml_attributes = {u'base': _RE_dir_of.match (
+                self.presto_prompt_line
+                ).groups ()[0]}
         walked = (
                 id (self.presto_prompt_env['__builtins__']),
                 id (self.presto_prompt_env)
                 )
-        e = XML_element ()
-        e.xml_name = u'http://presto/ dir'
-        if instance != _NO_INSTANCE:
-                names = dir (instance)
-                if type (instance) in PRESTo_types:
-                        names = set (names).difference (
-                                set (instance.__dict__.keys ())
-                                )
-                e.xml_attributes = {u'base': _RE_dir_of.match (
-                        self.presto_prompt_line
-                        ).groups ()[0]}
+        names = dir (instance)
+        try:
+                properties = set (instance.__dict__.keys ())
+        except:
+                properties = None
         else:
-                names = self.presto_prompt_env.keys ()
+                names = list (set (names).difference (properties))
         e.xml_children = [
                 presto_xml (instance, set (walked)),
                 presto_xml (names, set ())
                 ]
-        if type (instance) in PRESTo_types:
-                e.xml_children.append (presto_xml (
-                        instance.__dict__, set (walked)
-                        ))
+        if properties:
+                e.xml_children.append (presto_xml (dict ([
+                        (n, instance.__dict__.get (n)) for n in properties
+                        ]), set (walked)))
         # self.presto_prompt_env['__builtins__'] = None
         return e
         
@@ -105,8 +111,8 @@ def presto_prompt_async (self, reactor):
         # presto_xml ...
         #
         walked = (
-                id (self.presto_prompt_env['__builtins__']), 
-                id (self.presto_prompt_env)
+                # id (self.presto_prompt_env['__builtins__']), 
+                id (self.presto_prompt_env), 
                 )
         # remove any references to the instance and the reactor from
         # the prompt environnement (and xdir is one!)
@@ -188,7 +194,7 @@ def presto_prompt_sync (self, reactor):
 
 def presto_debug_async (Debug):
         Debug.presto_prompt_env = None
-        Debug.presto_prompt_async = presto_prompt_async
+        # Debug.presto_prompt_async = presto_prompt_async
         Debug.presto_interfaces = (
                 Debug.presto_interfaces | set ((u'PRESTo', u'prompt', ))
                 )
@@ -203,9 +209,9 @@ def presto_debug_sync (Debug):
         # methods (both public and privates).
         #
         presto_debug_async (Debug)
-        Debug.presto_prompt_sync = presto_prompt_sync
+        # Debug.presto_prompt_sync = presto_prompt_sync
         Debug.presto_methods[u'sync'] = presto_synchronize (
-                'presto_prompt_sync'
+                presto_prompt_sync
                 )
 
 

@@ -15,7 +15,13 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"Synchronous Standard I/O interfaces, with a Python prompt implementation."
+"""Synchronous Standard I/O interfaces, with a Python prompt implementation.
+
+SYNOPSIS
+
+	python -OO sync_stdio.py
+
+"""
 
 import sys
 
@@ -97,6 +103,12 @@ class Sync_prompt (Sync_stdio):
 		self.async_catch = async_loop.async_catch
 		async_loop.async_catch = self.sync_prompt_catch
 		Sync_stdio.__init__ (self)
+
+	def thread_loop_init (self):
+		self.select_trigger_log (
+			'press CTRL+C to open and close the console', 'info'
+			)
+		return True
 		
 	def sync_prompt (self):
 		self.sync_prompt_ready = False

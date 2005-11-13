@@ -295,9 +295,7 @@ class DNS_client (udp_channel.UDP_dispatcher):
                 self.dns_ip = ip
                 
         def __repr__ (self):
-                return '<dns-client pending="%d" sent="%d"/>' % (
-                        len (self.dns_pending), self.dns_sent
-                        )
+                return 'dns-client id="%x"' % id (self)
                         
         def dns_resolve (self, question, resolve):
                 # first check the cache for a valid response or a 
@@ -338,6 +336,11 @@ class DNS_client (udp_channel.UDP_dispatcher):
                 udp_channel.UDP_dispatcher.__init__ (self, ip)
 
         def dns_send (self, request, when):
+                assert None == self.log (
+                        'send pending="%d" sent="%d"' % (
+                                len (self.dns_pending), self.dns_sent
+                                ), 'debug'
+                        )
                 request.dns_when = when
                 request.dns_uid = self.dns_sent % (1<<16)
                 request.dns_peer = (request.dns_servers[0], 53)
@@ -357,7 +360,7 @@ class DNS_client (udp_channel.UDP_dispatcher):
                 dns_request = self.dns_pending.pop (uid)
                 if dns_request == None or dns_request.dns_peer != peer:
                         assert None == self.log (
-                                '<noise ip="%s" port="%d"/>' % peer, ''
+                                'noise ip="%s" port="%d"' % peer, 'debug'
                                 )
                         return # log any unsolicitted requests!
                         
@@ -365,7 +368,7 @@ class DNS_client (udp_channel.UDP_dispatcher):
                 # the response, ...
                 #
                 assert None == self.log (
-                        '<signal ip="%s" port="%d"/>' % peer, ''
+                        'signal ip="%s" port="%d"' % peer, 'debug'
                         )
                 dns_request.dns_unpack (datagram)
 
@@ -397,30 +400,26 @@ def dns_servers ():
 
 if __name__ == '__main__':
         import sys
-        assert None == sys.stderr.write (
+        from allegra import netstring, loginfo
+        loginfo.log (
                 'Allegra DNS/UDP Client'
-                ' - Copyright 2005 Laurent A.V. Szyster'
-                ' | Copyleft GPL 2.0\n...\n'
-                )
-        from allegra.netstring import netstring_encode, netstrings_encode
+                ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
+                'info'
+                )        
         def resolve (request):
-                sp = netstrings_encode (request.dns_question)
+                sp = netstring.netstrings_encode (request.dns_question)
                 c = request.dns_peer[0]
                 c = '%d:%s,' % (len (c), c)
                 if request.dns_resources == None:
-                        encoded = sp + '0:,' + c
+                        loginfo.log (sp + '0:,' + c)
                 else:
-                        encoded = netstrings_encode ([
-                                sp + ('%d:%s,' % (len(o), o)) + c
-                                for o in request.dns_resources
-                                ])
-                sys.stdout.write (
-                        '%d:%s,' % (len (encoded), encoded)
-                        )
-                sys.stderr.write ('\n')
-        try:
+                        for o in request.dns_resources:
+                                loginfo.log (
+                                        sp + ('%d:%s,' % (len(o), o)) + c
+                                        )
+        if len (sys.argv) > 3:
                 servers = sys.argv[3:]
-        except:
+        else:
                 servers = dns_servers ()
         dns_resolver = DNS_client (servers)
         if len (sys.argv) > 1:

@@ -19,28 +19,21 @@
 
 import time
 
-from allegra import loginfo, async_loop, tcp_client, async_limits, fifo
+from allegra import loginfo, async_loop, tcp_client #, fifo
 
 
-class TCP_pipeline (
-	tcp_client.TCP_client_channel, 
-	async_limits.Async_limit_in, 
-	async_limits.Async_limit_out
-	):
+class TCP_pipeline (tcp_client.TCP_client_channel):
 
 	pipeline_sleeping = False
 	pipeline_keep_alive = False
-	pipeline_inactive = 60	# one minute timeout for inactive pipelines
 
 	def __init__ (self, requests=None, responses=None):
 		self.pipeline_requests = requests or fifo.FIFO_deque ()
 		self.pipeline_responses = responses or fifo.FIFO_deque ()
 		tcp_client.TCP_client_channel.__init__ (self)
-		self.async_limit_send ()
-		self.async_limit_recv ()
 
 	def handle_connect (self):
-		assert None == self.log ('<connected/>', '')
+		assert None == self.log ('connected', 'debug')
 		if len (self.pipeline_requests):
 			self.pipeline_wake_up ()
 		else:
@@ -48,8 +41,9 @@ class TCP_pipeline (
 
 	def collect_incoming_data (self, data):
 		if self.pipeline_responses.is_empty ():
-			assert None == self.log (
-				'<dropped-data bytes="%d"/>' % len (data), ''
+			self.log (
+				'dropped-data bytes="%d"' % len (data), 
+				'error'
 				)
 			return
 
@@ -58,7 +52,7 @@ class TCP_pipeline (
 
 	def found_terminator (self):
 		if self.pipeline_responses.is_empty ():
-			assert None == self.log ('<dropped-terminator/>', '')
+			self.log ('dropped-terminator', 'error')
 			return
 
 		if self.pipeline_responses.first (
@@ -70,13 +64,6 @@ class TCP_pipeline (
 				not self.pipeline_keep_alive
 				):
 				self.handle_close ()
-
-	def tcp_client_defer (self, when):
-		if not self.closing and self.connected and (
-			when - max (self.async_when_in, self.async_when_out)
-			) > self.pipeline_inactive:
-			assert None == self.log ('<inactive/>', '')
-			self.handle_close ()
 
 	def dns_resolve (self, request):
 		if len (request.dns_resources) > 0:
@@ -106,7 +93,7 @@ class TCP_pipeline (
 		# pipelining protocols, like HTTP/1.1 or ESMPT
 		while not self.pipeline_requests.is_empty ():
 			reactor = self.pipeline_requests.pop ()
-			self.push_with_producer (reactor)
+			self.producer_fifo.append (reactor)
 			self.pipeline_responses.push (reactor)
 		self.pipeline_sleeping = True
 
@@ -116,7 +103,7 @@ class TCP_pipeline (
 			self.pipeline_sleeping = True
 		else:
 			reactor = self.pipeline_requests.pop ()
-			self.push_with_producer (reactor)
+			self.producer_fifo.append (reactor)
 			self.pipeline_responses.push (reactor)
 			self.pipeline_sleeping = False
 
@@ -138,6 +125,7 @@ class TCP_pipeline (
 				fifo.push_fifo (self.pipeline_requests)
 				return fifo
 
+
 def is_ip (host):
 	try:
 		return len ([
@@ -150,7 +138,7 @@ def is_ip (host):
 
 class TCP_pipeline_cache (loginfo.Loginfo):
 
-	Pipeline = None		# a Pipeline factory to override or subclass
+	TCP_PIPELINE = None # a Pipeline factory to override or subclass
 	
 	pipeline_precision = 3	# defered every 3 seconds (large)
 	pipeline_resurect = 0	# don't resurect inactive pipeline
@@ -160,10 +148,7 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 		self.dns_client = dns_client
 
 	def __repr__ (self):
-		return (
-			'<tcp-client pipelines="%d"'
-			'/>' % len (self.pipeline_cache)
-			)
+		return 'tcp-client id="%x"' % id (self)
 			
 	def pipeline_get (self, addr):
 		return (
@@ -177,13 +162,13 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 	def pipeline_init (self, addr):
 		if not self.pipeline_cache:
 			# empty cache, defer a recurrent tcp session event
-			assert None == self.log ('<defered-start/>', '')
+			assert None == self.log ('defered-start', 'debug')
 			async_loop.async_schedule (
 				time.time () + self.pipeline_precision,
 				self.pipeline_defer
 				)
 		# cache a disconnected pipeline
-		self.pipeline_cache[addr] = pipeline = self.Pipeline ()
+		self.pipeline_cache[addr] = pipeline = self.TCP_PIPELINE ()
 		if is_ip (addr[0]):
 			# connect to *any* IP address and TCP port
 			pipeline.tcp_connect (addr)
@@ -210,7 +195,7 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 
 	def pipeline_defer (self, when):
 		for addr, pipeline in self.pipeline_cache.items ():
-			pipeline.tcp_client_defer ()
+			# pipeline.tcp_client_defer ()
 			if pipeline.closing:
 				self.pipeline_delete (addr, pipeline)
 		if len (self.pipeline_cache) > 0:
@@ -219,30 +204,9 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 				self.pipeline_defer
 				) # continue to defer
 
-		assert None == self.log ('<defered-stop/>', '')
+		assert None == self.log ('defered-stop', 'debug')
 
 
-if __name__ == '__main__':
-        import sys
-        assert None == sys.stderr.write (
-                'Allegra TCP Pipeline'
-                ' - Copyright 2005 Laurent A.V. Szyster'
-                ' | Copyleft GPL 2.0\n...\n'
-                )
-        try:
-        	host, port = sys.argv[1:]
-        	addr = (host, int (port))
- 	except:
- 		sys.exit (1)
- 	
-        TCP_pipeline_cache (
-        	DNS_client (dns_servers ())
-        	).pipeline_get (
-        		addr
-        		).pipeline_push (
-        			)
-        async_loop.loop () # ... loop.
-	
 # Note about this implementation
 #
 # The first class, TCP_pipeline, is a generic implemention that 

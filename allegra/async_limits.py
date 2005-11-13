@@ -17,66 +17,128 @@
 
 ""
 
-from time import time
+import time
 
-class Async_limit_out:
-	
-	# TODO: fix the Async_limit_out first then copy here
 
-	async_bytes_out = async_when_out = 0
+# Add asynchronous limits to a UDP dispatcher or a TCP channel
 
-        def async_limit_out (self, sent):
-                self.async_bytes_out += sent
-                return sent
+def async_limit_in (channel, when):
+	channel.async_bytes_in = 0
+	channel.async_when_in = when
+	recv = channel.recv
+	def async_limit_recv (buffer_size):
+		data = recv (buffer_size)
+	        channel.async_bytes_in += len (data)
+		channel.async_when_in = time.time ()
+	        return data
+	        
+	channel.recv = async_limit_recv
+	try:
+		recvfrom = channel.recvfrom
+	except AttributeError:
+		return
+		
+	def async_limit_recvfrom ():
+		data, peer = recvfrom ()
+	        channel.async_bytes_in += len (data)
+		channel.async_when_in = time.time ()
+	        return data, peer
+	        
+	channel.recvfrom = async_limit_recvfrom
 
-	def async_limit_send (self):
-		self.send = (
-			lambda 
-			data, c=self, s=self.send: 
-			c.async_limit_out (s (data))
-			)
 
+def async_limit_out (channel, when):
+	channel.async_bytes_out = 0
+	channel.async_when_out = when
+	send = channel.send
+	def async_limit_send (data):
+		sent = send (data)
+	        channel.async_bytes_out += sent
+		channel.async_when_out = time.time ()
+	        return sent
+	        
+	channel.send = async_limit_send
+	try:
+		sendto = channel.sendto
+	except AttributeError:
+		return
+		
 	def async_limit_sendto (self):
-		self.sendto = (
-			lambda 
-			data, peer, c=self, s=self.sendto:
-			c.async_limit_out (s (data, peer))
-			)
+		sent = sendto (data, peer)
+	        channel.async_bytes_out += sent
+		channel.async_when_out = time.time ()
+	        return sent
 
-
-class Async_limit_in:
-
-	# a generic limit for UDP dispatcher and TCP channels
-	#
-	# TODO: fix a bug in async_when_in that triggers "<inactive/>"
+	channel.sendto = async_limit_sendto
 	
-	async_bytes_in = async_when_in = 0
 
-        def async_limit_in (self, received):
-		self.async_bytes_in += len (received)
-		self.async_when_in = time ()
-		return received
+def FourKBps ():
+	return 4096 # ac_in_buffer_size
 
-	def async_limit_recv (self):
-		self.recv = (
-			lambda 
-			bytes, c=self, r=self.recv: 
-			c.async_limit_in (r (bytes))
+
+def async_throttle_in (channel, Bps=FourKBps):
+	channel.async_limit_bytes_in = 1
+	channel.async_throttle_in_when = time.time ()
+	channel.async_throttle_out_Bps = Bps
+	readable = channel.readable
+	def async_throttle_readable ():
+		return (
+			channel.async_bytes_in < channel.async_limit_bytes_in 
+			and readable ()
 			)
+	channel.readable = async_throttle_readable
+	
+def async_throttle_in_defer (channel, when):
+	# when the channel exceeded its limit, allocate bandwith at a given
+	# rate for the period between "when" - approximatively but steadily
+	# "now" - and the last I/O or the last allocation, which ever comes
+	# later. in effect it grants the channel the bandwith it is entitled
+	# to for the immediate past.
+	#
+	if channel.async_bytes_in >= channel.async_limit_bytes_in:
+		channel.async_limit_bytes_in += int ((
+			when - max (
+				channel.async_when_in,
+				channel.async_throttle_in_when
+				)
+			) * channel.async_throttle_in_Bps ())
+	channel.async_throttle_in_when = when
+	#
+	# the async_throttle_in method is supposed to be called by a
+	# periodical defered. for peers with long-lived channels it is
+	# faster to periodically allocate bandwith than to do it whenever 
+	# we send or receive, or every time we check for readability or 
+	# writability.
 
-        def async_limit_from (self, received, peer):
-		self.async_bytes_in += len (received)
-		self.async_when_in = time ()
-		return received, peer
 
-	def async_limit_recvfrom (self):
-		self.recvfrom = (
-			lambda 
-			c=self, r=self.recvfrom: 
-			c.async_limit_from (r ())
+def async_throttle_out (channel):
+	channel.async_limit_bytes_out = 1
+	channel.async_throttle_out_when = time.time ()
+	writable = channel.writable
+	def async_throttle_writable ():
+		return (
+			channel.async_bytes_out < channel.async_limit_bytes_out
+			and writable ()
 			)
+	channel.writable = async_throttle_writable
+	
+def async_throttle_out_defer (channel, when):
+	if channel.async_bytes_out >= channel.async_limit_bytes_out:
+		channel.async_limit_bytes_out += int ((
+			when - max (
+				channel.async_when_out,
+				channel.async_throttle_out_when
+				)
+			) * channel.async_throttle_out_Bps ())
+	channel.async_throttle_out_when = when	
+	
 
-
+# Note about this implementation
+#
+# other kind of limits - like an absolute limit on the maximum i/o or
+# duration per channel - should be implemented in the final class.
+#
+#
 # The Case for Throttling
 #
 # Asynchat allows to save server's resources by limiting the i/o buffers
@@ -89,66 +151,3 @@ class Async_limit_in:
 # of the bandwith generaly available. Because there *are* other applications
 # and system functions that need a bit of bandwith, and peer application tend
 # to exhaust network resources.
-
-class Async_throttle_out:
-
-	async_throttle_out_Bps = lambda s: 4096 # throttle output to 4 KBps
-
-	def async_limit_write (self):
-		self.async_limit_bytes_out = 1
-		self.async_throttle_out_when = time ()
-		self.writable = (
-			lambda c=self, w=self.writable: (
-				c.async_bytes_out < c.async_limit_bytes_out and w ()
-				)
-			)
-
-	def async_throttle_out (self, when):
-		# when the channel exceeded its limit, allocate bandwith at a given
-		# rate for the period between "when" - approximatively but steadily
-		# "now" - and the last I/O or the last allocation, which ever comes
-		# later. in effect it grants the channel the bandwith it is entitled
-		# too for the immediate past.
-		#
-		if self.async_bytes_out >= self.async_limit_bytes_out:
-			self.async_limit_bytes_out += int ((
-				when - max (
-					self.async_when_out,
-					self.async_throttle_out_when
-					)
-				) * self.async_throttle_out_Bps ())
-		self.async_throttle_out_when = when
-		#
-		# the async_throttle_out method is supposed to be called by a
-		# periodical defered. for peers with relatively few client it is
-		# however faster to periodically allocate bandwith than to do it
-		# whenever we send or receive, or every time we check for
-		# readability or writability.
-
-
-class Async_throttle_in:
-
-	async_throttle_in_Bps = lambda s: 4096  # throttle input to 4 KBps
-
-	def async_limit_read (self):
-		self.async_limit_bytes_in = 1
-		self.async_throttle_in_when = time ()
-		self.readable = (
-			lambda c=self, r=self.readable: (
-				c.async_bytes_in < c.async_limit_bytes_in and r ()
-				)
-			)
-
-	def async_throttle_in (self, when):
-		if self.async_bytes_in >= self.async_limit_bytes_in:
-			self.async_limit_bytes_in += int ((
-				when - max (
-					self.async_when_in,
-					self.async_throttle_in_when
-					)
-				) * self.async_throttle_in_Bps ())
-		self.async_throttle_in_when = when
-
-
-# other kind of limits - like an absolute limit on the maximum i/o or
-# duration per channel - should be implemented in the final class.

@@ -140,6 +140,17 @@ def netlines (encoded, indent=''):
 	return '%s%d:%s,\n' % (indent, len (encoded), encoded)
 
 
+def netoutlines (encoded, format='%s\n'):
+	"""Recursively beautify a netstring as a CRLF outline"""
+	netstrings = netstrings_decode (encoded)
+	if len (netstrings) > 1:
+		return ''.join (
+			[netoutlines (e, '  '+format) for e in netstrings]
+			)
+			
+	return format % encoded
+
+
 if __name__ == '__main__':
         import sys
         assert None == sys.stderr.write (
@@ -152,7 +163,7 @@ if __name__ == '__main__':
  	else:
 		command = 'decode'
  	if command == 'decode':
- 		if len (sys.arv) > 2:
+ 		if len (sys.argv) > 2:
  			try:
  				buffer_size = int (sys.argv[2])
 			except:
@@ -162,7 +173,7 @@ if __name__ == '__main__':
 		else:
 	 		buffer_size = 4096
 		def more ():
-			sys.stdin.read (buffer_size)
+			return sys.stdin.read (buffer_size)
 		for n in netstrings_pipe (more):
 			sys.stdout.write (netlines (n) + '\n')
 	elif command == 'encode':

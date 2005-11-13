@@ -15,63 +15,39 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"""DESCRIPTION
 
-import sys, socket, time, asynchat
+One base class to derive TCP client implementation and a few functions 
+that add practical limits to guard a peer against zombie sessions (inactive 
+longer than the limit) and effectively rationate I/O bandwith.
 
-from allegra import loginfo, async_loop
+SYNOPSYS
+
+...
+
+"""
+
+import sys, socket, time
+
+from allegra import loginfo, async_loop, async_chat, async_limits
 
 
-class TCP_client_channel (loginfo.Loginfo, asynchat.async_chat):
+class TCP_client_channel (async_chat.Async_chat):
 
 	tcp_connect_timeout = 10 # a ten seconds timeout for connection
-
-	def __init__ (self, terminator=None):
-		asynchat.async_chat.__init__ (self)
-		if terminator:
-			self.set_terminator (terminator)
-
+	tcp_client_defer = None
+	
 	def __repr__ (self):
-		return '<tcp-client-channel id="%x"/>' % id (self)
-
-	# take precedence over the asyncore dispatcher logging facility
-	#
-	log = log_info = loginfo.Loginfo.loginfo_log
-
-	def close (self):
-		assert None == self.log ('close', 'debug')
-		self.del_channel ()
-		self.socket.close ()
-		self.connected = 0
-		self.closing = 1
-
-        def handle_error (self):
-		assert None == self.log ('handle_error', 'debug')
-                t, v = sys.exc_info ()[:2]
-                if t is SystemExit:
-                        raise t, v # don't catch SystemExit!
-                
-                self.loginfo_traceback ()
-		self.close ()
-
-	#def handle_expt (self):
-	#	assert None == self.log ('<handle-expt/>', '')
-        #       self.close ()
-
-        def handle_close (self):
-		assert None == self.log ('handle_close', 'debug')
-		self.close ()
-			
-	def handle_connect (self):
-		assert None == self.log ('handle_connected', 'debug')
+		return 'tcp-client-channel id="%x"' % id (self)
 
 	def collect_incoming_data (self, data):
 		assert None == self.log (data, 'debug')
 			
 	def found_terminator (self):
-		assert None == self.log ('found_terminator', 'debug')
+		assert None == self.log ('found-terminator', 'debug')
 		
         def tcp_connect (self, addr):
+        	"create a socket and try to connect to addr, return success"
 		if self.connected:
 			return True
 
@@ -90,70 +66,97 @@ class TCP_client_channel (loginfo.Loginfo, asynchat.async_chat):
 		return True
 
 	def tcp_timeout (self, when):
-		if not (self.connected or self.closing):
-			assert None == self.log (
-				'connect_timeout'
-				' %d' % self.tcp_connect_timeout, 'debug'
-				)
-			self.close ()
-			
-
-from allegra.async_limits import Async_limit_in, Async_limit_out
-
-class TCP_client_limit (TCP_client_channel, Async_limit_in, Async_limit_out):
-
-	tcp_inactive_timeout = 60	# one minute timeout for inactive client
-	tcp_defer_precision = 10	# ten seconds precision for defered
-
-	def __init__ (self, addr):
-		TCP_client_channel.__init__ (self, addr)
-		Async_limit_in.__init__ (self)
-		Async_limit_out.__init__ (self)
-		self.async_limit_send ()
-		self.async_limit_recv ()
-
-	def __repr__ (self):
-		return '<tcp-client-limit id="%x"/>' % id (self)
-
-	def tcp_timeout (self, when):
+		"if connected, continue to defer, otherwise handle close"
 		if self.connected:
-			return (
-				when + self.tcp_defer_precision,
-				self.tcp_client_defer
-				)
+			if self.tcp_client_defer != None:
+				return (
+					when + self.tcp_client_precision,
+					self.tcp_client_defer
+					)
+			return
 				
 		if not self.closing:
 			assert None == self.log (
-				'connect_timeout'
+				'connect-timeout'
 				' %d' % self.tcp_connect_timeout, 'debug'
 				)
 			self.handle_close ()
+			
 
-	def tcp_client_defer (self, when):
-		if not self.closing and self.connected and (
-			when - max (self.async_when_in, self.async_when_out)
-			) > self.tcp_inactive_timeout:
-			assert None == self.log ('inactive', 'debug')
-			self.close ()
+class TCP_client_echo (TCP_client_channel):
+	
+	"The simplest derived class, a netline logger."
 
-		return when + self.tcp_defer_precision, self.tcp_client_defer
+	def __init__ (self):
+		async_chat.Async_chat.__init__ (self)
+                self.set_terminator ('\n')
+                self.echo_buffer = ''
+                
+        def collect_incoming_data (self, data):
+                self.echo_buffer += data
+                
+        def found_terminator (self):
+                self.log (self.echo_buffer)
+                self.echo_buffer = ''
+                
 
+def tcp_client_inactive (channel, when):
+	if not channel.closing and channel.connected and (
+		when - max (channel.async_when_in, channel.async_when_out)
+		) > channel.tcp_client_inactive:
+		assert None == channel.log ('inactive', 'debug')
+		channel.handle_close ()
+		return
 
-from allegra.async_limits import Async_throttle_in, Async_throttle_out
+	return when + channel.tcp_client_precision, channel.tcp_client_defer
 
-class TCP_client_throttle (
-	TCP_client_limit, Async_throttle_in, Async_throttle_out
+def tcp_client_limit (channel, inactive=60, precision=10):
+	async_limits.async_limit_in (channel)
+	async_limits.async_limit_out (channel)
+	channel.tcp_client_inactive = inactive
+	channel.tcp_client_precision = precision
+	channel.tcp_client_defer = tcp_client_inactive
+	return channel
+	
+
+def tcp_client_throttle_defer (channel, when):
+	async_throttle_in_defer (channel, when)
+	async_throttle_out_defer (channel, when)
+	return tcp_client_inactive (channel, when)
+
+def tcp_client_throttle (
+	channel, 
+	throttle_in=async_limits.FourKBps, 
+	throttle_out=async_limits.FourKBps, 
+	inactive=60, precision=10
 	):
+	TCP_client_limit (channel, inactive, precision)
+	channel.tcp_client_defer = tcp_client_throttle
+	return channel
 
-	tcp_inactive_timeout = 10	# ten seconds timeout for inactive client
-	tcp_defer_precision = 1		# one second precision for defered
 
-	def __init__ (self, addr):
-		TCP_client_limit.__init__ (self, addr)
-		self.async_limit_read ()
-		self.async_limit_write ()
+def tcp_client_throttle_out_defer (channel, when):
+	async_throttle_out_defer (channel, when)
+	return tcp_client_inactive (channel, when)
 
-	def tcp_client_defer (self, when):
-		self.async_throttle_in (when)
-		self.async_throttle_out (when)
-		return TCP_client_limit.tcp_client_defer (self, when)
+def tcp_client_throttle_out (
+	channel, Bps=async_limits.FourKBps, inactive=60, precision=10
+	):
+	tcp_client_limit (channel, inactive, precision)
+	channel.async_throttle_out_Bps = Bps
+	channel.tcp_client_defer = tcp_client_throttle_out_defer
+	return channel
+
+
+def tcp_client_throttle_in_defer (channel, when):
+	async_throttle_in_defer (channel, when)
+	return tcp_client_inactive (channel, when)
+
+def tcp_client_throttle_in (
+	channel, Bps=async_limits.FourKBps, inactive=60, precision=10
+	):
+	tcp_client_limit (channel, inactive, precision)
+	channel.async_throttle_in_Bps = Bps
+	channel.tcp_client_defer = tcp_client_throttle_in_defer
+	return channel
+	

@@ -17,17 +17,19 @@
 
 ""
 
-import sys, socket, random, asyncore #, errno 
+import sys, socket, random #, asyncore, errno 
 
-from allegra import loginfo
+from allegra import async_core, finalization
 
 
-class UDP_dispatcher (asyncore.dispatcher, loginfo.Loginfo):
+class UDP_dispatcher (
+	async_core.Async_dispatcher, finalization.Finalization
+	):
 
 	udp_datagram_size = 512
 
 	def __init__ (self, ip, port=None):
-		asyncore.dispatcher.__init__ (self)
+		async_core.Async_dispatcher.__init__ (self)
 		self.create_socket (socket.AF_INET, socket.SOCK_DGRAM)
 		# binds a channel to a given ip address, pick a random port
 		# above 8192 if none provided, and handle error.
@@ -35,7 +37,7 @@ class UDP_dispatcher (asyncore.dispatcher, loginfo.Loginfo):
 			(abs (hash (random.random ())) >> 16) + 8192
 			)
 		assert None == self.log (
-			'<bind ip="%s" port="%d"/>' % self.addr, 'debug'
+			'bind ip="%s" port="%d"' % self.addr, 'debug'
 			)
 		try:
 			self.bind (self.addr)
@@ -45,7 +47,10 @@ class UDP_dispatcher (asyncore.dispatcher, loginfo.Loginfo):
 			self.connected = 1
 
 	def __repr__ (self):
-		return '<udp-dispatcher id="%x"/>' % id (self)
+		return 'udp-dispatcher id="%x"' % id (self)
+
+        def finalization (self, finalized):
+                assert None == self.log ('finalized', 'debug')
 
 	def readable (self):
 		return self.connected # UDP peer may be "disconnected"
@@ -78,38 +83,17 @@ class UDP_dispatcher (asyncore.dispatcher, loginfo.Loginfo):
 			self.handle_error ()
 			return '', None
 
-	def close (self):
-		assert None == self.log ('<close/>', 'debug')
-		self.del_channel ()
-		self.socket.close ()
-		self.connected = 0
-		self.closing = 1
-
 	def handle_read (self):
 		# to subclass
 		data, peer = self.recvfrom ()
 		if peer != None:
 			assert None == self.log (
-				'<recvfrom ip="%s" port"%d"/>'
-				'<![CDATA[%s]]!>' % (
-					peer[0], peer[1], data
+				'recvfrom ip="%s" port"%d" bytes="%d"' % (
+					peer[0], peer[1], len (data)
 					), 'debug'
 				)
 		else:
-			assert None == self.log ('<recvfrom/>', 'debug')
+			assert None == self.log ('recvfrom', 'debug')
 
-        def handle_error (self):
-        	# to subclass
-                t, v = sys.exc_info ()[:2]
-                if t is SystemExit:
-                        raise t, v
-
-		self.loginfo_traceback ()
-
-	def handle_close (self):
-		# to subclass
-		self.close ()
-
-	log = log_info = loginfo.Loginfo.loginfo_log
 
 # TODO: add a UDP pipeline implementation that behaves like asynchat?

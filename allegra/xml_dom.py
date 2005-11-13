@@ -25,7 +25,7 @@ except ImportError:
         from xml.parsers import pyexpat
 
 
-class XML_element:
+class XML_element (object):
         
         "the simplest XML element interface implementation"
 
@@ -109,7 +109,7 @@ def xml_orphan (e):
         del e.xml_parent
 
 
-class XML_dom:
+class XML_dom (object):
         
         # TODO: support more expat interfaces ...
         
