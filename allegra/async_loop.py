@@ -72,7 +72,19 @@ def poll1 (map, timeout=0.0):
                 time.sleep (timeout)
         else:
                 try:
-                        r,w,e = select.select (r,w,e, timeout)
+                        r, w, e = select.select (r, w, e, timeout)
+                except ValueError:
+                	# Default limit set to 512 in _select.pyd, no upper
+                	# bound for NT, something in the many thousands for
+                	# Linux. Anyway, this will not prevent a peer to
+                	# handle many more sockets, provided no more than
+                	# 512 of them are readable or writable concurrently.
+                	#
+                	loginfo.log ('select read="%d" write="%d"' % (
+                		len (r), len (w)
+                		), 'fatal')
+                	raise async_Exception, 'select-fatal'
+                	
                 except select.error, err:
                         if err[0] != errno.EINTR:
                             raise
@@ -307,3 +319,36 @@ def loop ():
 # implementation is in the standard heapq CPython module. Finally, the poll
 # or select loops are just thin glue around the respective C system calls.
 #
+# The trade-off here is that even if an Allegra peer is significantly 
+# slower at handling the HTTP protocol than an Apache server or a Java 
+# Application Server, it will never be as slow as to loose the benefit
+# of asynchrony: no synchronization chore and cost, no thread/process
+# core and cost and a lot more memory available for cache.
+#
+# Last but not least, a network application peer does not have to scale
+# much beyond the lower limits set on the select or poll call by most
+# OS. An application peer handling 512 concurrent connections
+#
+# Foundation for a P2EE Stack?
+#
+# However, very much like a NET or J2EE stack, an Allegra peer can host
+# network applications and enforce enough protection against the hosted
+# applications' defects. Actually, the CPython VM provides most of that
+# safety because it is an strong-typed but late-binding interpreter, one
+# that makes it virtually impossible to "crash" (buffer overflow, broken
+# C libraries interfaces, etc ...)
+#
+# What about malicious or broken access to Allegra's core API?
+#
+# Well, what about auditing the code hosted? What about testing it first
+# and reading it one last time before putting it into production? C# or
+# Java are not safer, actually there is in their API enough rope to hang
+# both application servers from inside. Whatever the host, it makes more
+# sense to audit the code deployed rather than restrict the API available.
+# 
+# And when it comes to source audit, Python is definitively more effective
+# than Java or C#, because the same algorithm is usually shorter in Python.
+#
+# So, a CPython VM running an asynchronous peer like Allegra might very
+# well prove to be a more competitive solution than Sun's or the
+# Microsoft's frameworks.
