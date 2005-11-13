@@ -130,11 +130,11 @@ class Sync_prompt (Sync_stdio):
 			self.select_trigger ((self.sync_prompt, ()))
 			return
 
-		self.sync_readline (line)
-		self.thread_loop_queue ((self.sync_stdin, ()))
+		self.select_trigger ((self.async_readline, (line,)))
 		
-	def sync_readline (self, line):
-		assert None == self.select_trigger_log (line)
+	def async_readline (self, line):
+		assert None == self.log (line)
+		self.thread_loop_queue ((self.sync_stdin, ()))
 
 	def async_stdio_stop (self):
 		async_loop.async_catch = self.async_catch
@@ -151,10 +151,7 @@ class Python_prompt (Sync_prompt):
 	def __repr__ (self):
 		return 'python-prompt'
 
-	def sync_readline (self, line):
-		self.select_trigger ((self.python_prompt, (line, )))
-			
-	def python_prompt (self, line):
+	def async_readline (self, line):
 		method, result = prompt.python_prompt (
 			line, self.python_prompt_env
 			)
@@ -162,6 +159,7 @@ class Python_prompt (Sync_prompt):
 			self.loginfo_traceback (result)
 		elif result != None:
 			self.async_stderr ('%r\n' % result)
+		self.thread_loop_queue ((self.sync_stdin, ()))
 
 	def async_stdio_stop (self):
 		self.python_prompt_env = None # break circular reference
