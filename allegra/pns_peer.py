@@ -100,7 +100,7 @@ class PNS_peer (loginfo.Loginfo):
 	def pns_pirp_continue (self, name, encoded, addr):
 		# send back the response and log a PIRP statement to stdout
 		self.pns_udp.sendto (encoded, addr)
-		self.log (netstring.netstrings_encode ((
+		self.log (netstring.encode ((
 			name, '', addr[0]
 			)))
 		#
@@ -202,7 +202,8 @@ if __name__ == '__main__':
 	if '-d' in sys.argv:
 		sys.argv.remove ('-d')
 		from allegra import sync_stdio
-		loginfo.Loginfo_stdio.log = loginfo.Loginfo_stdio.loginfo_debug
+		loginfo.Loginfo_stdio.log = \
+			loginfo.Loginfo_stdio.loginfo_netlines
 		loginfo.log (
 			'Allegra PNS Dev'
 			' - Copyright 2005 Laurent A.V. Szyster'
@@ -233,7 +234,7 @@ if __name__ == '__main__':
 				PNS_peer.pns_shutdown (self)
 				async_loop.async_catch = self.async_catch
 				self.async_catch = None
-				return 1
+				return True
 	else:
 		loginfo.log (
 			'Allegra PNS Peer'

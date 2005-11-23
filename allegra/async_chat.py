@@ -39,26 +39,26 @@
 
 import types, collections, socket
 
-from allegra import async_core, finalization
+from allegra import async_core
 
 
 def refill_buffer (channel):
         if len (channel.producer_fifo):
                 p = channel.producer_fifo[0]
                 if p is None:
-                        if not channel.ac_out_buffer:
+                        if channel.ac_out_buffer == '':
                                 channel.producer_fifo.popleft ()
                                 channel.handle_close () # this *is* an event
                         return
                     
                 elif type (p) is types.StringType:
                         channel.producer_fifo.popleft ()
-                        channel.ac_out_buffer = channel.ac_out_buffer + p
+                        channel.ac_out_buffer += p
                         return
 
                 data = p.more ()
                 if data:
-                        channel.ac_out_buffer = channel.ac_out_buffer + data
+                        channel.ac_out_buffer += data
                         return
                     
                 else:
@@ -159,7 +159,7 @@ def consume_buffer (channel):
         return len (channel.ac_in_buffer) > 0
         
                         
-class Async_chat (async_core.Async_dispatcher, finalization.Finalization):
+class Async_chat (async_core.Async_dispatcher):
 
         ac_in_buffer_size = ac_out_buffer_size = 4096
         
@@ -172,9 +172,6 @@ class Async_chat (async_core.Async_dispatcher, finalization.Finalization):
         def __repr__ (self):
                 return 'async-chat id="%x"' % id (self)
                 
-        def finalization (self, finalized):
-                assert None == self.log ('finalized', 'debug')
-
         def readable (self):
                 "predicate for inclusion in the readable for select()"
                 return (len (self.ac_in_buffer) <= self.ac_in_buffer_size)
@@ -217,7 +214,13 @@ class Async_chat (async_core.Async_dispatcher, finalization.Finalization):
                 # is necessary because we might read several data+terminator
                 # combos with a single recv(1024).
                 #
-                self.ac_in_buffer = self.ac_in_buffer + data
+                #assert None == self.log (
+                #        'handle-read read="%d" buffered="%d"' % (
+                #                len (data), len (self.ac_out_buffer)
+                #                ),
+                #        'debug'
+                #        )
+                self.ac_in_buffer += data
                 while self.ac_consume_buffer ():
                         pass
 
@@ -230,16 +233,23 @@ class Async_chat (async_core.Async_dispatcher, finalization.Finalization):
         
                 if self.ac_out_buffer and self.connected:
                         try:
-                                num_sent = self.send (
+                                sent = self.send (
                                         self.ac_out_buffer[:obs]
                                         )
-                                if num_sent:
-                                        self.ac_out_buffer = \
-                                                self.ac_out_buffer[num_sent:]
-                
                         except socket.error, why:
                                 self.handle_error ()
-
+                        else:
+                                if sent:
+                                        self.ac_out_buffer = \
+                                                self.ac_out_buffer[sent:]
+                                #assert None == self.log (
+                                #        'handle-write'
+                                #        ' sent="%d" buffered="%d"' % (
+                                #                sent, len (self.ac_out_buffer)
+                                #                ),
+                                #        'debug'
+                                #        )
+                        
         # Allow to use simplified or more sophisticated collector and producer
         # interfaces (like a netstring channel) or implementations (like a C
         # version of the original ;-).
@@ -283,14 +293,6 @@ class Async_chat (async_core.Async_dispatcher, finalization.Finalization):
                 assert None == self.log (
                         self.get_terminator (), 'found-terminator'
                         )
-
-#        def discard_buffers (self):
-#                # Emergencies only!
-#                self.ac_in_buffer = ''
-#                self.ac_out_buffer = ''
-#                while self.producer_fifo:
-#                        self.producer_fifo.popleft ()
-
 
 # Note about this implementation
 #

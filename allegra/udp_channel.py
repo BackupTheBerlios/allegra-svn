@@ -19,12 +19,10 @@
 
 import sys, socket, random #, asyncore, errno 
 
-from allegra import async_core, finalization
+from allegra import async_core
 
 
-class UDP_dispatcher (
-	async_core.Async_dispatcher, finalization.Finalization
-	):
+class UDP_dispatcher (async_core.Async_dispatcher):
 
 	udp_datagram_size = 512
 
@@ -44,19 +42,16 @@ class UDP_dispatcher (
 		except socket.error:
 			self.handle_error ()
 		else:
-			self.connected = 1
+			self.connected = 1 # somehow connected ...
 
 	def __repr__ (self):
 		return 'udp-dispatcher id="%x"' % id (self)
-
-        def finalization (self, finalized):
-                assert None == self.log ('finalized', 'debug')
 
 	def readable (self):
 		return self.connected # UDP peer may be "disconnected"
 
 	def writable (self):
-		return 0 # UDP protocols are *allways* writable
+		return 0 # UDP protocols are *never* writable as for asyncore
 
 	# ECONNRESET, ENOTCONN, ESHUTDOWN
 	#

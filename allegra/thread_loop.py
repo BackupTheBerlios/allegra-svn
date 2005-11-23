@@ -74,9 +74,9 @@ class Protected_deque:
                                                 )
                 finally:
                         self.cv.release ()
-                return netstring.netstrings_encode ((
+                return netstring.encode ((
                         'protected_deque queued="%d"' % l,
-                        netstring.netstrings_encode (r)
+                        netstring.encode (r)
                         ))
         
 	def __len__ (self):
@@ -194,7 +194,7 @@ class Thread_loop (threading.Thread, select_trigger.Select_trigger):
                         trunked = self.thread_loop_queue.trunk ()
                         if trunked:
                                 self.select_trigger_log (
-                                        netstring.netstrings_encode ([
+                                        netstring.encode ([
                                                 '%r' % (i,) for i in trunked
                                                 ]), 'debug'
                                         )

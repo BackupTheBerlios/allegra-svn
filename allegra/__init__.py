@@ -18,72 +18,39 @@
 __author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
 
 __all__ = [
+        #
+        # Asynchronous Internet Peer
+        #
         'netstring', 'prompt', 'loginfo', 
-        'async_loop', 'finalization', 'fifo', 
+        'async_loop', 'finalization', 'async_core',
         'select_trigger', 'thread_loop', 'sync_stdio', 'synchronizer', 
-        'udp_channel', 'timeouts', 
-        'async_limits', 'tcp_client', 'tcp_server',
-        'collector', 'producer', 'reactor', 
-        'dns_client', 'tcp_pipeline', 
-        'mime_collector', 'mime_producer', 'mime_reactor',
-        'smtp_client', 'pop_client', 'nnrp_client', 
-        'http_collector', 'http_client', 'http_server', 
+        'async_net', 'async_chat', 'async_limits', 
+        'producer', 'collector', 'reactor', 
+        'udp_peer', 'tcp_server', 'tcp_client', 
+        #
+        # Web Application Protocols
+        #
+        'dns_client', 'tcp_pipeline', 'mime_headers', 'mime_reactor',
+        # 'smtp_client', 'pop_client', 'nnrp_client', 
+        # 'smtp_server', 'pop_server', 'nnrp_server', 
+        'http_reactor', 'http_client', 'http_server', 
         'xml_dom', 'xml_unicode', 'xml_utf8', 'xml_reactor',
+        #
+        # PNS, The Reference Implementation
+        #
         'pns_model', 'pns_sat', 'pns_xml', 'pns_mime',
         'pns_tcp', 'pns_resolution', 'pns_inference', 'pns_udp', 
-        'pns_peer', 
-        'pns_client', 'pns_articulator', 
-        'presto', 'presto_http', 
+        'pns_peer', 'pns_client', 'pns_articulator', 
+        #
+        # Allegra Presto
+        #
+        'presto', 'presto_http', # presto_smtp, presto_pop,
         'presto_prompt', 'presto_bsddb', 'presto_pns', 
-        'dns_peer'
+        #
+        # The Last DNS Application
+        #
+        # 'dns_peer'
         ]
-
-# Table Of Content
-#
-# Introduction
-#        
-#        asyncore, asynchat, 
-#
-# Part I - Allegra's Core
-#        
-#        netstring, prompt, loginfo, async_loop, finalization, fifo, 
-#        select_trigger, thread_loop, synchronizer, sync_stdio, 
-#        
-#        udp_channel, timeouts, async_limits, tcp_client, tcp_server,
-#        collector, producer, reactor, 
-#        
-# Part II - The Web Stack: DNS, MIME, HTTP and XML protocols
-#        
-#        dns_client, tcp_pipeline, 
-#        mime_collector, mime_producer, mime_reactor,
-#        smtp_client, pop_client, nnrp_client, 
-#
-#        http_collector, http_client, http_server, 
-#        xml_dom, xml_unicode, xml_utf8, xml_reactor,
-#        
-# Part III - The Semantic Stack: PNS peer, client and articulators
-#        
-#        pns_model, pns_sat, 
-#        pns_tcp, pns_resolution, pns_inference, pns_udp, pns_peer, 
-#        pns_client, pns_articulator, 
-#        pns_xml, pns_mime
-#        
-# Part IV - The First Semantic Web Peer
-#        
-#        presto, presto_http, 
-#        presto_prompt, presto_bsddb, presto_pns, 
-#        
-# Part V - The Last DNS Application.
-#        
-#        dns_peer
-#
-# Conclusion
-#
-#        allegra_presto
-#
-# an asynchronously distributed PNS/XML web of component instances!
-#
-
 
 # Note about This Implementation
 #

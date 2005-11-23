@@ -530,7 +530,7 @@ def presto_producer (reactor, result, encoding='ASCII', benchmark=None):
                         reactor.presto_dom.xml_prefixes, 
                         xml_unicode.xml_ns (reactor.presto_dom.xml_prefixes), 
                         encoding
-                        )
+                        ), 512 # glob 64KB
                 )
 
 

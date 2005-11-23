@@ -141,7 +141,7 @@ else:
         # session written to stdout
         #
         def pns_stdio_statement (statement):
-                encoded = netstring.netstrings_encode (statement)
+                encoded = netstring.encode (statement)
                 if len (encoded) > 1024:
                         sys.stderr.write (
                                 '%d:%s,' % (len (encoded), encoded)

@@ -17,14 +17,12 @@
 
 ""
 
-from allegra.finalization import Finalization
-from allegra.netstring import netstrings_encode, netstrings_decode
-from allegra.pns_model import pns_name
+from allegra import netstring, finalization, pns_model
 
 
 def pns_articulate_route (encoded):
-        names = netstrings_decode (encoded)
-        name = pns_name (netstrings_encode (names[1:]), set ())
+        names = netstring.netstrings (encoded)
+        name = pns_model.pns_name (netstring.encode (names[1:]), set ())
         return (names[0], name)
         
 
@@ -64,14 +62,14 @@ class PNS_articulator:
                 elif resolved[1] == '' or resolved[2] == '':
                         # ... as sets for contexts and indexes
                         self.pns_commands[resolved] = (
-                                model[3], set (netstrings_decode (model[3]))
+                                model[3], set (netstring.netstrings (model[3]))
                                 )
                 else:
                         # ... as lists of sets for routes
                         self.pns_commands[resolved] = [
                                 pns_articulate_route (encoded)
                                 for encoded in 
-                                netstrings_decode (model[3])
+                                netstring.netstrings (model[3])
                                 ]
                 if handler != None:
                         handler (resolved, self.pns_commands[resolved])
@@ -147,7 +145,7 @@ class PNS_articulator:
 # a usefull search processes.
 
 
-class PNS_articulate (Finalization):
+class PNS_articulate (finalization.Finalization):
 
         pns_index = None
         
@@ -167,7 +165,7 @@ class PNS_articulate (Finalization):
                         
         def pns_articulate_names (self, finalized):
                 if len (finalized.pns_indexes) > 1:
-                        self.pns_index = pns_name (netstrings_encode (
+                        self.pns_index = pns_model.pns_name (netstring.encode (
                                 list (finalized.pns_indexes)
                                 ), set ())
                 elif len (finalized.pns_indexes) > 0:
@@ -205,7 +203,7 @@ class PNS_articulate (Finalization):
                 for name in finalized.pns_contexts.union (
                         set (finalized.pns_indexes)
                         ):
-                        if len (netstrings_decode (name)) > 1:
+                        if len (netstring.decode (name)) > 0:
                                 finalized.pns_articulator.pns_statement (
                                         (name, 'sat', ''), '', 
                                         self.pns_resolve_sat
@@ -225,16 +223,16 @@ class PNS_articulate (Finalization):
                 if model[2] == '':
                         return
                         
-                encoded = netstrings_decode (model[2])
-                if len (encoded) > 1:
-                        for co in encoded:
-                                c, o = netstrings_decode (co)
+                statements = list (netstring.decode (model[2]))
+                if len (statements) > 0:
+                        for co in statements:
+                                c, o = netstring.decode (co)
                                 self.pns_sat.append ((
                                         resolved[0], resolved[1], 
                                         o, c, '_'
                                         ))
                 else:
-                        c, o = netstrings_decode (encoded[0])
+                        c, o = netstring.decode (model[2])
                         self.pns_sat.append ((
                                 resolved[0], resolved[1], o, c, '_'
                                 ))
@@ -245,7 +243,7 @@ class PNS_articulate (Finalization):
                         self.pns_articulator = None
 
 
-class PNS_articulate_names (Finalization):
+class PNS_articulate_names (finalization.Finalization):
         
         # The real search.
         #
@@ -289,15 +287,15 @@ class PNS_articulate_names (Finalization):
                         return # stop.
 
                 # no context available, articulate the name resolved
-                names = netstrings_decode (resolved[1])
-                if len (names) == 1:
+                names =list (netstring.decode (resolved[1]))
+                if len (names) == 0:
                         # nothing to articulate, if there are no contexts
                         # available yet, walk up
                         if not (
-                                names[0] in self.pns_indexes
+                                resolved[1] in self.pns_indexes
                                 ) and len (self.pns_contexts) == 0:
                                 self.pns_articulator.pns_command (
-                                        ('', '', names[0]), 
+                                        ('', '', resolved[1]), 
                                         self.pns_resolve_index
                                         )
                         return
@@ -317,7 +315,7 @@ class PNS_articulate_names (Finalization):
                         self.pns_articulator = None
 
 
-class PNS_articulate_subject (Finalization):
+class PNS_articulate_subject (finalization.Finalization):
         
         # get all objects and contexts for a given subject, then finalize
         
@@ -350,16 +348,16 @@ class PNS_articulate_subject (Finalization):
                         self.pns_objects.append (model)
                 elif model[2]:
                         # multiple contextual statements
-                        encoded = netstrings_decode (model[2])
-                        if len (encoded) > 1:
-                                for co in encoded:
-                                        c, o = netstrings_decode (co)
+                        statements = list (netstring.decode (model[2]))
+                        if len (statements) > 0:
+                                for co in statements:
+                                        c, o = netstring.decode (co)
                                         self.pns_objects.append ((
                                                 resolved[0], resolved[1], 
                                                 o, c, '_'
                                                 ))
                         else:
-                                c, o = netstrings_decode (encoded[0])
+                                c, o = netstring.decode (model[2])
                                 self.pns_objects.append ((
                                         resolved[0], resolved[1], o, c, '_'
                                         ))
@@ -377,15 +375,14 @@ if __name__ == '__main__':
                 )
                 
         from exceptions import StopIteration
-        from allegra.netstring import netstrings_pipe
-        from allegra.pns_client import PNS_client_channel
+        from allegra import pns_client
         
-        class PNS_pipe (PNS_client_channel):
+        class PNS_pipe (pns_client.PNS_client_channel):
                 
                 def __init__ (self, ip, pipe):
                         self.pns_start = time.time ()
                         self.pns_pipe = pipe
-                        PNS_client_channel.__init__ (self, ip)
+                        pns_client.PNS_client_channel.__init__ (self, ip)
                         self.tcp_connect ()
                         
                 def pns_peer (self, ip):
@@ -418,7 +415,7 @@ if __name__ == '__main__':
                                 self.pns_close_when_done = True
                                 return
 
-                        model = netstrings_decode (encoded)
+                        model = list (netstring.decode (encoded))
                         if len (model) != 4:
                                 self.pns_close_when_done = True
                                 return
@@ -436,7 +433,7 @@ if __name__ == '__main__':
                 ip = sys.argv[1]
         else:
                 ip = '127.0.0.1'
-        PNS_pipe (ip, netstrings_pipe (lambda: sys.stdin.read (4096)))
+        PNS_pipe (ip, netstring.netpipe (lambda: sys.stdin.read (4096)))
         from allegra import async_loop
         try:
                 async_loop.loop ()

@@ -44,14 +44,14 @@ class HTTP_server_channel (
         async_chat.Async_chat, mime_reactor.MIME_collector
         ):
 
-        ac_out_buffer_size = 1<<16 # 64KB use a larger default output buffer?
+        ac_in_buffer_size = 4096 # 4KB input buffer
+        ac_out_buffer_size = 1<<16 # 64KB output buffer
 
 	# HTTP_server_channel
 
 	http_version = '1.0'
 
-	def __init__ (self, conn, addr):
-                self.addr = addr
+	def __init__ (self, conn):
 		async_chat.Async_chat.__init__ (self, conn)
                 mime_reactor.MIME_collector.__init__ (self)
 
@@ -222,11 +222,11 @@ class HTTP_server_channel (
                         )
                 if reactor.mime_producer_body != None:
                         self.producer_fifo.append (reactor.mime_producer_body)
+                self.handle_write ()
                 if reactor.mime_collector_headers.get (
                         'connection'
                         ) != 'keep-alive':
                         self.close_when_done ()
-                self.handle_write ()
                 reactor.log (reactor.mime_producer_lines[0], 'response')
 
         HTTP_SERVER_RESPONSE = (
@@ -280,47 +280,50 @@ class HTTP_server_channel (
                 }
             
 
-class HTTP_server (tcp_server.TCP_server):
+def http_continue (server, reactor):
+        for handler in server.http_handlers:
+                if handler.http_match (reactor):
+                        try:
+                                return handler.http_continue (reactor)
+                                
+                        except:
+                                ctb = server.loginfo_traceback ()
+                                reactor.http_response = 500
+                                return False
+                                #
+                                # 500 - Server Error
+                                
+        reactor.http_response = 404
+        return False
+        #
+        # 404 - Not Found
 
-        tcp_server_clients_limit = 16
+def http_server_accept (server, channel):
+        channel.http_continue = server.http_continue
+
+def http_server_close (server, channel):
+        del channel.http_continue
+
+
+class HTTP_server (tcp_server.TCP_server_limit):
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
 
-        def __init__ (self, handlers, ip, port):
+        def __init__ (self, handlers, ip, port=80):
                 self.http_handlers = handlers
-                tcp_server.TCP_server.__init__ (self, (ip, port))
+                tcp_server.TCP_server_limit.__init__ (self, (ip, port))
 
         def __repr__ (self):
-                return 'http-server id="%x"' % id (self)
+                return 'http-peer id="%x"' % id (self)
 
-        def tcp_server_accept (self, conn, addr):
-                channel = tcp_server.TCP_server.tcp_server_accept (self, conn, addr)
-                if channel:
-                        channel.http_continue = self.http_continue
-                return channel
+        tcp_server_accept = http_server_accept
 
         def tcp_server_close (self, channel):
                 del channel.http_continue
-                tcp_server.TCP_server.tcp_server_close (self, channel)
+                tcp_server.TCP_server_limit.tcp_server_close (self, channel)
 
-        def http_continue (self, reactor):
-                for handler in self.http_handlers:
-                        if handler.http_match (reactor):
-                                try:
-                                        return handler.http_continue (reactor)
-                                        
-                                except:
-                                        ctb = self.loginfo_traceback ()
-                                        reactor.http_response = 500
-                                        return False
-                                        #
-                                        # 500 - Server Error
-                                        
-                reactor.http_response = 404
-                return False
-                #
-                # 404 - Not Found
-
+        http_continue = http_continue
+        
 
 class HTTP_root (loginfo.Loginfo):
         

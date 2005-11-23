@@ -34,13 +34,13 @@ class RSS_20_pubDate (pns_xml.XML_PNS_articulate):
                 try:
                         daydatetime = self.xml_first.split (' ')
                         day = daydatetime[0].strip (',')
-                        date = netstring.netstrings_encode (daydatetime[1:4])
+                        date = netstring.encode (daydatetime[1:4])
                 except:
                         pass
                 else:
                         self.pns_object = ' '.join (daydatetime[:4])
                         self.pns_name = pns_model.pns_name (
-                                netstring.netstrings_encode ((day, date))
+                                netstring.encode ((day, date))
                                 )
                         self.xml_first = self.xml_children = None
                         
@@ -52,7 +52,7 @@ class DC_date (pns_xml.XML_PNS_articulate):
                         return
                         
                 try:
-                        encoded = netstring.netstrings_encode (
+                        encoded = netstring.encode (
                                 self.xml_first.split (
                                         'T'
                                         )[0].split ('-')
@@ -151,7 +151,7 @@ if __name__ == '__main__':
         # session written to stdout
         #
         def pns_stdio_statement (statement):
-                encoded = netstring.netstrings_encode (statement)
+                encoded = netstring.encode (statement)
                 if len (encoded) > 1024:
                         sys.stderr.write (
                                 '%d:%s,' % (len (encoded), encoded)

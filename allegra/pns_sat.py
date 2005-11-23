@@ -19,7 +19,7 @@
 
 import re
 
-from allegra.netstring import netstrings_encode, netstrings_decode
+from allegra import netstring
 from allegra.pns_model import pns_name
 
 
@@ -69,7 +69,7 @@ def pns_sat_utf8 (
         else:
                 names = articulated.split (articulators[depth])
         if len (names) > 1:
-                name = pns_name (netstrings_encode (names), set ())
+                name = pns_name (netstring.encode (names), set ())
                 if not name or name in horizon:
                         return ''
                         
@@ -171,7 +171,7 @@ def pns_sat_re (
         else:
                 names = articulators[depth].split (articulated)
         if len (names) > 1:
-                return pns_name (netstrings_encode (names), horizon)
+                return pns_name (netstring.encode (names), horizon)
                 
         if len (names) > 0 and names[0]:
                 return names[0]
@@ -218,7 +218,7 @@ def pns_sat_chunk (
                 
         names = articulators[depth].split (articulated)
         if len (names) > 1:
-                name = pns_name (netstrings_encode (names), horizon)
+                name = pns_name (netstring.encode (names), horizon)
                 if name:
                         chunks.append ((name, articulated))
         elif len (names) > 0 and names[0]:
@@ -285,7 +285,7 @@ def pns_sat_articulate (
                         ]
                 if names:
                         name = pns_name (
-                                netstrings_encode (names), horizon, HORIZON
+                                netstring.encode (names), horizon, HORIZON
                                 )
                 else:
                         name = pns_name (m.group (), horizon, HORIZON)

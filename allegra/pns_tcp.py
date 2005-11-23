@@ -17,36 +17,23 @@
 
 ""
 
-from allegra import netstring, async_chat, collector, tcp_server, pns_model
+from allegra import netstring, async_net, tcp_server, pns_model
 
 
-class PNS_session (async_chat.Async_chat, collector.Netstring_collector):
+class PNS_session (async_net.Async_net):
 	
-	def __init__ (self, conn, addr):
+	def __init__ (self, conn):
 		self.pns_subscribed = []
-		collector.Netstring_collector.__init__ (self)
-		self.addr = addr
-		async_chat.Async_chat.__init__ (self, conn)
+		async_net.Async_net.__init__ (self, conn)
 
 	def __repr__ (self):
 		return 'session id="%x"' % id (self)
 
-	found_terminator = collector.Netstring_collector.found_terminator
-	collect_incoming_data = \
-		collector.Netstring_collector.collect_incoming_data
-
-	def netstring_collector_error (self):
-		self.log ('netstring-error', 'error')
-		self.close ()
-		#
-		# just close if netstring encoding is wrong, do not even
-		# bother to send back an error message
-		
-	def netstring_collector_continue (self, encoded):
+	def async_net_continue (self, encoded):
 		if encoded.startswith ('0:,0:,0:,0:,'):
 			# user agent closing
 			self.log ('pns-user-close', 'info')
-			self.close ()
+			self.handle_close ()
 			return
 			
 		model, error = pns_model.pns_quatuor (
@@ -102,7 +89,7 @@ class PNS_session (async_chat.Async_chat, collector.Netstring_collector):
 	def pns_error (self, encoded, error):
 		encoded = '%s%d:.%s,' % (encoded, len (error)+1, error)
 		self.log (encoded, 'pns-error')
-		self.push ('%d:%s,' % (len (encoded), encoded))
+		self.async_net_push ((encode,))
 		#
 		# self.close_when_done ()
 		# PNS/TCP does tolerate non-compliant articulator that
@@ -118,19 +105,21 @@ class PNS_session (async_chat.Async_chat, collector.Netstring_collector):
 		# TODO: move to pns_peer.pns_udp.pns_join and make sure ... ?
 
 	def pns_tcp_continue (self, model, direction):
-		self.push (pns_model.pns_quintet (model, direction))
+		self.async_net_push ((
+			pns_model.pns_quintet (model, direction),
+			))
 
 
-def pns_tcp_accept (pns_peer, channel):
+def pns_tcp_accept (server, channel):
 	assert None == channel.log ('pns-tcp-accept', 'debug')
 	#
 	# set the accepted channel's peer; add it to the peer's hash
 	# of channels; and push the PNS/TCP server greetings to the client
 	#
-	channel.pns_peer = pns_peer
-	pns_peer.pns_sessions['%s:%d' % channel.addr] = channel
+	channel.pns_peer = server.pns_peer
+	server.pns_peer.pns_sessions['%s:%d' % channel.addr] = channel
 	channel.pns_tcp_continue (
-		(pns_peer.pns_name, '', '', ''), '_'
+		(server.pns_peer.pns_name, '', '', ''), '_'
 		)
 
 
@@ -147,7 +136,7 @@ def pns_tcp_close (channel):
 	channel.pns_peer = None
 
 
-def pns_tcp_stopped (server):
+def pns_tcp_stop (server):
 	assert None == server.log ('pns-tcp-stopped', 'debug')
 	#
 	# close the server once all its channels have been closed,
@@ -175,19 +164,13 @@ class PNS_TCP_peer (tcp_server.TCP_server_limit):
 	def __repr__ (self):
 		return 'pns-tcp'
 
-	def tcp_server_accept (self, conn, addr):
-		channel = tcp_server.TCP_server_limit.tcp_server_accept (
-			self, conn, addr
-			)
-		if channel != None:
-			pns_tcp_accept (self.pns_peer, channel)
-			return channel
+	tcp_server_accept = pns_tcp_accept
 
 	def tcp_server_close (self, channel):
 		pns_tcp_close (channel)
 		tcp_server.TCP_server_limit.tcp_server_close (self, channel)
 
-	tcp_server_stopped = pns_tcp_stopped
+	tcp_server_stop = pns_tcp_stop
 
 
 # The TCP server listening on another address than the UDP peer
@@ -203,19 +186,13 @@ class PNS_TCP_server (tcp_server.TCP_server_limit):
 	def __repr__ (self):
 		return 'pns-tcp'
 
-	def tcp_server_accept (self, conn, addr):
-		channel = tcp_server.TCP_server_limit.tcp_server_accept (
-			self, conn, addr
-			)
-		if channel != None:
-			pns_tcp_accept (self.pns_peer, channel)
-			return channel
+	tcp_server_accept = pns_tcp_accept
 
 	def tcp_server_close (self, channel):
 		pns_tcp_close (channel)
 		tcp_server.TCP_server_limit.tcp_server_close (self, channel)
 
-	tcp_server_stopped = pns_tcp_stopped
+	tcp_server_stop = pns_tcp_stop
 
 
 # The Public PNS/TCP Proxy, the seeds of the network, things people can
@@ -225,7 +202,7 @@ class PNS_TCP_server (tcp_server.TCP_server_limit):
 
 class PNS_TCP_seed_session (PNS_session):
 
-	def netstring_collector_continue (self, encoded):
+	def async_net_continue (self, encoded):
 		if (
 			encoded.startswith ('0:,') and
 			not encoded.endswith ('0:,')
@@ -234,11 +211,11 @@ class PNS_TCP_seed_session (PNS_session):
 			# just close (without reporting the abuse to the
 			# abuser, there is obviously no need for that ;-)
 			#
-			self.pns_error ('')
+			self.pns_error ('...')
 			return
 			
 		# process anonymous statement "normally"
-		PNS_session.netstring_collector_continue (self, encoded)
+		PNS_session.async_net_continue (self, encoded)
 		#
 		# PNS/TCP public/private seeds are usefull for simplistic
 		# user agents without access to PNS/UDP
@@ -272,15 +249,7 @@ class PNS_TCP_seed (tcp_server.TCP_server_throttle):
 	def __repr__ (self):
 		return 'pns-tcp'
 
-	def tcp_server_accept (self, conn, addr):
-		channel = tcp_server.TCP_server_throttle.tcp_server_accept (
-			self, conn, addr
-			)
-		if not channel:
-			return
-			
-		pns_tcp_accept (self.pns_peer, channel)
-		return channel
+	tcp_server_accept = pns_tcp_accept
 
 	def tcp_server_close (self, channel):
 		pns_tcp_close (channel)
@@ -288,5 +257,5 @@ class PNS_TCP_seed (tcp_server.TCP_server_throttle):
 			self, channel
 			)
 		
-	tcp_server_stopped = pns_tcp_stopped
+	tcp_server_stop = pns_tcp_stop
 

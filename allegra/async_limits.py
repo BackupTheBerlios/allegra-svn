@@ -22,51 +22,46 @@ import time
 
 # Add asynchronous limits to a UDP dispatcher or a TCP channel
 
-def async_limit_in (channel, when):
+def async_limit_recv (channel, when):
 	channel.async_bytes_in = 0
 	channel.async_when_in = when
 	recv = channel.recv
 	def async_limit_recv (buffer_size):
 		data = recv (buffer_size)
 	        channel.async_bytes_in += len (data)
-		channel.async_when_in = time.time ()
+		channel.async_when_in = when
 	        return data
 	        
 	channel.recv = async_limit_recv
-	try:
-		recvfrom = channel.recvfrom
-	except AttributeError:
-		return
-		
+
+def async_limit_recvfrom (channel, when):
+	recvfrom = channel.recvfrom
 	def async_limit_recvfrom ():
 		data, peer = recvfrom ()
 	        channel.async_bytes_in += len (data)
-		channel.async_when_in = time.time ()
+		channel.async_when_in = when
 	        return data, peer
 	        
 	channel.recvfrom = async_limit_recvfrom
 
-
-def async_limit_out (channel, when):
+def async_limit_send (channel, when):
 	channel.async_bytes_out = 0
 	channel.async_when_out = when
 	send = channel.send
 	def async_limit_send (data):
 		sent = send (data)
 	        channel.async_bytes_out += sent
-		channel.async_when_out = time.time ()
+		channel.async_when_out = when
 	        return sent
 	        
 	channel.send = async_limit_send
-	try:
-		sendto = channel.sendto
-	except AttributeError:
-		return
-		
+
+def async_limit_sendto (channel, when):
+	sendto = channel.sendto
 	def async_limit_sendto (self):
 		sent = sendto (data, peer)
 	        channel.async_bytes_out += sent
-		channel.async_when_out = time.time ()
+		channel.async_when_out = when
 	        return sent
 
 	channel.sendto = async_limit_sendto
@@ -76,10 +71,10 @@ def FourKBps ():
 	return 4096 # ac_in_buffer_size
 
 
-def async_throttle_in (channel, Bps=FourKBps):
+def async_throttle_in (channel, when, Bps=FourKBps):
 	channel.async_limit_bytes_in = 1
-	channel.async_throttle_in_when = time.time ()
-	channel.async_throttle_out_Bps = Bps
+	channel.async_throttle_in_when = when
+	channel.async_throttle_in_Bps = Bps
 	readable = channel.readable
 	def async_throttle_readable ():
 		return (
@@ -111,9 +106,10 @@ def async_throttle_in_defer (channel, when):
 	# writability.
 
 
-def async_throttle_out (channel):
+def async_throttle_out (channel, when, Bps=FourKBps):
 	channel.async_limit_bytes_out = 1
-	channel.async_throttle_out_when = time.time ()
+	channel.async_throttle_out_when = when
+	channel.async_throttle_out_Bps = Bps
 	writable = channel.writable
 	def async_throttle_writable ():
 		return (

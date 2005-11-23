@@ -17,7 +17,8 @@
 
 ""
 
-from allegra.netstring import netstrings_encode, netstrings_decode
+from allegra import netstring
+
 from allegra.pns_model import pns_name, pns_quintet
 from allegra.timeouts import Timeouts
 from allegra.udp_channel import UDP_dispatcher
@@ -95,14 +96,14 @@ class PNS_circle (UDP_dispatcher):
 	def pns_tcp_continue (self, model, direction):
 		encoded = pns_quintet (model, direction)
 		for subscriber in self.pns_subscribers:
-			subscriber.push (encoded)
+			subscriber.async_net_push ((encoded,))
 
 	# Events
 
 	def pns_statement (self, model):
 		# handle PNS/TCP statements either directly from persistence
 		# or not-relayed original statements
-		sp = netstrings_encode (model[:2])
+		sp = netstring.encode (model[:2])
 		o = self.pns_buffer.get (sp)
 		if o != None:
 			# buffered statement, TODO: drop or buffer?
@@ -140,7 +141,7 @@ class PNS_circle (UDP_dispatcher):
 		# handle in-circle question
 		if datagram.startswith ('0:,'):
 			# command: quit right
-			model = netstrings_decode (datagram)
+			model = list (netstring.decode (datagram))
 			if len (model) == 2 and is_ip (model[1]):
 				self.pns_quit_right (model[1])
 				return
@@ -168,7 +169,7 @@ class PNS_circle (UDP_dispatcher):
 			return
 
 		# validate question
-		model = netstrings_decode (datagram)
+		model = list (netstring.decode (datagram))
 		if (
 			len (model) != 2 or 
 			model[0] != pns_name (model[0])
@@ -180,7 +181,7 @@ class PNS_circle (UDP_dispatcher):
 			self.pns_quit ()
 			return
 
-		sp = netstrings_encode (model)
+		sp = netstring.encode (model)
 		if (
 			self.pns_buffer.get (sp) == '' and
 			not self.pns_statements.has_key (sp)
@@ -222,7 +223,7 @@ class PNS_circle (UDP_dispatcher):
 		if datagram.startswith ('0:,'):
 			if not self.pns_right:
 				# out-of-circle
-				model = netstrings_decode (datagram)
+				model = list (netstring.decode (datagram))
 				if (
 					len (model) == 3 and
 					model[1] == '' and
@@ -240,7 +241,7 @@ class PNS_circle (UDP_dispatcher):
 				
 		if datagram.startswith (self.PNS_SP):
 			# handle protocol statement
-			model = netstrings_decode (datagram)
+			model = list (netstring.decode (datagram))
 			if not (len (model) == 3 and (
 				model[2] == '' or is_ip (model[2])
 				)):
@@ -266,7 +267,7 @@ class PNS_circle (UDP_dispatcher):
 			return
 
 		# validate answer
-		model = netstrings_decode (datagram)
+		model = list (netstring.decode (datagram))
         	if (
         		(len (model[0]) + len (model[1]) + len (
         			'%d%d' % (len (model[0]), len (model[1]))
@@ -279,7 +280,7 @@ class PNS_circle (UDP_dispatcher):
 			self.pns_quit ()
 			return
 
-		sp = netstrings_encode (model[:2])
+		sp = netstring.encode (model[:2])
 		if (
 			self.pns_buffer.has_key (sp) and
 			not self.pns_statements.has_key (sp)
@@ -299,7 +300,7 @@ class PNS_circle (UDP_dispatcher):
 
 		# relay right
 		self.pns_sendto_right (
-			netstrings_encode (model), self.pns_right
+			netstring.encode (model), self.pns_right
 			)
 		if (
 			model[1] == '' and
@@ -341,7 +342,7 @@ class PNS_circle (UDP_dispatcher):
 		else:
 			o = ''
 		# echo the non-protocol timeouts to all subscribers
-		model = netstrings_decode (sp)
+		model = list (netstring.decode (sp))
 		model.append (o)
 		model.append (self.pns_name)
 		self.pns_tcp_continue (model, '_')
@@ -624,7 +625,7 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 			return
 
 		# out of circle
-		model = netstrings_decode (datagram)
+		model = list (netstring.decode (datagram))
 		if (
 			len (model) != 2 or
 			model[0] == '' or
@@ -715,18 +716,18 @@ if __name__ == '__main__':
 
 		def pns_udp_question (self, model):
 			self.log (
-				netstring.netstrings_encode (model), 
+				netstring.encode (model), 
 				'question'
 				)
 
 		def pns_udp_answer (self, model):
 			self.log (
-				netstring.netstrings_encode (model), 
+				netstring.encode (model), 
 				'question'
 				)
 
 		def pns_udp_pirp (self, name, addr):
-			self.log (netstring.netstrings_encode ((
+			self.log (netstring.encode ((
 				addr[0], name
 				)), 'pirp')
 
@@ -739,7 +740,7 @@ if __name__ == '__main__':
 			return 'inference'
 
 		def pns_statement (self, model):
-			self.log (netstrings_encode (model), 'statement')
+			self.log (netstring.encode (model), 'statement')
 
 	class PNS_peer (loginfo.Loginfo):
 

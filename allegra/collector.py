@@ -116,44 +116,6 @@ class Length_collector (object):
 		return self.length_collector_left == 0
 	
 
-class Netstring_collector (object):
-	
-	collector_is_simple = False
-	
-	def __init__ (self):
-		self.netstring_collector = ''
-		self.set_terminator (':')
-
-	def collect_incoming_data (self, data):
-		self.netstring_collector += data
-
-	def found_terminator (self):
-		if self.get_terminator () != ':':
-			if self.netstring_collector[-1] != ',':
-				self.nestring_collector_error ()
-				return
-				
-			self.netstring_collector_continue (
-				self.netstring_collector[:-1]
-				)
-			self.netstring_collector = ''
-			self.set_terminator (':')
-			return
-			
-		if self.netstring_collector.isdigit ():
-			self.set_terminator (
-				int (self.netstring_collector) + 1
-				)
-			self.netstring_collector = ''
-			return
-
-		self.nestring_collector_error ()
-
-	# def nestring_collector_continue (self):
-		
-	# def nestring_collector_error (self):
-		
-
 """
 allegra/collectors.py
 

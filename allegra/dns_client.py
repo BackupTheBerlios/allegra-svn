@@ -23,7 +23,7 @@
 
 import time
 
-from allegra import async_loop, udp_channel
+from allegra import async_loop, udp_channel, tcp_client
 
 
 # unpack and parse names, ttl and preference from resource DNS records
@@ -297,6 +297,26 @@ class DNS_client (udp_channel.UDP_dispatcher):
         def __repr__ (self):
                 return 'dns-client id="%x"' % id (self)
                         
+        def handle_read (self):
+                # match the datagram's UID with the pending DNS requests
+                #
+                datagram, peer = self.recvfrom ()
+                uid = (ord (datagram[0]) << 8) + ord (datagram[1])
+                dns_request = self.dns_pending.pop (uid)
+                if dns_request == None or dns_request.dns_peer != peer:
+                        assert None == self.log (
+                                'noise ip="%s" port="%d"' % peer, 'debug'
+                                )
+                        return # log any unsolicitted requests!
+                        
+                # consider the DNS request as answered: unpack and cache 
+                # the response, ...
+                #
+                assert None == self.log (
+                        'signal ip="%s" port="%d"' % peer, 'debug'
+                        )
+                dns_request.dns_unpack (datagram)
+
         def dns_resolve (self, question, resolve):
                 # first check the cache for a valid response or a 
                 # pending request ...
@@ -352,26 +372,6 @@ class DNS_client (udp_channel.UDP_dispatcher):
                         )
                 self.dns_sent += 1
 
-        def handle_read (self):
-                # match the datagram's UID with the pending DNS requests
-                #
-                datagram, peer = self.recvfrom ()
-                uid = (ord (datagram[0]) << 8) + ord (datagram[1])
-                dns_request = self.dns_pending.pop (uid)
-                if dns_request == None or dns_request.dns_peer != peer:
-                        assert None == self.log (
-                                'noise ip="%s" port="%d"' % peer, 'debug'
-                                )
-                        return # log any unsolicitted requests!
-                        
-                # consider the DNS request as answered: unpack and cache 
-                # the response, ...
-                #
-                assert None == self.log (
-                        'signal ip="%s" port="%d"' % peer, 'debug'
-                        )
-                dns_request.dns_unpack (datagram)
-
 # a bit of OS specific code to get the addresses of the DNS name
 # servers for the host system
 
@@ -398,6 +398,57 @@ def dns_servers ():
         return ['127.0.0.1']
 
 
+# A manager for DNS named TCP/IP client channels
+
+def is_ip (host):
+        try:
+                return len ([
+                        n for n in host.split ('.') 
+                        if -1 < int (n) < 255
+                        ]) == 4
+                                
+        except:
+                return False
+                
+                
+class TCP_client_DNS (tcp_client.TCP_client):
+
+        def __init__ (self, dns_client=None):
+                self.dns_client = dns_client or DNS_client (dns_servers ())
+                tcp_client.TCP_client.__init__ (self)
+        
+        def tcp_client (self, addr, timeout=3):
+                try:
+                        return self.tcp_client_channels[addr]
+                        
+                except KeyError:
+                        if is_ip (addr[0]):
+                                channel = self.tcp_client_channel (addr)
+                                if channel.tcp_connect (addr, timeout):
+                                        return channel
+                                        
+                                return
+        
+                        channel = self.tcp_client_channel (addr)
+                        def resolve (resolved):
+                                self.tcp_client_dns (channel, addr, resolved)
+                        self.dns_client.dns_resolve ((addr[0], 'A'), resolve)
+                        return channel
+                        
+        def tcp_client_dns (self, channel, addr, resolved):
+                if len (resolved.dns_resources) > 0:
+                        # DNS address resolved, connect ...
+                        channel.tcp_connect ((
+                                resolved.dns_resources[0], addr[1]
+                                ))
+                else:
+                        del self.tcp_client_channels[addr]
+                        self.tcp_client_dns_error (channel, addr)
+                
+        def tcp_client_dns_error (self, channel, addr):
+                assert None == channel.log ('DNS error', 'debug')
+
+
 if __name__ == '__main__':
         import sys
         from allegra import netstring, loginfo
@@ -405,18 +456,21 @@ if __name__ == '__main__':
                 'Allegra DNS/UDP Client'
                 ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
                 'info'
-                )        
+                )
+                       
         def resolve (request):
-                sp = netstring.netstrings_encode (request.dns_question)
-                c = request.dns_peer[0]
-                c = '%d:%s,' % (len (c), c)
+                model = list (request.dns_question)
                 if request.dns_resources == None:
-                        loginfo.log (sp + '0:,' + c)
+                        model.append ('')
+                elif len (request.dns_resources) > 1:
+                        model.append (netstring.encode (
+                                request.dns_resources
+                                ))
                 else:
-                        for o in request.dns_resources:
-                                loginfo.log (
-                                        sp + ('%d:%s,' % (len(o), o)) + c
-                                        )
+                        model.append (request.dns_resources[0])
+                model.append (request.dns_peer[0])
+                loginfo.log (netstring.encode (model))
+                
         if len (sys.argv) > 3:
                 servers = sys.argv[3:]
         else:

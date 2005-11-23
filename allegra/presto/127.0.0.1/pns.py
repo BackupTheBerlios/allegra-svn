@@ -31,9 +31,9 @@ from allegra.xml_unicode import xml_cdata, xml_attr
 from allegra.presto import \
         PRESTo_async, PRESTo_reactor, presto_xml, \
         PRESTo_sync, presto_synchronize
-from allegra.netstring import netstrings_decode, netstrings_encode
+
 from allegra import \
-        pns_model, pns_sat, pns_xml, pns_client, pns_articulator
+        netstring, pns_model, pns_sat, pns_xml, pns_client, pns_articulator
 
 
 class PNS_presto_log (XML_element):
@@ -76,7 +76,7 @@ class PNS_presto_articulator (
                 if not articulated:
                         return
 
-                names = netstrings_decode (articulated)
+                names = netstring.netstrings (articulated)
                 if len (names) > 1:
                         # articulate a search ...
                         react = PRESTo_reactor (
@@ -136,7 +136,7 @@ class PNS_presto_articulator (
                         return
                         
                 predicate = reactor.presto_vector[u'predicate'].encode ('UTF-8')
-                predicates = netstrings_decode (predicate)
+                predicates = netstring.netstrings (predicate)
                 obj = reactor.presto_vector[u'object'].encode ('UTF-8')
                 if obj == '' and len (predicates) > 1:
                         react = PRESTo_reactor (

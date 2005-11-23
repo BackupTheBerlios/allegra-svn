@@ -19,112 +19,66 @@
 
 import time
 
-from allegra import loginfo, async_loop, tcp_client #, fifo
+from allegra import loginfo, async_loop, async_chat, tcp_client
 
 
-class TCP_pipeline (tcp_client.TCP_client_channel):
+class Pipeline:
 
 	pipeline_sleeping = False
 	pipeline_keep_alive = False
 
 	def __init__ (self, requests=None, responses=None):
-		self.pipeline_requests = requests or fifo.FIFO_deque ()
-		self.pipeline_responses = responses or fifo.FIFO_deque ()
-		tcp_client.TCP_client_channel.__init__ (self)
+		self.pipeline_requests = requests or collections.deque ()
+		self.pipeline_responses = responses or collections.deque ()
 
-	def handle_connect (self):
-		assert None == self.log ('connected', 'debug')
-		if len (self.pipeline_requests):
-			self.pipeline_wake_up ()
-		else:
-			self.pipeline_sleeping = True
-
-	def collect_incoming_data (self, data):
-		if self.pipeline_responses.is_empty ():
-			self.log (
-				'dropped-data bytes="%d"' % len (data), 
-				'error'
-				)
-			return
-
-		self.pipeline_responses.first (
-			).collect_incoming_data (data)
-
-	def found_terminator (self):
-		if self.pipeline_responses.is_empty ():
-			self.log ('dropped-terminator', 'error')
-			return
-
-		if self.pipeline_responses.first (
-			).found_terminator ():
-			self.pipeline_responses.pop ()
-			self.pipeline_wake_up ()
-			if (
-				self.pipeline_sleeping and 
-				not self.pipeline_keep_alive
-				):
-				self.handle_close ()
-
-	def dns_resolve (self, request):
-		if len (request.dns_resources) > 0:
-			# DNS address resolved, connect ...
-			self.tcp_connect ((
-				request.dns_resources[0], 
-				self.tcp_client_port
-				))
-			return
-			
-		self.pipeline_error ()
-		
-	def pipeline_error (self):
-		while not self.pipeline_requests.is_empty ():
-			self.pipeline_requests.pop ()
-			
-		while not self.pipeline_responses.is_empty ():
-			self.pipeline_responses.pop ()
-						
-	def pipeline_push (self, request):
-		self.pipeline_requests.push (request)
+	def pipeline (self, request):
+		self.pipeline_requests.append (request)
 		if self.pipeline_sleeping:
 			self.pipeline_sleeping = False
 			self.pipeline_wake_up ()
 
 	def pipeline_wake_up (self):
 		# pipelining protocols, like HTTP/1.1 or ESMPT
-		while not self.pipeline_requests.is_empty ():
-			reactor = self.pipeline_requests.pop ()
-			self.producer_fifo.append (reactor)
-			self.pipeline_responses.push (reactor)
-		self.pipeline_sleeping = True
+		if self.pipeline_requests:
+			while self.pipeline_requests:
+				reactor = self.pipeline_requests.popleft ()
+				self.producer_fifo.append (reactor)
+				self.pipeline_responses.append (reactor)
+			self.pipeline_sleeping = True
+		else:
+			self.pipeline_sleeping = True
 
 	def pipeline_wake_up_once (self):
 		# synchronous protocols, like HTTP/1.0 or SMTP
-		if self.pipeline_requests.is_empty ():
-			self.pipeline_sleeping = True
-		else:
-			reactor = self.pipeline_requests.pop ()
+		if self.pipeline_requests:
+			reactor = self.pipeline_requests.popleft ()
 			self.producer_fifo.append (reactor)
-			self.pipeline_responses.push (reactor)
+			self.pipeline_responses.append (reactor)
 			self.pipeline_sleeping = False
-
-	def pipeline_merge (self):
-		if self.pipeline_requests.is_empty ():
-			if self.pipeline_responses.is_empty ():
-				return None
-			
-			else:
-				return self.pipeline_responses
-			
 		else:
-			if self.pipeline_responses.is_empty ():
-				return self.pipeline_requests
+			self.pipeline_sleeping = True
+
+	def pipeline_error (self):
+		while self.pipeline_requests:
+			self.pipeline_requests.popleft ()
 			
-			else:
-				fifo = fifo.FIFO_pipeline ()
-				fifo.push_fifo (self.pipeline_responses)
-				fifo.push_fifo (self.pipeline_requests)
+		while self.pipeline_responses:
+			self.pipeline_responses.popleft ()
+						
+	def pipeline_merge (self):
+		if self.pipeline_requests:
+			if self.pipeline_responses:
 				return fifo
 
+			else:
+				return self.pipeline_requests
+			
+		elif self.pipeline_responses:
+			return self.pipeline_responses
+		
+		else:
+			return None
+			
 
 def is_ip (host):
 	try:
@@ -135,10 +89,11 @@ def is_ip (host):
 				
 	except:
 		return False
+		
 
 class TCP_pipeline_cache (loginfo.Loginfo):
 
-	TCP_PIPELINE = None # a Pipeline factory to override or subclass
+	TCP_PIPELINE_CHANNEL = None # a Pipeline factory to override or subclass
 	
 	pipeline_precision = 3	# defered every 3 seconds (large)
 	pipeline_resurect = 0	# don't resurect inactive pipeline
@@ -148,7 +103,7 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 		self.dns_client = dns_client
 
 	def __repr__ (self):
-		return 'tcp-client id="%x"' % id (self)
+		return 'tcp-pipeline id="%x"' % id (self)
 			
 	def pipeline_get (self, addr):
 		return (
@@ -157,7 +112,22 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 			)
 
 	def pipeline_push (self, reactor, addr):
-		self.pipeline_get (addr).pipeline_push (reactor)
+		self.pipeline_get (addr).pipeline (reactor)
+		
+	def pipeline_init (self, addr):
+		if is_ip (addr[0]):
+			return self.tcp_client_connect (addr)
+
+		pipeline = self.TCP_CLIENT_CHANNEL ()
+		def resolve (request):
+			self.pipeline_resolve (
+				pipeline, addr, request
+				)
+		self.dns_client.dns_resolve (
+			(addr[0], 'A'), self.pipeline_resolve
+			)
+		return pipeline
+		
 
 	def pipeline_init (self, addr):
 		if not self.pipeline_cache:
@@ -168,31 +138,32 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 				self.pipeline_defer
 				)
 		# cache a disconnected pipeline
-		self.pipeline_cache[addr] = pipeline = self.TCP_PIPELINE ()
+		self.pipeline_cache[addr] = \
+			pipeline = self.TCP_PIPELINE_CHANNEL ()
 		if is_ip (addr[0]):
 			# connect to *any* IP address and TCP port
 			pipeline.tcp_connect (addr)
 		else:
 			# resolve what must be a DNS host name ...
-			pipeline.tcp_client_port = addr[1]
+			def resolve (request):
+				self.pipeline_resolve (
+					pipeline, addr, request
+					)
 			self.dns_client.dns_resolve (
-				(addr[0], 'A'), pipeline.dns_resolve
+				(addr[0], 'A'), self.pipeline_resolve
 				)
 		return pipeline
 		
-	def pipeline_delete (self, addr, pipeline):
-		# TODO: handle this cleaner ...
-		#
-		if (self.pipeline_resurect and not (
-			pipeline.pipeline_requests.is_empty () and
-			pipeline.pipeline_responses.is_empty () 
-			)):
-			self.pipeline_init (
-				addr, pipeline.pipeline_merge ()
-				)
-		else:
-			del self.pipeline_cache[addr]
-
+	def pipeline_resolve (self, pipeline, addr, request):
+		if len (request.dns_resources) > 0:
+			# DNS address resolved, connect ...
+			self.tcp_client_connect ((
+				request.dns_resources[0], addr[1]
+				))
+			return
+			
+		pipeline.pipeline_error ()
+		
 	def pipeline_defer (self, when):
 		for addr, pipeline in self.pipeline_cache.items ():
 			# pipeline.tcp_client_defer ()
@@ -206,17 +177,30 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 
 		assert None == self.log ('defered-stop', 'debug')
 
+	def pipeline_delete (self, addr, pipeline):
+		# TODO: handle this cleaner ...
+		#
+		if (self.pipeline_resurect and (
+			pipeline.pipeline_requests or
+			pipeline.pipeline_responses
+			)):
+			self.pipeline_init (
+				addr, pipeline.pipeline_merge ()
+				)
+		else:
+			del self.pipeline_cache[addr]
+
 
 # Note about this implementation
 #
-# The first class, TCP_pipeline, is a generic implemention that 
+# The first class, TCP_pipeline_channel, is a generic implemention that 
 # supports pipelining for HTTP/1.0 and HTTP/1.1, SMTP and ESMTP, etc.
-# It is complete with I/O limits, connection and zombie timeouts.
 #
 # The actual API is provided by the second class, which manages a cache
 # of TCP pipelines and from which to derive TCP user agents like a web
-# proxy, a news reader or a mailer. This class also handle the chore of
-# name resolution (using a subset of the PNS model, more to come ...).
+# proxy, a news reader or a mailer. This class handle the chore of
+# name resolution (using a subset of the PNS model, more to come ...) and
+# completes channels with I/O limits, connection and zombie timeouts.
 #
 # The purpose is to manage I/O appropriately and minimize the TCP overhead
 # whenever possible by reducing the number of concurrent connections, even
@@ -231,20 +215,7 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 # the web even if they are actually served by the same IP address. Client
 # connections are defacto rationated on a service base.
 #
-# All Allegra TCP clients are built as pipeline cache, managing dictionnaries
-# of named and/or addressed TCP sessions, handling finalized reactors through 
-# their pipes for independant asynchronous accessors.
-#
-
-# Note about this implementation
-#
-# This pipeline class implements a usefull function for TCP protocols like
-# HTTP or SMTP that eventually support pipelining, but may not (HTTP/1.0 and
-# many broken mail relays). It provides a pipelining interface for allegra's
-# clients even when the server does not support it, buffering locally what
-# cannot be buffered to the network.
-#
-# Moreover, this class allow to handles broken TCP pipelines gracefully,
+# Moreover, the Pipeline class allow to handles broken queues gracefully,
 # pushing back up front the requests allready sent (provided of course that
 # they can re-produce the original request, for instance an GET HTTP request
 # and its MIME headers).
@@ -257,10 +228,15 @@ class TCP_pipeline_cache (loginfo.Loginfo):
 # or an invalid XML string, as long as it does not raise an exception or
 # stall for ever it does the job.
 #
+#
 # MIME Protocols
 #
-# Most Internet Application Protocols (HTTP, SMTP, POP, NNRP, NNTP, 
-# MULTIPART, SMIME, HTTPS, Gnutella, SOAP, XML/RPC, etc) are MIME 
+# Most Allegra TCP/MIME clients are built as pipeline cache, managing 
+# dictionnaries of named and/or addressed sessions, handling finalized 
+# reactors through their pipelines for independant asynchronous accessors.
+#
+# And indeed, most Internet Application Protocols (HTTP, SMTP, POP, NNRP, 
+# NNTP, MULTIPART, SMIME, HTTPS, Gnutella, SOAP, XML/RPC, etc) are MIME 
 # protocols of TCP pipelines such as:
 #
 # 	Request Line

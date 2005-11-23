@@ -16,27 +16,56 @@
 # USA
 #
 
-"""This module implements six functions for netstrings encoding and decoding,
-as well as a usefull shell pipe. 
+"""API
 
-SINOPSYS
+...
+
+	>>> from allegra import netstring
+	>>> netstring.encode (('A', 'B', 'CD'))
+	'1:A,1:B,2:CD,'
+	>>> tuple (netstring.decode ('1:A,1:B,2:CD,'))
+	('A', 'B', 'CD')
+	>>> tuple (netstring.decode (':A,1:B,2:CD,'))
+	()
+	>>> tuple (netstring.decode ('1:A,1:B,2:C'))
+	('A', 'B')
+	>>> def more ():
+		return '1:A,1:B,2:CD,'
+	>>> g = netstring.pipe (more)
+	>>> g.next ()
+	'A'
+	>>> g.next ()
+	'B'
+	>>> g.next ()
+	'CD'
+	>>> g.next ()
+	'A'
+	
+	
+CLI
+
+...
 
 	netstring.py [command] [buffer] < stdin 1> stdout 2> stderr
 
-	If not specified, the default command is 'decode'. The second 
-	optional argument is the size of the decoder's buffer.
+If not specified, the default command is 'outline'. The second 
+optional argument is the size of the decoder's buffer.
 
-EXAMPLES
+Validate a stream of netstrings:
 
-Decode and beautify a stream of netstrings:
+	netstring.py decode < netstrings.net
 
-	netstring.py decode < netstrings.net 1> netlines.txt
+Decode a stream of netstrings and beautify the output a text outline:
+
+	netstring.py outline < netstrings.net 1> netlines.txt
 
 Encode a stream of lines as safe netstrings:
 
 	netstring.py encode < lines.txt 1> safe.net
 	
-No exceptions are catched and their tracebacks are printed to STDERR."""
+No exceptions are catched and their tracebacks are printed to STDERR.
+
+"""
 
 
 __author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
@@ -45,110 +74,118 @@ __author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
 import exceptions
 
 
-def netstring_encode (i):
-	"""encode an instance as a netstring, use its __str__ or __repr__ 
-	method to get the 8-bit byte string representation of the instance."""
-	try:
-		s = i.__str__ ()
-	except:
-		s = i.__repr__ ()
-	return '%d:%s,' % (len (s), s)
-
-
-def netstrings_encode (i):
+def encode (strings):
 	"encode an sequence of 8-bit byte strings as netstrings"
-	return ''.join (['%d:%s,' % (len (s), s) for s in i])
+	return ''.join (['%d:%s,' % (len (s), s) for s in strings])
 
 
-def netstrings_buffer (buffer):
-	"decode the netstrings found in the buffer, append garbage at the end"
-	while buffer:
-		pos = buffer.find (':')
-		try:
-			next = pos + int (buffer[:pos]) + 1
-		except:
-			yield buffer
+def decode (buffer):
+	"decode the netstrings found in the buffer, trunk garbage"
+	size = len (buffer)
+	prev = 0
+	while prev < size:
+		pos = buffer.find (':', prev)
+		if pos < 1:
+			break
 			
+		try:
+			next = pos + int (buffer[prev:pos]) + 1
+		except:
 			break
 	
-		if next >= len (buffer):
-			yield buffer
-
+		if next >= size:
 			break
 		
 		if buffer[next] == ',':
 			yield buffer[pos+1:next]
 
 		else:
-			yield buffer
-			
 			break
+			
+		prev = next + 1
 
-		buffer = buffer[next+1:]
 
-
-def netstrings_decode (buffer):
+def netstrings (buffer):
 	"decode the netstrings found in the buffer and return a list"
-	return list (netstrings_buffer (buffer))
+	return list (decode (buffer)) or [buffer]
+
+
+def outline (encoded, format, indent):
+	"Recursively format nested netstrings as a CRLF outline"
+	n = tuple (decode (encoded))
+	if len (n) > 0:
+		return ''.join ([outline (
+			e, indent + format, indent
+			) for e in n])
+			
+	return format % encoded
+
+
+def netlines (encoded, format='%s\n', indent='  '):
+	"Beautify a netstring as an outline ready to log"
+	n = tuple (decode (encoded))
+	if len (n) > 0:
+		return ''.join ([outline (
+			e, format, indent
+			) for e in n]) + '\n'
+			
+	return format % encoded
 
 
 class NetstringsError (exceptions.Exception): pass
 
 
-def netstrings_pipe (more):
-	"""decode the stream of netstrings produced by more (), 
-	raise a NetstringsError exception on protocol failure or
-	StopIteration when the producer is exhausted"""
+def netpipe (more, BUFFER_MAX=0):
+	"""A practical netstrings pipe generator
+	
+	Decode the stream of netstrings produced by more (), raise 
+	a NetstringsError exception on protocol failure or StopIteration
+	when the producer is exhausted.
+	
+	If specified, the BUFFER_MAX size must be more than twice as
+	big as the largest netstring piped through (although netstrings
+	strictly smaller than BUFFER_MAX may pass through without raising
+	an exception).
+	"""
 	buffer = more ()
 	while buffer:
 		pos = buffer.find (':')
-		length = buffer[:pos]
+		if pos < 0:
+			raise NetstringsError, '1 not a netstring' 
 		try:
-			next = pos + int (length) + 1
+			next = pos + int (buffer[:pos]) + 1
 		except:
-			raise NetstringsError, '1 not a digit'
+			raise NetstringsError, '2 not a valid length'
 	
+		if 0 < BUFFER_MAX < next:
+			raise (
+				NetstringsError, 
+				'3 buffer overflow (%d bytes)' % BUFFER_MAX
+				)
+			
 		while next >= len (buffer):
 			data = more ()
 			if data:
 				buffer += data
 			else:
-				raise NetstringsError, '2 end of buffer'
+				raise NetstringsError, '4 end of pipe'
 		
 		if buffer[next] == ',':
 			yield buffer[pos+1:next]
 
 		else:
-			raise NetstringsError, '3 missing coma'
+			raise NetstringsError, '5 missing coma'
 
 		buffer = buffer[next+1:]
-		if buffer.isdigit ():
+		if buffer == '' or buffer.isdigit ():
 			buffer += more ()
 
-
-def netlines (encoded, indent=''):
-	"""Recursively beautify a netstring for display"""
-	netstrings = netstrings_decode (encoded)
-	if len (netstrings) > 1:
-		lines = ''.join (
-			[netlines (e, indent+'  ') for e in netstrings]
-			)
-		return '%s%d:\n%s%s,\n' % (
-			indent, len (encoded), lines, indent
-			)
-			
-	return '%s%d:%s,\n' % (indent, len (encoded), encoded)
-
-
-def netoutlines (encoded, format='%s\n'):
-	"""Recursively beautify a netstring as a CRLF outline"""
-	netstrings = netstrings_decode (encoded)
-	if len (netstrings) > 1:
-		return ''.join (
-			[netoutlines (e, '  '+format) for e in netstrings]
-			)
-			
-	return format % encoded
+	#
+	# Note also that the first call to more must return at least the
+	# encoded length of the first netstring, which practically is (or
+	# should be) allways the case (for instance, piping in a netstring
+	# sequence from a file will be done by blocks of pages, typically
+	# between 512 and 4096 bytes, maybe more certainly not less).
 
 
 if __name__ == '__main__':
@@ -161,21 +198,36 @@ if __name__ == '__main__':
         if len (sys.argv) > 1:
         	command = sys.argv[1]
  	else:
-		command = 'decode'
- 	if command == 'decode':
+		command = 'outline'
+ 	if command in ('outline', 'decode'):
  		if len (sys.argv) > 2:
+	 		if len (sys.argv) > 3:
+	 			try:
+	 				buffer_max = int (sys.argv[3])
+				except:
+					sys.stderr.write (
+						'3 invalid buffer max\n'
+						)
+					sys.exit (3)
+					
+			else:
+				buffer_max = 0
  			try:
- 				buffer_size = int (sys.argv[2])
+ 				buffer_more = int (sys.argv[2])
 			except:
 				sys.stderr.write ('2 invalid buffer size\n')
 				sys.exit (2)
 				
 		else:
-	 		buffer_size = 4096
+	 		buffer_more = 4096
 		def more ():
-			return sys.stdin.read (buffer_size)
-		for n in netstrings_pipe (more):
-			sys.stdout.write (netlines (n) + '\n')
+			return sys.stdin.read (buffer_more)
+		if command == 'outline':
+			for n in netpipe (more, buffer_max):
+				sys.stdout.write (netlines (n))
+		else:
+			for n in netpipe (more, buffer_max):
+				pass
 	elif command == 'encode':
 		for line in sys.stdin.xreadlines ():
 			sys.stdout.write (

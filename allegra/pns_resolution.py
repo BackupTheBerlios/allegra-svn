@@ -94,7 +94,7 @@ class PNS_resolution (thread_loop.Thread_loop):
 	# Resolution
 
 	def pns_log (self, model):
-		encoded = netstring.netstrings_encode (model)
+		encoded = netstring.encode (model)
 		self.pns_log_file.write (
 			'%d:%s,' % (len (encoded), encoded)
 			)
@@ -105,12 +105,12 @@ class PNS_resolution (thread_loop.Thread_loop):
 		# the statement is to be blocked and the object stored
 		# previously if any.
 		#
-                sp = netstring.netstrings_encode (model[:2])
+                sp = netstring.encode (model[:2])
                 stored = self.pns_statements.get (sp)
                 if stored == None:
                 	# new (subject, predicate): log, store and pass
                 	assert None == self.select_trigger_log (
-                		netstring.netstrings_encode (model), 'new'
+                		netstring.encode (model), 'new'
                 		)
                 	self.pns_log (model)
 			self.pns_statements [sp] = cPickle.dumps (
@@ -124,14 +124,14 @@ class PNS_resolution (thread_loop.Thread_loop):
 		if o == model[2]:
 			# redundant contextual statement: block
                 	assert None == self.select_trigger_log (
-                		netstring.netstrings_encode (model), 'block'
+                		netstring.encode (model), 'block'
                 		)
 			return False, None
 			
 		if model[2] != '':
 			# dissent: log, update answer and pass
                 	assert None == self.select_trigger_log (
-                		netstring.netstrings_encode (model), 'update'
+                		netstring.encode (model), 'update'
                 		)
                 	self.pns_log (model)
 			persistents[model[3]] = model[2]
@@ -142,12 +142,12 @@ class PNS_resolution (thread_loop.Thread_loop):
         
 	def pns_anonymous (self, model):
 		# anonymous question, resolve in all contexts.
-                sp = netstring.netstrings_encode (model[:2])
+                sp = netstring.encode (model[:2])
                 stored = self.pns_statements.get (sp)
                 if stored != None:
 	          	bounce = model[:5]
-	          	bounce[2] = netstring.netstrings_encode ([
-				netstring.netstrings_encode (i) 
+	          	bounce[2] = netstring.encode ([
+				netstring.encode (i) 
 				for i in cPickle.loads (stored).items ()
 				])
 			self.select_trigger ((

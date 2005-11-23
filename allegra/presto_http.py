@@ -20,7 +20,8 @@
 import os, glob, urllib
 from urllib import unquote, unquote_plus
 
-from allegra import loginfo, producer, mime_reactor, http_server, presto
+from allegra import \
+        loginfo, async_loop, producer, mime_reactor, http_server, presto
 
 
 def presto_decode (urlencoded_form_data, result, encoding='UTF-8'):
@@ -148,9 +149,28 @@ class PRESTo_handler (loginfo.Loginfo):
                 # references).
 
 
+class PRESTo_http (http_server.HTTP_server):
+
+        def __init__ (self, handlers, ip, port):
+                http_server.HTTP_server.__init__ (self, handlers, ip, port)
+                if ip == '127.0.0.1':
+                        self.tcp_server_clients_limit = 64
+                self.async_catch = async_loop.async_catch
+                async_loop.async_catch = self.presto_http_shutdown
+                
+        def presto_http_shutdown (self):
+                async_loop.async_catch = self.async_catch
+                self.async_catch = None
+                self.handle_close ()
+                return False
+
+
 if __name__ == '__main__':
         import sys
-        from allegra import async_loop
+        if '-d' in sys.argv:
+                sys.argv.remove ('-d')
+                loginfo.Loginfo_stdio.log = \
+                        loginfo.Loginfo_stdio.loginfo_netlines
         loginfo.log (
                 'Allegra PRESTo'
                 ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
@@ -160,9 +180,13 @@ if __name__ == '__main__':
         http_root = './http'
         if len (sys.argv) > 1:
                 ip, port = sys.argv[1].split (':')
+                if len (sys.argv) > 2:
+                        presto_root = sys.argv[2]
+                        if len (sys.argv) > 3:
+                                http_root = sys.argv[3]
         else:
                 ip, port = ('127.0.0.1', '80')
-        http_server.HTTP_server ([
+        PRESTo_http ([
                 PRESTo_handler (presto_root), 
                 http_server.HTTP_handler (http_root)
                 ], ip, int (port))

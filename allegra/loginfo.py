@@ -22,7 +22,7 @@ import sys, types
 from allegra import netstring, prompt
 
 
-class Write_and_flush:
+class Write_and_flush (object):
 	
 	"Wrapper class for buffered files that allways flush."
 	
@@ -46,18 +46,8 @@ def write_and_flush (instance):
 		
 	return instance
 
-def netlog (encoded):
-	"""Beautify a netstring as a CRLF outline ready to log"""
-	netstrings = netstring.netstrings_decode (encoded)
-	if len (netstrings) > 1:
-		return ''.join ([
-			netstring.netoutlines (e, '%s\n') 
-			for e in netstrings
-			]) + '\n'
-			
-	return '%s\n' % encoded
 
-class Loginfo_stdio:
+class Loginfo_stdio (object):
 
 	"Loginfo's log dispatcher implementation"
 	
@@ -76,7 +66,7 @@ class Loginfo_stdio:
 		self.loginfo_stderr = write_and_flush (stderr)
 		return prev
 
-	def loginfo_log (self, data, info=None):
+	def loginfo_netstrings (self, data, info=None):
 		"log netstrings to STDOUT, a category handler or STDERR"
 		if info == None:
 			self.loginfo_stdout ('%d:%s,' % (len (data), data))
@@ -85,36 +75,41 @@ class Loginfo_stdio:
 				'%d:%s,' % (len (data), data)
 				)
 		else:
-			encoded = netstring.netstrings_encode ((info, data))
+			encoded = netstring.encode ((info, data))
 			self.loginfo_stderr (
 				'%d:%s,' % (len (encoded), encoded)
 				)
 
-	def loginfo_debug (self, data, info=None):
+	def loginfo_netlines (self, data, info=None):
 		"log netoutlines to STDOUT, a category handler or STDERR"
 		assert type (data) == types.StringType
 		if info == None:
-			self.loginfo_stdout (netlog (data))
+			self.loginfo_stdout (
+				netstring.netlines (data)
+				)
 		elif self.loginfo_loggers.has_key (info):
-			self.loginfo_loggers[info] (netlog (data))
+			self.loginfo_loggers[info] (
+				netstring.netlines (data)
+				)
 		else:
 			assert type (info) == types.StringType
-			encoded = netstring.netstrings_encode ((
-				info, data
+			self.loginfo_stderr (netstring.netlines (
+				netstring.encode ((
+					info, data
+					))
 				))
-			self.loginfo_stderr (netlog(encoded))
 
 	if __debug__:
-		log = loginfo_debug
+		log = loginfo_netlines
 	else:
-		log = loginfo_log
+		log = loginfo_netstrings
 
 
 def compact_traceback_netstrings (ctb):
 	"encode a compact traceback tuple as netstrings"
- 	return netstring.netstrings_encode ((
+ 	return netstring.encode ((
  		ctb[0], ctb[1], 
- 		netstring.netstrings_encode (['|'.join (x) for x in ctb[2]])
+ 		netstring.encode (['|'.join (x) for x in ctb[2]])
  		))
 
 
@@ -130,7 +125,7 @@ class Loginfo (object):
 	def loginfo_log (self, data, info=None):
 		"""log a message with this instance's __repr__ and an 
 		optional category"""
-		self.loginfo_logger.log (netstring.netstrings_encode ((
+		self.loginfo_logger.log (netstring.encode ((
 			'%r' % self, '%s' % data
 			)), info)
 
@@ -207,22 +202,6 @@ def loginfo_traceback (ctb=None):
 	return ctb
 
 
-# The Loginfo interface and implementation provide a simpler, yet more
-# powerfull and practical logging facility than the one currently integrated
-# with Python.
-#
-# First is uses netstrings instead of CR or CRLF delimeted lines for I/O
-# encoding, solving ahead many problems of the log consumers. Second it
-# is well adapted to a practical development cycle and by defaults implement
-# a simple scheme that suites well a shell pipe like:
-#
-#	pipe < input 1> output 2> errors
-#
-#
-# Last but not least, the loginfo_log is compatible with asyncore logging 
-# interfaces (which is no wonder, it is inspired from Medusa's original
-# logging facility module).
-#
 # EXAMPLE
 #
 # 	>>> from allegra import loginfo
@@ -252,4 +231,32 @@ def loginfo_traceback (ctb=None):
 #	  data
 #
 #	>>>
+#
+# The Loginfo interface and implementation provide a simpler, yet more
+# powerfull and practical logging facility than the one currently integrated
+# with Python.
+#
+# First is uses netstrings instead of CR or CRLF delimeted lines for I/O
+# encoding, solving ahead many problems of the log consumers. Second it
+# is well adapted to a practical development cycle and by defaults implement
+# a simple scheme that suites well a shell pipe like:
+#
+#	pipe < input 1> output 2> errors
+#
+# However "slow" this Python facily is, it offers a next-best trade-off
+# between performance in production and flexibility for both debugging and
+# maintenance. All debug and information logging can be effectively disabled,
+# either skipped in case of:
+#
+#	assert None == loginfo.log (...)
+#
+# or simply dropped, yielding not access to possibly blocking or buffering
+# process handling the log output. The ability to filter out or filter in
+# log at the instance or class level is enough to satisfy the most demanding
+# application administrator (as for categories, there are none defined, do
+# as it please you ;-).
+#
+# Last but not least, the loginfo_log is compatible with asyncore logging 
+# interfaces (which is no wonder, it is inspired from Medusa's original
+# logging facility module).
 #

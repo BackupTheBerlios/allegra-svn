@@ -19,12 +19,12 @@
 
 import re
 
-from allegra.netstring import netstrings_decode, netstrings_encode
+from allegra import netstring
 
 
 NETSTRING_RE = re.compile ('[1-9][0-9]*:')
 
-def pns_name_cleanse (name, horizon, HORIZON):
+def pns_name_clean (name):
         # scan the beginning of a potential "stealth" netstrings and check
         # their length. Upon discovery, return '' as the public name.
         # This adds a regexp match to validate public names, but there is no
@@ -35,15 +35,10 @@ def pns_name_cleanse (name, horizon, HORIZON):
         while s:
                 end = s.end () + int (s.group ()[:-1])
                 if end < len (name) and name[end] == ',':
-                        if s.start () == 0 and end == len (name) - 1:
-                                return pns_name (
-                                        name[s.end ():-1], horizon, HORIZON
-                                        ) # unwrap a singleton like "4:1:.,,"
-                                
-                        return '' # encapsulated trash like " 1:., "
+                        return False
                         
                 s = NETSTRING_RE.search (name, s.end ())
-        return name # safe public name
+        return True
         
         
 def pns_name (encoded, horizon, HORIZON=126):
@@ -54,43 +49,32 @@ def pns_name (encoded, horizon, HORIZON=126):
         #
         # Pub Names is a protocol.
         #
-        names = [n for n in netstrings_decode (encoded) if n]
-        if len (names) > 1:
-                # possibly a valid composed public name, must not be
-                # dispersed, recursively validate
-                encoded = []
-                for name in names:
-                        name = pns_name (name, horizon, HORIZON)
-                        if name:
-                                encoded.append (name)
-                                if len (horizon) == HORIZON:
-                                        break
-                                        
-                if len (encoded) > 1:
-                        # sort composing names and encode
-                        encoded.sort ()
-                        return netstrings_encode (encoded)
-                        
-                if len (encoded) > 0:
-                        # return singleton as allready encoded
-                        return encoded[0]
-                        
-                return '' # return NULL
-                        
-        if len (names) > 0:
-                # maybe a singleton, check the horizon
-                if names[0] in horizon:
-                        return ''
-                        
-                # positively not a composed public name, must be a new
-                # singleton, or an 8bit clean string with no netstring
-                # encapsulated that would "trash" fast indexes, or a
-                # "shallow" name ...
-                #
-                encoded = pns_name_cleanse (names[0], horizon, HORIZON)
-                if encoded:
+        names = [n for n in netstrings.decode (encoded) if n]
+        if not names:
+                if encoded not in horizon and pns_name_clean (encoded):
                         horizon.add (encoded)
                         return encoded
+                        
+                return ''
+
+        # possibly a valid composed public name, must not be
+        # dispersed, recursively validate
+        valid = []
+        for name in names:
+                name = pns_name (name, horizon, HORIZON)
+                if name:
+                        valid.append (name)
+                        if len (horizon) == HORIZON:
+                                break
+                                
+        if len (valid) > 1:
+                # sort composing names and encode
+                valid.sort ()
+                return netstring.encode (valid)
+                
+        if len (valid) > 0:
+                # return singleton as allready encoded
+                return valid[0]
                 
         return '' # return NULL
 
@@ -98,7 +82,7 @@ def pns_name (encoded, horizon, HORIZON=126):
 def pns_quatuor (encoded, pns_names, PNS_LENGTH=1024):
         # a valid quatuor must have subject, predicate, object and context
         #
-        model = netstrings_decode (encoded)
+        model = list (netstrings.decode (encoded))
         if len (model) != 4:
                 return None, '1 not a quatuor'
         
@@ -165,8 +149,7 @@ def pns_quatuor (encoded, pns_names, PNS_LENGTH=1024):
 def pns_quintet (model, direction):
         l = ['%d:%s,' % (len (s), s) for s in model[:4]]
         l.append ('%d:%s,' % (len (direction), direction))
-        encoded = ''.join (l)
-        return '%d:%s,' % (len (encoded), encoded)
+        return ''.join (l)
         
         
 if __name__ == '__main__':
@@ -176,7 +159,6 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster\n'
                 )
         from exceptions import StopIteration
-        from allegra.netstring import netstrings_pipe
         def benchmark (t, c):
                 t = (time.time () - t)
                 sys.stderr.write ('\n\n%d in %f seconds (%f/sec)\n' % (
@@ -184,7 +166,7 @@ if __name__ == '__main__':
                         ))
         timer = time.time ()
         counter = 0
-        pipe = netstrings_pipe (lambda: sys.stdin.read (4096))
+        pipe = netstrings.netpipe (lambda: sys.stdin.read (4096))
         while 1:
                 try:
                         encoded = pipe.next ()

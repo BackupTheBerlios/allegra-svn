@@ -29,24 +29,15 @@ SYNOPSYS
 
 import sys, socket, time
 
-from allegra import loginfo, async_loop, async_chat, async_limits
+from allegra import \
+	loginfo, async_loop, async_limits, async_net, async_chat
 
 
-class TCP_client_channel (async_chat.Async_chat):
+class TCP_client_channel (object):
 
-	tcp_connect_timeout = 10 # a ten seconds timeout for connection
 	tcp_client_defer = None
 	
-	def __repr__ (self):
-		return 'tcp-client-channel id="%x"' % id (self)
-
-	def collect_incoming_data (self, data):
-		assert None == self.log (data, 'debug')
-			
-	def found_terminator (self):
-		assert None == self.log ('found-terminator', 'debug')
-		
-        def tcp_connect (self, addr):
+        def tcp_connect (self, addr, timeout=3):
         	"create a socket and try to connect to addr, return success"
 		if self.connected:
 			return True
@@ -60,64 +51,109 @@ class TCP_client_channel (async_chat.Async_chat):
 			
 		assert None == self.log ('connect %s %d' % addr, 'debug')
 		async_loop.async_schedule (
-			time.time () + self.tcp_connect_timeout,
-			self.tcp_timeout
+			time.time () + timeout, self.tcp_timeout
 			)
 		return True
 
 	def tcp_timeout (self, when):
 		"if connected, continue to defer, otherwise handle close"
-		if self.connected:
-			if self.tcp_client_defer != None:
-				return (
-					when + self.tcp_client_precision,
-					self.tcp_client_defer
-					)
-			return
-				
-		if not self.closing:
+		if not self.connected and not self.closing:
 			assert None == self.log (
-				'connect-timeout'
-				' %d' % self.tcp_connect_timeout, 'debug'
+				'connect-timeout', 'debug'
 				)
 			self.handle_close ()
-			
 
-class TCP_client_echo (TCP_client_channel):
+
+class TCP_client_net (async_net.Async_net, TCP_client_channel):
 	
-	"The simplest derived class, a netline logger."
+	"The simplest netstring client, a netline logger."
 
-	def __init__ (self):
-		async_chat.Async_chat.__init__ (self)
-                self.set_terminator ('\n')
-                self.echo_buffer = ''
+
+class TCP_client_line (async_chat.Async_chat, TCP_client_channel):
+	
+	"The simplest asynchat client, a netline logger."
+
+        echo_line = ''
                 
+	def __repr__ (self):
+		return 'line-client-channel id="%x"' % id (self)
+
         def collect_incoming_data (self, data):
-                self.echo_buffer += data
+                self.echo_line += data
                 
         def found_terminator (self):
-                self.log (self.echo_buffer)
-                self.echo_buffer = ''
-                
+                self.log (self.echo_line)
+                self.echo_line = ''
+ 
 
-def tcp_client_inactive (channel, when):
-	if not channel.closing and channel.connected and (
-		when - max (channel.async_when_in, channel.async_when_out)
-		) > channel.tcp_client_inactive:
-		assert None == channel.log ('inactive', 'debug')
-		channel.handle_close ()
-		return
-
-	return when + channel.tcp_client_precision, channel.tcp_client_defer
-
-def tcp_client_limit (channel, inactive=60, precision=10):
-	async_limits.async_limit_in (channel)
-	async_limits.async_limit_out (channel)
-	channel.tcp_client_inactive = inactive
-	channel.tcp_client_precision = precision
-	channel.tcp_client_defer = tcp_client_inactive
-	return channel
+# A manager interface for TCP/IP clients
+        
+class TCP_client (loginfo.Loginfo):
 	
+	TCP_CLIENT_CHANNEL = TCP_client_line
+	
+	def __init__ (self, timeout=60, precision=10):
+		self.tcp_client_timeout = timeout
+		self.tcp_client_precision = precision
+		self.tcp_client_channels = {}
+		
+	def tcp_client (self, addr):
+		try:
+			return self.tcp_client_channels[addr]
+			
+		except KeyError:
+			channel = self.tcp_client_channel (addr)
+			channel.tcp_client_key = addr
+	
+	def tcp_client_channel (self, addr):
+		channel = self.TCP_CLIENT_CHANNEL ()
+		async_limits.async_limit_in (channel)
+		async_limits.async_limit_out (channel)
+		channel.handle_close = self.tcp_client_close
+		self.tcp_client_channels[addr] = channel
+		if len (self.tcp_client_channels) == 1:
+	                assert None == self.log ('defer-start', 'debug')
+			async_loop.async_schedule (
+				time.time () + self.tcp_client_precision, 
+				self.tcp_client_defer
+				)
+		return channel
+		
+	def tcp_client_defer (self, when):
+                if self.tcp_client_channels:
+	                for channel in self.tcp_client_channels.values ():
+	                        self.tcp_client_inactive (channel, when)
+                        return (
+                                when + self.tcp_client_precision,
+                                self.tcp_client_defer
+                                ) # continue to defer
+                
+                assert None == self.log ('defer-stop', 'debug')
+                if self.tcp_client_shutdown:
+                	self.tcp_client_stop ()
+                return None
+
+	def tcp_client_inactive (self, channel, when):
+		if not channel.closing and channel.connected and (
+			when - max (
+				channel.async_when_in, channel.async_when_out
+				)
+			) > self.tcp_client_timeout:
+			assert None == channel.log ('inactive', 'debug')
+			channel.handle_close ()
+
+	def tcp_client_close (self, channel):
+		channel.close ()
+		del channel.recv, channe.send, channel.handle_close
+		del self.tcp_client_channels[channel.tcp_client_key]
+		
+	def tcp_client_shutdown (self, channel):
+		for channel in self.tcp_client_channels.values ():
+			channel.close_when_done ()		
+		
+	def tcp_client_stop (self):
+		assert None == self.log ('stop', 'debug')
+
 
 def tcp_client_throttle_defer (channel, when):
 	async_throttle_in_defer (channel, when)
@@ -160,3 +196,37 @@ def tcp_client_throttle_in (
 	channel.tcp_client_defer = tcp_client_throttle_in_defer
 	return channel
 	
+
+class Pipeline (object):
+
+	pipeline_sleeping = False
+	pipeline_keep_alive = False
+
+	def __init__ (self, requests=None, responses=None):
+		self.pipeline_requests = requests or collections.deque ()
+		self.pipeline_responses = responses or collections.deque ()
+
+	def pipeline (self, request):
+		self.pipeline_requests.append (request)
+		if self.pipeline_sleeping:
+			self.pipeline_sleeping = False
+			self.pipeline_wake_up ()
+
+	def pipeline_wake_up (self):
+		# pipelining protocols, like HTTP/1.1 or ESMPT
+		if self.pipeline_requests:
+			while self.pipeline_requests:
+				reactor = self.pipeline_requests.popleft ()
+				self.producer_fifo.append (reactor)
+				self.pipeline_responses.append (reactor)
+		self.pipeline_sleeping = True
+
+	def pipeline_wake_up_once (self):
+		# synchronous protocols, like HTTP/1.0 or SMTP
+		if self.pipeline_requests:
+			reactor = self.pipeline_requests.popleft ()
+			self.producer_fifo.append (reactor)
+			self.pipeline_responses.append (reactor)
+			self.pipeline_sleeping = False
+		else:
+			self.pipeline_sleeping = True

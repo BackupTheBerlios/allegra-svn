@@ -20,59 +20,75 @@
 import re, types
 
 from allegra import \
-	producer, tcp_pipeline, mime_headers, mime_reactor, http_reactor
+	async_chat, producer, \
+	tcp_pipeline, mime_headers, mime_reactor, http_reactor
 
 
 HTTP_RESPONSE_RE = re.compile ('.+?/([0-9.]+) ([0-9]{3}) (.*)')
 
 class HTTP_client_pipeline (
-	tcp_pipeline.TCP_pipeline, mime_reactor.MIME_collector
+	tcp_pipeline.Pipeline, 
+	mime_reactor.MIME_collector,
+	async_chat.Async_chat
 	):
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
 
         terminator = '\r\n\r\n'
 	http_version = '1.1'
+	
+	# Asynchat
 
+	def handle_connect (self):
+		assert None == self.log ('connected', 'debug')
+		if self.pipeline_requests:
+			self.pipeline_wake_up ()
+		else:
+			self.pipeline_sleeping = True
+		
+	# Pipeline
+			
 	def pipeline_error (self):
 		# TODO: handle pipeline error
-		if self.pipeline_responses_fifo.is_empty ():
+		if not self.pipeline_responses:
 			# not resolved or not connected ...
-			while not self.pipeline_requests.is_empty ():
-				reactor = self.pipeline_requests.pop ()
+			while self.pipeline_requests:
+				reactor = self.pipeline_requests.popleft ()
 				reactor.http_response = \
 					'418 Unknown DNS host name'
 		else:
 			# broken connection ...
-			tcp_pipeline.TCP_pipeline.pipeline_error (self)
+			tcp_pipeline.Pipeline.pipeline_error (self)
 			
 	def pipeline_wake_up (self):
+		assert None == self.log ('wake-up-http-1.0', 'debug')
 		# HTTP/1.0, push one at a time, maybe keep-alive or close
 		# when done.
 		#
-		reactor = self.pipeline_requests.pop ()
+		reactor = self.pipeline_requests.popleft ()
 		if (
-			self.pipeline_requests.is_empty () and
-			not self.pipeline_keep_alive
+			self.pipeline_requests or
+			self.pipeline_keep_alive
 			):
-			reactor.mime_producer_headers['connection'] = 'Close'
-		else:
 			reactor.mime_producer_headers[
 				'connection'
 				] = 'Keep-alive'
+		else:
+			reactor.mime_producer_headers['connection'] = 'Close'
 		self.http_producer_continue (reactor)
 		self.handle_write ()
 
 	def pipeline_wake_up_11 (self):
+		assert None == self.log ('wake-up-http-1.1', 'debug')
 		# HTTP/1.1 pipeline, send all at once and maybe close when
 		# done if not keep-aliver.
 		#
-		while 1:
-			reactor = self.pipeline_requests.pop ()
+		while True:
+			reactor = self.pipeline_requests.popleft ()
 			reactor.mime_producer_headers[
 				'connection'
 				] = 'Keep-alive'
-			if self.pipeline_requests.is_empty ():
+			if not self.pipeline_requests:
 				if not self.pipeline_keep_alive:
 					reactor.mime_producer_headers[
 						'connection'
@@ -86,6 +102,8 @@ class HTTP_client_pipeline (
 		#
 		self.http_producer_continue (reactor)
 		self.handle_write ()
+		
+	# MIME collector
 
 	def mime_collector_continue (self):
 		reactor = self.pipeline_responses_fifo.first ()
@@ -126,11 +144,11 @@ class HTTP_client_pipeline (
 			):
 			self.producer_fifo.push (None)
 
-	# close the channel when there is an in the HTTP collector!
-	#
-	http_collector_error = tcp_pipeline.TCP_pipeline.handle_close
+	# HTTP reactor
 
 	http_collector_continue = http_reactor.http_collector_continue
+
+	http_collector_error = async_chat.Async_chat.handle_close
 
 	def http_producer_continue (self, reactor):
 		# push one or two producers in the output fifo ...
@@ -182,6 +200,8 @@ class HTTP_client_pipeline (
 		self.pipeline_responses.push (reactor)
 		#
 		# ready to send.
+
+	# The HTTP client interface
 
 	def http_client_reactor (self, url, headers, command):
                 reactor = mime_reactor.MIME_reactor (headers)

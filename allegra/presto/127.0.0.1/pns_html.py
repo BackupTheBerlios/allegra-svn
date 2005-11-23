@@ -106,7 +106,7 @@ if __name__ == '__main__':
                 ' | Copyleft GPL 2.0\n'
                 )
         def pns_stdio_statement (statement):
-                encoded = netstrings_encode (statement)
+                encoded = netstring.encode (statement)
                 if len (encoded) > 1024:
                         sys.stderr.write (
                                 '%d:%s,' % (len (encoded), encoded)

@@ -44,10 +44,10 @@ from errno import \
         EALREADY, EINPROGRESS, EWOULDBLOCK, ECONNRESET, \
         ENOTCONN, ESHUTDOWN, EINTR, EISCONN
 
-from allegra import loginfo, async_loop
+from allegra import loginfo, async_loop, finalization
 
 
-class Async_dispatcher (loginfo.Loginfo):
+class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
     
         connected = accepting = closing = 0
 
@@ -71,6 +71,9 @@ class Async_dispatcher (loginfo.Loginfo):
 
         def __repr__ (self):
                 'async-dispatcher id="%x"' % id (self)
+
+        def finalization (self, finalized):
+                assert None == self.log ('finalized', 'debug')
 
         def add_channel (self):
                 "add the dispatcher to the asynchronous I/O map"

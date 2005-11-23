@@ -19,27 +19,28 @@
 
 import sys, socket, time
 
-from allegra import async_loop, async_core, async_chat, async_limits
+from allegra import \
+        async_loop, async_core, async_limits, async_net, async_chat
 
+
+class TCP_server_echo_net (async_net.Async_net):
+        
+        def async_net_continue (self, data):
+                self.log (data)
+                self.an_out_buffer += '%d:%s,' % (len (data), data)
+                
 
 class TCP_server_echo_line (async_chat.Async_chat):
+        
+        echo_line = ''
 
-        def __init__ (self, conn, addr):
-                assert None == self.log (
-                        'accepted ip="%s" port="%d"' % addr, 'debug'
-                        )
-                self.addr = addr               
-                async_chat.Async_chat.__init__ (self, conn)
-                self.set_terminator ('\n')
-                self.tcp_server_buffer = ''
-                
         def collect_incoming_data (self, data):
-                self.tcp_server_buffer += data
+                self.echo_line += data
                 
         def found_terminator (self):
-                self.log (self.tcp_server_buffer)
-                self.push (self.tcp_server_buffer+'\n')
-                self.tcp_server_buffer = ''
+                self.log (self.echo_line)
+                self.push (self.echo_line+'\n')
+                self.echo_line = ''
                 
 
 class TCP_server (async_core.Async_dispatcher):
@@ -104,17 +105,6 @@ class TCP_server (async_core.Async_dispatcher):
                         # accept() we get EWOULDBLOCK, so dispatcher.accept() 
                         # returns None. Seen on FreeBSD3.
 
-		self.tcp_server_accept (conn, addr)
-                
-        def handle_close (self):
-                "stop the server now, close all channels now, then finalize"
-                if len (self.tcp_server_channels) > 0:
-                        for channel in tuple (self.tcp_server_channels):
-                                channel.handle_close ()
-                self.close ()
-                self.tcp_server_stopped ()
-                        
-	def tcp_server_accept (self, conn, addr):
                 if self.tcp_server_clients.setdefault (
                         addr[0], 0
                         ) < self.tcp_server_clients_limit:
@@ -127,12 +117,26 @@ class TCP_server (async_core.Async_dispatcher):
                                 )
                         return
 
-                channel = self.TCP_SERVER_CHANNEL (conn, addr)
-                def tcp_server_close ():
+                channel = self.TCP_SERVER_CHANNEL (conn)
+                channel.addr = addr
+                def handle_close ():
                         self.tcp_server_close (channel)
-                channel.handle_close = tcp_server_close
+                        
+                channel.handle_close = handle_close
                 self.tcp_server_channels.append (channel)
-		return channel
+                self.tcp_server_accept (channel)
+                return channel
+                
+        def handle_close (self):
+                "stop the server now, close all channels now, then finalize"
+                if len (self.tcp_server_channels) > 0:
+                        for channel in tuple (self.tcp_server_channels):
+                                channel.handle_close ()
+                self.close ()
+                self.tcp_server_stop ()
+                        
+	def tcp_server_accept (self, channel):
+                assert None == self.log ('%r' % channel, 'accepted')
 
         def tcp_server_close (self, channel):
                 "remove a closed channel from the managed list, update limits"
@@ -144,9 +148,9 @@ class TCP_server (async_core.Async_dispatcher):
                 channel.close ()
                 del channel.handle_close # break circular reference!
 
-        def tcp_server_stopped (self):
+        def tcp_server_stop (self):
                 "called once the server stopped, assert debug log and close"
-                assert None == self.log ('stopped', 'debug')
+                assert None == self.log ('stop', 'debug')
                         
 
 class TCP_server_limit (TCP_server):
@@ -156,28 +160,29 @@ class TCP_server_limit (TCP_server):
         # pipelined or statefull API, when TCP sessions are kept-alive
         # but also may "stall" (like some HTTP/1.1 client do).
         
-        tcp_server_inactive = 60
+        tcp_server_timeout = 60
         tcp_server_precision = 10
+        tcp_server_shutdown = False
 
         def handle_close (self):
-                assert None == self.log ('stop', 'debug')
+                assert None == self.log ('shutdown', 'debug')
+                self.tcp_server_shutdown = True
                 if len (self.tcp_server_channels) > 0:
-                        self.closing = 1
                         for channel in tuple (self.tcp_server_channels):
                                 channel.close_when_done ()
                         return
                                 
                 self.close ()
-                self.tcp_server_stopped ()
+                self.tcp_server_stop ()
 
-        def tcp_server_accept (self, conn, addr):
-                channel = TCP_server.tcp_server_accept (self, conn, addr)
+        def handle_accept (self):
+                channel = TCP_server.handle_accept (self)
                 if channel == None:
                         return
                         
                 channel.tcp_server_when = now = time.time ()
-                async_limits.async_limit_in (channel, now)
-                async_limits.async_limit_out (channel, now)
+                async_limits.async_limit_recv (channel, now)
+                async_limits.async_limit_send (channel, now)
                 if (
                         self.tcp_server_precision >0 and
                         len (self.tcp_server_channels) == 1
@@ -190,19 +195,18 @@ class TCP_server_limit (TCP_server):
                 return channel
 
         def tcp_server_defer (self, when):
-                assert None == self.log ('defer', 'debug')
-                for channel in self.tcp_server_channels:
-                        self.tcp_server_inactive (channel, when)
                 if self.tcp_server_channels:
+                        for channel in self.tcp_server_channels:
+                                self.tcp_server_inactive (channel, when)
                         return (
                                 when + self.tcp_server_precision,
                                 self.tcp_server_defer
                                 ) # continue to defer
                 
                 assert None == self.log ('defer-stop', 'debug')
-                if self.closing:
+                if self.tcp_server_shutdown:
                         self.close ()
-                        self.tcp_server_stopped ()
+                        self.tcp_server_stop ()
                 return None
                 
         def tcp_server_inactive (self, channel, when):
@@ -210,7 +214,7 @@ class TCP_server_limit (TCP_server):
                         when - max (
                                 channel.async_when_in, channel.async_when_out
                                 )
-                        ) > self.tcp_inactive_timeout:
+                        ) > self.tcp_server_timeout:
                         channel.log ('inactive', 'info')
                         channel.handle_close ()
                         
@@ -221,6 +225,7 @@ class TCP_server_limit (TCP_server):
                         (time.time () - channel.tcp_server_when)
                         ), 'info')
                 TCP_server.tcp_server_close (self, channel)
+                del channel.recv, channel.send
 
 
 class TCP_server_throttle (TCP_server_limit):
@@ -239,10 +244,8 @@ class TCP_server_throttle (TCP_server_limit):
         tcp_server_throttle_in_Bps = 4096 # ac_in_buffer_size
         tcp_server_throttle_out_Bps = 4096 # ac_in_buffer_size
 
-	def tcp_server_accept (self, conn, addr):
-		channel = TCP_server_limit.tcp_server_accept (
-                        self, conn, addr
-                        )
+	def handle_accept (self, conn, addr):
+		channel = TCP_server_limit.handle_accept ()
                 if channel == None:
                         return
 
@@ -276,6 +279,6 @@ class TCP_server_throttle (TCP_server_limit):
                 # remove circular references (a perfect example of why private
                 # APIs *are* a wrong coding practice!)
                 #
-		del channel.async_throttle_in_Bps
-                del channel.async_throttle_out_Bps
 		TCP_server_limit.tcp_server_close (self, channel)
+                del channel.async_throttle_in_Bps
+                del channel.async_throttle_out_Bps

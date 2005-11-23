@@ -17,14 +17,14 @@
 
 ""
 
-from allegra.netstring import netstrings_encode, netstrings_decode
 from allegra.pns_model import pns_name
 from allegra.pns_sat import \
         pns_sat_utf8, pns_sat_articulate, \
         SAT_STRIP_UTF8, SAT_SPLIT_UTF8, SAT_ARTICULATE_EN, SAT_RE_WWW
 from allegra.xml_dom import \
         XML_dom, XML_element, xml_delete, xml_orphan
-from allegra import xml_utf8, xml_unicode                                                
+        
+from allegra import netstring, xml_utf8, xml_unicode                                                
 
 
 # XML to PNS
@@ -92,7 +92,7 @@ class XML_PNS_articulate (XML_element):
                                 ]
                         if len (names) > 1:
                                 self.pns_subject = pns_name (
-                                        netstrings_encode (names),
+                                        netstring.encode (names),
                                         self.pns_horizon
                                         )
                                 return self.pns_subject != ''
@@ -130,7 +130,7 @@ class XML_PNS_articulate (XML_element):
                                 len (self.pns_horizon) < self.sat_horizon
                                 ):
                                 self.pns_subject = pns_name (
-                                        netstrings_encode ([
+                                        netstring.encode ([
                                                 item[0] 
                                                 for item in self.pns_sats
                                                 ]),
@@ -150,7 +150,7 @@ class XML_PNS_articulate (XML_element):
         def pns_articulate (self, subject, context, dom):
                 # SAT articulate
                 if self.pns_object and self.pns_subject and len (
-                        netstrings_decode (self.pns_subject)
+                        netstring.netstrings (self.pns_subject)
                         ) > 1:
                         # there is a SAT object and an articulated subject
                         if self.pns_subject == subject:
@@ -176,7 +176,7 @@ class XML_PNS_articulate (XML_element):
                         #
                         for name, text in self.pns_sats:
                                 if text and name != subject and len (
-                                        netstrings_decode (name)
+                                        netstring.netstrings (name)
                                         ) > 1:
                                         dom.pns_statement ((
                                                 name, 'sat', text, subject
@@ -263,7 +263,7 @@ class XML_PNS_validate (XML_PNS_articulate):
                         len (self.pns_horizon) < self.sat_horizon
                         ):
                         self.pns_subject = pns_name (
-                                netstrings_encode (self.pns_sats),
+                                netstring.encode (self.pns_sats),
                                 set ()
                                 )
                 elif len (self.pns_sats) > 0:
@@ -333,7 +333,7 @@ class XML_PNS_orphan (XML_element):
 
 def pns_names_utf8 (name, tag='public', attr=''):
         # how elegant are Public Names in XML?
-        names = netstrings_decode (name)
+        names = netstring.netstrings (name)
         if len (names) > 1:
                 return '<%s%s names="%s">%s</%s>' % (
                         tag, attr, xml_utf8.xml_attr (name),
@@ -417,7 +417,7 @@ def pns_names_unicode (
         name, encoding='ASCII', tag='pns:public', 
         attr=' xmlns:pns="http://pns/"'
         ):
-        names = netstrings_decode (name)
+        names = netstring.netstrings (name)
         if len (names) > 1:
                 return '<%s%s names="%s">%s</%s>' % (
                         tag, attr, xml_unicode.xml_attr (
@@ -551,9 +551,8 @@ if __name__ == '__main__':
                 # are supported by pns_xml.py: PNS's own and W3C's XHTML.
                 #
                 sys.argv.remove ('-i')
-                from allegra.netstring import netstrings_pipe
                 t = time.time ()
-                pipe = netstrings_pipe (lambda: sys.stdin.read (4096))
+                pipe = netstring.netpipe (lambda: sys.stdin.read (4096))
                 encoding = 'ASCII'
                 stylesheet = ''
                 if len (sys.argv) > 1:
@@ -581,7 +580,7 @@ if __name__ == '__main__':
                                         )
                                 )
                         for encoded in pipe:
-                                model = netstrings_decode (encoded)
+                                model = netstring.netstrings (encoded)
                                 sys.stdout.write (pns_xml_utf8 (
                                         model, pns_cdata_utf8 (
                                                 model[2], prefixes
@@ -609,7 +608,7 @@ if __name__ == '__main__':
                                         )
                                 )
                         for encoded in pipe:
-                                model = netstrings_decode (encoded)
+                                model = netstring.netstrings (encoded)
                                 sys.stdout.write (pns_xml_unicode (
                                         model, pns_cdata_unicode (
                                                 model[2], prefixes, encoding
@@ -627,7 +626,7 @@ if __name__ == '__main__':
                 # session written to stdout
                 #
                 def pns_stdio_statement (statement):
-                        encoded = netstrings_encode (statement)
+                        encoded = netstring.encode (statement)
                         if len (encoded) > 1024:
                                 sys.stderr.write (
                                         '%d:%s,' % (len (encoded), encoded)

@@ -267,7 +267,7 @@ def async_catch ():
 # And finally, the loop itself
 
 def loop ():
-	"the asynchronous loop: poll, clock and finalize"
+	"poll, clock and finalize while there is at least one channel mapped"
 	assert None == loginfo.log ('async_loop_start', 'debug')
 	while async_map:
 		try:
@@ -279,6 +279,21 @@ def loop ():
 		async_clock () 
 		async_finalize ()
 	assert None == loginfo.log ('async_loop_stop', 'debug')
+
+
+def dispatch ():
+	"poll, clock and finalize while there is at least one event"
+	assert None == loginfo.log ('async_dispatch_start', 'debug')
+	while async_map or async_scheduled or async_finalized:
+		try:
+			async_poll (async_map, async_timeout)
+		except async_Exception:
+			if not async_catch ():
+				break
+			
+		async_clock () 
+		async_finalize ()
+	assert None == loginfo.log ('async_dispatch_stop', 'debug')
 
 
 # Note about this implementation
@@ -303,6 +318,25 @@ def loop ():
 # the infrastructure, not complicate the network peer architecture.
 #
 #
+# Select/Poll File Descriptor Limit 
+#
+# Actually, a network application *peer* does not have to scale much beyond
+# the lower limits set on the select or poll call by most OS. Running with 
+# the standard Python 2.4 distribution for Windows, the limit is set to 512
+# concurrent read or write file descriptors, possibly a lot more than a
+# single user's application will ever need (think of a mail, news, web client
+# or even a file sharing peer, 512 simultaneous connections is a lot for a
+# simple PC or a local web server). On a Linux server, that limit may be
+# raised to 4096, above the number of static pages served in one second by
+# Apache on current PC hardware.
+#
+# Instead of using non-limited and more scallable system calls like epoll
+# to serve more client from a single server, a network application can
+# scale up simply by adding more peers. Instead of ending up with two very
+# expensive big irons configured in a balanced and failover system, start
+# with two cheap PCs and add more as you need.
+#
+#
 # Performances
 #
 # However slow this Python code is, most of the implementation it integrates
@@ -325,13 +359,10 @@ def loop ():
 # of asynchrony: no synchronization chore and cost, no thread/process
 # core and cost and a lot more memory available for cache.
 #
-# Last but not least, a network application peer does not have to scale
-# much beyond the lower limits set on the select or poll call by most
-# OS. An application peer handling 512 concurrent connections
 #
 # Foundation for a P2EE Stack?
 #
-# However, very much like a NET or J2EE stack, an Allegra peer can host
+# Well, very much like a NET or J2EE stack, an Allegra peer can host
 # network applications and enforce enough protection against the hosted
 # applications' defects. Actually, the CPython VM provides most of that
 # safety because it is an strong-typed but late-binding interpreter, one
@@ -340,7 +371,7 @@ def loop ():
 #
 # What about malicious or broken access to Allegra's core API?
 #
-# Well, what about auditing the code hosted? What about testing it first
+# And what about auditing the code hosted? What about testing it first
 # and reading it one last time before putting it into production? C# or
 # Java are not safer, actually there is in their API enough rope to hang
 # both application servers from inside. Whatever the host, it makes more

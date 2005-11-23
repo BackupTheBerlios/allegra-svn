@@ -142,8 +142,8 @@ class PNS_inference (thread_loop.Thread_loop):
 
         def pns_map_names (self, index):
                 # index a sequence of names to the index
-                names = netstring.netstrings_decode (index)
-                if len (names) == 1:
+                names = list (netstring.decode (index))
+                if len (names) == 0:
                         return
                         
                 for name in names:
@@ -173,7 +173,7 @@ class PNS_inference (thread_loop.Thread_loop):
         def pns_command (self, model):
                 # handle a command from a PNS/TCP session
                 assert None == self.log (
-                        netstring.netstrings_encode (model), 'command'
+                        netstring.encode (model), 'command'
                         )
                 if model[1]:
                         if model[2]:
@@ -184,7 +184,7 @@ class PNS_inference (thread_loop.Thread_loop):
                                 # into the client, but rather articulate it).
                                 #
                                 contexts = set (
-                                        netstring.netstrings_buffer (model[2])
+                                        netstring.decode (model[2])
                                         )
                                 self.thread_loop_queue ((
                                         self.pns_walk_simplest,
@@ -262,7 +262,9 @@ class PNS_inference (thread_loop.Thread_loop):
                         self.pns_walk_out (model, routes)
                         return
                         
-                names = netstring.netstrings_decode (subject)
+                names = list (
+                        netstring.decode (subject)
+                        ) or [subject]
                 self.thread_loop_queue ((
                         self.pns_walk_simple,
                         (model, contexts, walked, routes, names)
@@ -272,7 +274,7 @@ class PNS_inference (thread_loop.Thread_loop):
                 stored = self.pns_routes.get (name)
                 if stored and (ord (stored[-1]) < self.pns_horizon):
 		        return contexts & set (
-                                netstring.netstrings_buffer (stored)
+                                netstring.decode (stored)
                                 )
                 
                 return NULL_SET
@@ -282,7 +284,7 @@ class PNS_inference (thread_loop.Thread_loop):
                 for name in names:
                         stored = self.pns_index.get (name)
                         if stored and (ord (stored[-1]) < self.pns_horizon):
-                                for n in (set (netstring.netstrings_buffer (
+                                for n in (set (netstring.decode (
                                         stored[:-1]
                                         )) - walked):
                                         index.setdefault (
@@ -297,7 +299,7 @@ class PNS_inference (thread_loop.Thread_loop):
                         '<walk-simple horizon="%d" walked="%d"/>'
                         '<![CDATA[%s]]!>' % (
                                 len (names), len (walked),
-                                netstring.netstrings_encode (model)
+                                netstring.encode (model)
                                 ), 'debug'
                         )
                 for name in names:
@@ -334,8 +336,8 @@ class PNS_inference (thread_loop.Thread_loop):
                         '<walk-out routes="%d"/>'
                         '<![CDATA[%s]]!><![CDATA[%s]]!>' % (
                                 len (routes),
-                                netstring.netstrings_encode (model),
-                                netstring.netstrings_encode (
+                                netstring.encode (model),
+                                netstring.encode (
                                         [r[1] for r in routes]
                                         )
                                 ), ''
@@ -354,10 +356,10 @@ class PNS_inference (thread_loop.Thread_loop):
                 if model[0] == '':
                         # user command, send response to the PNS/TCP session
                         # as an ordered set of contexts and related names.
-                        model[3] = netstring.netstrings_encode ([
+                        model[3] = netstring.encode ([
                                 '%d:%s,%s' % (
                                         len (c), c, 
-                                        netstring.netstrings_encode (n)
+                                        netstring.encode (n)
                                         )
                                 for w, c, n in routes
                                 ])
@@ -430,7 +432,7 @@ def pns_weight_routes (graph):
 # The Semantic Walk is a simple algorithm that should scale from transient
 # peer with limited graph to persistent ones maintaining unlimited
 # and possibly huge graphs. This implementation *will* be relatively slow
-# until netstrings_decode is optimized (in a C module along the other
+# until netstring.decode is optimized (in a C module along the other
 # obvious bottlenecks) and some tuning of bsddb3 caching is done.
 #
 # However, what matters more is that it produces relevant routes ;-)

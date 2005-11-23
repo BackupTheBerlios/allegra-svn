@@ -24,7 +24,7 @@ class Simple_producer (object):
 	
 	"producer for a string"
 
-	def __init__ (self, data, buffer_size=1<<16):
+	def __init__ (self, data, buffer_size=4096):
 		self.data = data
 		self.buffer_size = buffer_size
 
@@ -54,59 +54,62 @@ class Composite_producer (object):
 	# one, with support for stalled producers and generators. it is the
 	# bread & butter of Allegra's PRESTo! with the Buffer_reactor.
 	
-        def __init__ (self, head, body, glob=1<<16):
+        def __init__ (self, head, body, glob=4096):
         	assert (
         		type (head) == types.StringType and 
         		type (body) == types.GeneratorType
         		)
-        	self.composite_current = head
-                self.composite_generator = body
-                self.composite_glob = glob
+        	self.current = head
+                self.generator = body
+                self.glob = glob
                 
- 	def composite_more_string (self):
- 		data = self.composite_current
- 		while len (data) < self.composite_glob:
-	        	try:
-	        		self.composite_current = \
-	        			self.composite_generator.next ()
-	  		except exceptions.StopIteration:
-	  			self.composite_current = ''
-	  			break
-
-			if type (self.composite_current) == types.StringType:
-				data += self.composite_current
-				continue
+        def more (self):
+        	if self.current == '':
+        		return ''
+        		
+        	buffer = ''
+        	limit = self.glob
+        	while True:
+	        	if type (self.current) == types.StringType:
+	        		buffer += self.current
+	        		try:
+	  				self.current = self.generator.next ()
+		  		except exceptions.StopIteration:
+		  			self.current = ''
+		  			break
+		  		
+		  		if len (buffer) > limit:
+		  			break
+		  			
+			elif self.current.producer_stalled ():
+				assert buffer != '' # watch this!
+				break
 				
-        		self.more = self.composite_more_producer
-        		break
-	  		
- 		return data
-
-	more = composite_more_string
- 		
-	def composite_more_producer (self):
-		while True:
-			data = self.composite_current.more ()
-			if data:
-				return data
-				
-	        	try:
-	        		self.composite_current = \
-	        			self.composite_generator.next ()
-	  		except StopIteration:
-	  			self.composite_current = ''
-	  			return ''
-	  		
-	  		if type (self.composite_current) == types.StringType:
-	        		self.more = self.composite_more_string
-	 			return self.more ()
-	               
+			else:
+				data = self.current.more ()
+				if data:
+					buffer += data
+					if len (buffer) > limit:
+						break
+					
+					else:
+						continue
+						
+	        		try:
+	  				self.current = self.generator.next ()
+		  		except exceptions.StopIteration:
+		  			self.current = ''
+		  			break
+		  		
+		return buffer
+                
 	def producer_stalled (self):
-		return (
-			self.more == self.composite_more_producer and
-			self.composite_current.producer_stalled ()
-			)
-
+		try:
+			return self.current.producer_stalled ()
+			
+		except:
+			return False
+			
 	# Note that this class also makes the original Medusa's lines, buffer 
 	# and globbing producer redundant. What this class does it to glob
 	# as much strings as possible from a MIME like data structure:

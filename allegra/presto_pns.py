@@ -17,15 +17,13 @@
 
 ""
 
-from allegra.reactor import Buffer_reactor
-from allegra.presto import PRESTo_async, PRESTo_reactor, presto_xml
-from allegra.netstring import \
-        netstrings_decode, netstrings_encode, netlines
 from allegra import \
-        pns_model, pns_sat, pns_xml, pns_client, pns_articulator
+        netstring, finalization, reactor, \
+        pns_model, pns_sat, pns_xml, pns_client, pns_articulator, \
+        presto
 
 
-class PRESTo_pns_statement (Buffer_reactor):
+class PRESTo_pns_statement (reactor.Buffer_reactor):
         
         def __call__ (self, resolved, model):
                 self.buffer (pns_xml.pns_xml_unicode (
@@ -35,7 +33,7 @@ class PRESTo_pns_statement (Buffer_reactor):
                 return False
                         
                         
-class PRESTo_pns_command (Buffer_reactor):
+class PRESTo_pns_command (reactor.Buffer_reactor):
         
         def __call__ (self, resolved, model):
                 if resolved[1] == '':
@@ -64,7 +62,7 @@ class PRESTo_pns_command (Buffer_reactor):
                         
 # TODO: move to pns_xml ?
                                 
-class PNS_articulate_xml (Finalization):
+class PNS_articulate_xml (finalization.Finalization):
         
         # aggregate an XML strings for a given subject, attach the result
         # tree or CDATA to the given parent, then finalize.
@@ -100,9 +98,8 @@ class PNS_articulate_xml (Finalization):
                                 self.pns_articulate_xml (model[2], model[3])
                         else:
                                 # multiple contextual answers
-                                encoded = netstrings_decode (model[2])
-                                for co in encoded:
-                                        c, o = netstrings_decode (co)
+                                for co in netstring.decode (model[2]):
+                                        c, o = netstring.decode (co)
                                         self.pns_articulate_xml (o, c)
         
         def pns_articulate_xml (self, obj, context):
@@ -163,7 +160,7 @@ class PNS_articulate_xml (Finalization):
                 pass # ... and finally join ;-)
 
 
-class PRESTo_pns_articulate (Buffer_reactor):
+class PRESTo_pns_articulate (reactor.Buffer_reactor):
         
         def __call__ (self, finalized):
                 self.buffer ('<allegra:articulate>')
@@ -198,7 +195,7 @@ class PRESTo_pns_articulate (Buffer_reactor):
                                 
 
 class PRESTo_pns_articulator (
-        PRESTo_async, pns_articulator.PNS_articulator
+        presto.PRESTo_async, pns_articulator.PNS_articulator
         ):
                  
         presto_interfaces = set ((u'articulated', u'predicates'))
@@ -223,7 +220,7 @@ class PRESTo_pns_articulator (
 
                 react = PRESTo_articulate ()
                 pns_articulator.PNS_articulate (
-                        self, articulated, netstrings_decode (
+                        self, articulated, netstring.netstrings (
                                 reactor.presto_vector[
                                         u'predicates'
                                         ].encode ('UTF-8') or 'sat'
@@ -243,7 +240,7 @@ class PRESTo_pns_articulator (
                 pns_sat.pns_sat_articulate (encoded, horizon, chunks)
                 if len (chunks) > 1 and len (horizon) < 126:
                         horizon = set ()
-                        valid = pns_model.pns_name (netstrings_encode (
+                        valid = pns_model.pns_name (netstring.encode (
                                 [name for name, text in chunks]
                                 ), horizon)
                 elif len (chunks) > 0:
@@ -255,7 +252,7 @@ class PRESTo_pns_articulator (
         presto_methods = {}
                 
 
-class PRESTo_pns (PRESTo_async):
+class PRESTo_pns (presto.PRESTo_async):
         
         xml_name = u'http://allegra/ pns'
         
