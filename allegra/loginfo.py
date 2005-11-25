@@ -109,7 +109,7 @@ def compact_traceback_netstrings (ctb):
 	"encode a compact traceback tuple as netstrings"
  	return netstring.encode ((
  		ctb[0], ctb[1], 
- 		netstring.encode (['|'.join (x) for x in ctb[2]])
+ 		netstring.encode ([' | '.join (x) for x in ctb[2]])
  		))
 
 
@@ -118,7 +118,7 @@ class Loginfo (object):
 	loginfo_logger = Loginfo_stdio ()
 	
 	def __repr__ (self):
-		return '<%s pid="%x"/>' % (
+		return '%s pid="%x"' % (
 			self.__class__.__name__, id (self)
 			)
 

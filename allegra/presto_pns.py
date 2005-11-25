@@ -220,7 +220,7 @@ class PRESTo_pns_articulator (
 
                 react = PRESTo_articulate ()
                 pns_articulator.PNS_articulate (
-                        self, articulated, netstring.netstrings (
+                        self, articulated, netstring.netlist (
                                 reactor.presto_vector[
                                         u'predicates'
                                         ].encode ('UTF-8') or 'sat'

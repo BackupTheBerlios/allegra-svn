@@ -76,7 +76,7 @@ class PNS_presto_articulator (
                 if not articulated:
                         return
 
-                names = netstring.netstrings (articulated)
+                names = netstring.netlist (articulated)
                 if len (names) > 1:
                         # articulate a search ...
                         react = PRESTo_reactor (
@@ -136,7 +136,7 @@ class PNS_presto_articulator (
                         return
                         
                 predicate = reactor.presto_vector[u'predicate'].encode ('UTF-8')
-                predicates = netstring.netstrings (predicate)
+                predicates = netstring.netlist (predicate)
                 obj = reactor.presto_vector[u'object'].encode ('UTF-8')
                 if obj == '' and len (predicates) > 1:
                         react = PRESTo_reactor (

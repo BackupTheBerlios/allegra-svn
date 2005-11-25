@@ -54,11 +54,6 @@ async_Exception = KeyboardInterrupt
 
 async_map = {}
 
-def async_close ():
-	for dispatcher in async_map.values ():
-		dispatcher.close ()
-
-
 # The original asyncore functions to poll this socket map for I/O
 
 def poll1 (map, timeout=0.0):
@@ -203,6 +198,10 @@ else:
 	async_poll = poll2
 
 async_timeout = 0.1 # default to a much smaller interval (300) than asyncore
+
+def async_close ():
+	for dispatcher in async_map.values ():
+		dispatcher.close ()
 
 
 # Finalizations, the Garbage Collector asynchronous loop
@@ -357,12 +356,13 @@ def dispatch ():
 # slower at handling the HTTP protocol than an Apache server or a Java 
 # Application Server, it will never be as slow as to loose the benefit
 # of asynchrony: no synchronization chore and cost, no thread/process
-# core and cost and a lot more memory available for cache.
+# core and cost and a lot more memory available for data cache and 
+# application state.
 #
 #
-# Foundation for a P2EE Stack?
+# Foundation for an Entreprise Application Development Stack?
 #
-# Well, very much like a NET or J2EE stack, an Allegra peer can host
+# Well, very much like a LAMP, NET or J2EE stack, an Allegra peer can host
 # network applications and enforce enough protection against the hosted
 # applications' defects. Actually, the CPython VM provides most of that
 # safety because it is an strong-typed but late-binding interpreter, one
@@ -382,4 +382,12 @@ def dispatch ():
 #
 # So, a CPython VM running an asynchronous peer like Allegra might very
 # well prove to be a more competitive solution than Sun's or the
-# Microsoft's frameworks.
+# Microsoft's frameworks when it comes to audit and maintenance, a huge
+# share of the TCO for entreprise software. 
+#
+# The Python language itself has allready been ported to C# and Java,
+# exactly for that specific reason: it is simpler to read and write, 
+# safer at run-time, making it an ideal pick for application and test
+# programming, which are the core activity of any software business.
+#
+#

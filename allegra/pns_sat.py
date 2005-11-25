@@ -46,6 +46,7 @@ def pns_sat_utf8 (
         articulated, horizon,
         HORIZON=126, depth=0, articulators=SAT_SPLIT_UTF8
         ):
+        "a simplistic lexer for short UTF-8 text"
         while articulated.find (articulators[depth]) < 0:
                 depth += 1
                 if depth < len (articulators):
@@ -93,6 +94,11 @@ def sat_articulators_re (articulators):
                 )
 
 # English linguists have mercy! Here's a frenchspeaker coding ...
+#
+# To put it straight, I aggregated a bizarre english grammar, scraped
+# from the web at various places teaching the language's basics. This
+# is an empirical and practical stack of simple RE that make up a
+# simplistic but effective natural language lexer.
 
 SAT_ARTICULATE_EN = (
         # punctuation
@@ -103,11 +109,11 @@ SAT_ARTICULATE_EN = (
         re.compile ('[(]|[)]|[[]|[]]|{|}|\\s+-+\\s+'),
         # quotes and a common web separator
         re.compile ('["&|]'), 
-        # The Verb is First: "to be" and "to have"
-        sat_articulators_re ((
-                'am', 'is', 'are', 'was', 'were',
-                'have', 'has', 'had',
-                )),
+        # The Verb Came First? of those, "to be" and "to have" probably
+        #sat_articulators_re ((
+        #        'am', 'is', 'are', 'was', 'were',
+        #        'have', 'has', 'had',
+        #        )),
         # Subordinating Conjunctions
         sat_articulators_re ((
                 'after', 'although', 'because', 'before', 
@@ -133,13 +139,16 @@ SAT_ARTICULATE_EN = (
                 'a', 'an', 'the', 
                 )),
         # Noun (Upper case, like "D.J. Bernstein" or "RDF")
-        re.compile ('((?:[A-Z]+[^\\s]*?\\s+)+)')
+        re.compile ('((?:[A-Z]+[^\\s]*?\\s+)+)'),
         # whitespaces
         re.compile ('\\s'), 
         # all sorts of hyphens 
         re.compile ("[/*+\\-_#']") 
         )
 
+
+# The lexer itself ...
+#
 
 def pns_sat_re (
         articulated, horizon,
@@ -226,11 +235,10 @@ def pns_sat_chunk (
         return horizon
         
         
-# extract valid public names or netstrings from SAT.
-        
 NETSTRING_RE = re.compile ('[1-9][0-9]*:')
 
 def pns_sat_names (articulated, chunks, whitespaces=SAT_STRIP_UTF8):
+        "extract valid public names or netstrings from SAT"
         text = ''
         while articulated:
                 m = NETSTRING_RE.search (articulated)

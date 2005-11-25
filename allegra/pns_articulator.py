@@ -21,7 +21,7 @@ from allegra import netstring, finalization, pns_model
 
 
 def pns_articulate_route (encoded):
-        names = netstring.netstrings (encoded)
+        names = netstring.netlist (encoded)
         name = pns_model.pns_name (netstring.encode (names[1:]), set ())
         return (names[0], name)
         
@@ -62,14 +62,14 @@ class PNS_articulator:
                 elif resolved[1] == '' or resolved[2] == '':
                         # ... as sets for contexts and indexes
                         self.pns_commands[resolved] = (
-                                model[3], set (netstring.netstrings (model[3]))
+                                model[3], set (netstring.netlist (model[3]))
                                 )
                 else:
                         # ... as lists of sets for routes
                         self.pns_commands[resolved] = [
                                 pns_articulate_route (encoded)
                                 for encoded in 
-                                netstring.netstrings (model[3])
+                                netstring.netlist (model[3])
                                 ]
                 if handler != None:
                         handler (resolved, self.pns_commands[resolved])

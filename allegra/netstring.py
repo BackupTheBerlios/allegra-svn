@@ -16,62 +16,10 @@
 # USA
 #
 
-"""API
-
-...
-
-	>>> from allegra import netstring
-	>>> netstring.encode (('A', 'B', 'CD'))
-	'1:A,1:B,2:CD,'
-	>>> tuple (netstring.decode ('1:A,1:B,2:CD,'))
-	('A', 'B', 'CD')
-	>>> tuple (netstring.decode (':A,1:B,2:CD,'))
-	()
-	>>> tuple (netstring.decode ('1:A,1:B,2:C'))
-	('A', 'B')
-	>>> def more ():
-		return '1:A,1:B,2:CD,'
-	>>> g = netstring.pipe (more)
-	>>> g.next ()
-	'A'
-	>>> g.next ()
-	'B'
-	>>> g.next ()
-	'CD'
-	>>> g.next ()
-	'A'
-	
-	
-CLI
-
-...
-
-	netstring.py [command] [buffer] < stdin 1> stdout 2> stderr
-
-If not specified, the default command is 'outline'. The second 
-optional argument is the size of the decoder's buffer.
-
-Validate a stream of netstrings:
-
-	netstring.py decode < netstrings.net
-
-Decode a stream of netstrings and beautify the output a text outline:
-
-	netstring.py outline < netstrings.net 1> netlines.txt
-
-Encode a stream of lines as safe netstrings:
-
-	netstring.py encode < lines.txt 1> safe.net
-	
-No exceptions are catched and their tracebacks are printed to STDERR.
-
-"""
-
-
-__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
-
-
 import exceptions
+
+
+class NetstringsError (exceptions.Exception): pass
 
 
 def encode (strings):
@@ -105,11 +53,6 @@ def decode (buffer):
 		prev = next + 1
 
 
-def netstrings (buffer):
-	"decode the netstrings found in the buffer and return a list"
-	return list (decode (buffer)) or [buffer]
-
-
 def outline (encoded, format, indent):
 	"Recursively format nested netstrings as a CRLF outline"
 	n = tuple (decode (encoded))
@@ -121,18 +64,45 @@ def outline (encoded, format, indent):
 	return format % encoded
 
 
+def netstrings (instance):
+	"encode a tree of iterables and strings as nested netstrings"
+	t = type (instance)
+	if t == str:
+		return instance
+		
+	if t in (tuple, list, dict, set, frozenset):
+		return encode ([netstrings (i) for i in instance])
+
+	try:
+		return '%s' % instance
+		
+	except:
+		return '%r' % instance
+		
+
+def netlist (encoded):
+	"return a list of strings or [encoded] if no netstrings found"
+	return list (decode (encoded)) or [encoded]
+
+
+def nettree (encoded):
+	"decode the nested encoded strings in a tree of lists"
+	leaves = [nettree (s) for s in decode (encoded)]
+	if len (leaves) > 0:
+		return leaves
+		
+	return encoded
+
+
 def netlines (encoded, format='%s\n', indent='  '):
 	"Beautify a netstring as an outline ready to log"
 	n = tuple (decode (encoded))
 	if len (n) > 0:
-		return ''.join ([outline (
+		return format % ''.join ([outline (
 			e, format, indent
-			) for e in n]) + '\n'
+			) for e in n])
 			
 	return format % encoded
-
-
-class NetstringsError (exceptions.Exception): pass
 
 
 def netpipe (more, BUFFER_MAX=0):
@@ -193,7 +163,7 @@ if __name__ == '__main__':
         assert None == sys.stderr.write (
                 'Allegra Netstrings'
                 ' - Copyright 2005 Laurent A.V. Szyster'
-                ' | Copyleft GPL 2.0\n'
+                ' | Copyleft GPL 2.0\n\n'
                 )
         if len (sys.argv) > 1:
         	command = sys.argv[1]
@@ -202,8 +172,8 @@ if __name__ == '__main__':
  	if command in ('outline', 'decode'):
  		if len (sys.argv) > 2:
 	 		if len (sys.argv) > 3:
-	 			try:
-	 				buffer_max = int (sys.argv[3])
+				try:
+					buffer_max = int (sys.argv[3])
 				except:
 					sys.stderr.write (
 						'3 invalid buffer max\n'
@@ -213,12 +183,13 @@ if __name__ == '__main__':
 			else:
 				buffer_max = 0
  			try:
- 				buffer_more = int (sys.argv[2])
+				buffer_more = int (sys.argv[2])
 			except:
 				sys.stderr.write ('2 invalid buffer size\n')
 				sys.exit (2)
 				
 		else:
+			buffer_max = 0
 	 		buffer_more = 4096
 		def more ():
 			return sys.stdin.read (buffer_more)
@@ -239,21 +210,8 @@ if __name__ == '__main__':
 		
 	sys.exit (0)
 
-# Note about this implementation
-#
-# Programs usually starts as simple shell scripts that dump some their 
-# output to STDOUT and errors to STDERR, like this:
-#	
-#	script < input 1> output 2> errors
-#
-# probably consuming input from STDIN. Also, application modules should 
-# provide such simple pipes to test separately the functions implemented.
-#
-# Generally such program consume and produce lines delimited by CR or CRLF,
-# using the readline and writeline interfaces provided by the development 
-# environemnt. In Python the infamous print statement or the sys.stdin,
-# -out or -err files methods.
-#
-# However, CR or CRLF lines as an encoding for I/O are too simple. This is
-# a well-known shortcoming of the MIME protocols and netstring protocols like 
-# QMTP have proved to be more efficient and safer than SMTP, for instance.
+
+__doc__ = "http://laurentszyster.be/blog/netstring/"
+
+
+__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'

@@ -150,7 +150,7 @@ class XML_PNS_articulate (XML_element):
         def pns_articulate (self, subject, context, dom):
                 # SAT articulate
                 if self.pns_object and self.pns_subject and len (
-                        netstring.netstrings (self.pns_subject)
+                        netstring.netlist (self.pns_subject)
                         ) > 1:
                         # there is a SAT object and an articulated subject
                         if self.pns_subject == subject:
@@ -176,7 +176,7 @@ class XML_PNS_articulate (XML_element):
                         #
                         for name, text in self.pns_sats:
                                 if text and name != subject and len (
-                                        netstring.netstrings (name)
+                                        netstring.netlist (name)
                                         ) > 1:
                                         dom.pns_statement ((
                                                 name, 'sat', text, subject
@@ -333,7 +333,7 @@ class XML_PNS_orphan (XML_element):
 
 def pns_names_utf8 (name, tag='public', attr=''):
         # how elegant are Public Names in XML?
-        names = netstring.netstrings (name)
+        names = netstring.netlist (name)
         if len (names) > 1:
                 return '<%s%s names="%s">%s</%s>' % (
                         tag, attr, xml_utf8.xml_attr (name),
@@ -417,7 +417,7 @@ def pns_names_unicode (
         name, encoding='ASCII', tag='pns:public', 
         attr=' xmlns:pns="http://pns/"'
         ):
-        names = netstring.netstrings (name)
+        names = netstring.netlist (name)
         if len (names) > 1:
                 return '<%s%s names="%s">%s</%s>' % (
                         tag, attr, xml_unicode.xml_attr (
@@ -580,7 +580,7 @@ if __name__ == '__main__':
                                         )
                                 )
                         for encoded in pipe:
-                                model = netstring.netstrings (encoded)
+                                model = netstring.netlist (encoded)
                                 sys.stdout.write (pns_xml_utf8 (
                                         model, pns_cdata_utf8 (
                                                 model[2], prefixes
@@ -608,7 +608,7 @@ if __name__ == '__main__':
                                         )
                                 )
                         for encoded in pipe:
-                                model = netstring.netstrings (encoded)
+                                model = netstring.netlist (encoded)
                                 sys.stdout.write (pns_xml_unicode (
                                         model, pns_cdata_unicode (
                                                 model[2], prefixes, encoding
