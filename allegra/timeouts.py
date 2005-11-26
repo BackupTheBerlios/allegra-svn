@@ -34,14 +34,14 @@ class Timeouts:
 		self.timeouts_deque = collections.deque ()
 		async_loop.async_schedule (
 			time.time () + self.timeouts_precision,
-			lambda w, t=self:t.timeouts_defer (w)
-			) # defer ...
+			self.timeouts_schedule
+			)
 		
         def timeouts_push (self, reference):
 		self.timeouts_deque.append ((time.time (), reference))
 		return reference
 	
-	def timeouts_defer (self, now):
+	def timeouts_schedule (self, now):
 		then = now - self.timeouts_precision - self.timeouts_period 
 		while len (self.timeouts_deque) > 0:
 			when, reference = self.timeouts_deque[0]
@@ -51,19 +51,22 @@ class Timeouts:
 			else:
 				break
 				
+		return self.timeouts_continue (now)
+
+	def timeouts_continue (self, now):
 		return (
-			now + self.timeouts_precision,
-			lambda w, t=self: t.timeouts_defer (w)
-			) # ... continue to defer ...
+			now + self.timeouts_precision, 
+			self.timeouts_schedule
+			)	
 
 	# to stop the Timeouts, simply do:
 	#
-	#	self.timeouts_defer = self.timeouts_stop
+	#	self.timeouts_continue = self.timeouts_stop
 	#
 	def timeouts_stop (self, when):
-		del self.timeouts_defer, self.timeouts_timeout
+		del self.timeouts_continue, self.timeouts_timeout
 		#
-		# ... break the circular reference on last defer.
+		# ... break the circular reference on last schedule.
 	
 	
 # Note about this implementation	

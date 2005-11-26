@@ -202,7 +202,7 @@ def loginfo_traceback (ctb=None):
 	return ctb
 
 
-# EXAMPLE
+# SYNOPSIS
 #
 # 	>>> from allegra import loginfo
 #	>>> loginfo.log ('data')

@@ -254,3 +254,115 @@ if __name__ == '__main__':
         if root == None:
                 sys.sdterr.write (dom.xml_error + '\n')
         sys.stderr.write ('instanciated in %f sec\n' % t)
+        
+        
+# Note about this implementation
+#
+# Looking deeper into celementtree C source, considering the need for an
+# iterparse interface overwhelmed its performance cost and yet its inability
+# to provide a better parser interface than expat, I'm quite satisfied to
+# have stayed quietly close to qp_xml.py original design and true to my
+# first intuition: object-oriented XML parsers are cool and they can be
+# fast too.
+#
+# It may sound vain to make such big claim before having even started the
+# optimization process, but I have had some experience with Python, expat
+# and various high profile XML libraries. As far as Python is concerned,
+# qp_xml.py still was my favorite base for developping XML processors. 
+#
+#
+# Two New Simple Interfaces
+#
+# This module delivers a few marginal improvements from Greg Stein's
+# original work: a consistent name space, without possible conflicts
+# with the many different applications of XML; element type declaration
+# and validation interfaces, providing a new point of articulation for
+# developpers and enabling a new kind of XML processor design; 
+#
+# When parsing a 
+#
+# 
+#
+# A Better Optimization Strategy: 
+#
+# 1. instanciate new objects from the C parser loop for element names
+#    indexed, using the mapped XML element class
+#
+# 2. or use a default type (possibly an ad-hoc C type too)
+#
+# 3. when no default type is provided, simply drop non-matching markup
+#    and buffer the CDATA marked up.
+#
+# This is an interface optimized for the simple folling case:
+#
+#        root = XML_dom ({u'tag': XML_class}).xml_parse ('<?xml ...')
+#
+# "hide" anything other markup than <tag/>, only call 
+#
+#        XML_class.xml_valid (self, dom)
+#
+# for each valid element and drop the schmarkup you don't care about.
+# Yet another application is to specify a class with no __new__, __init__
+# or xml_valid method and with __slots__ only for the xml_* namespace:
+#
+#         root = XML_dom (
+#                {u'tag': XML_class}, XML_element
+#                ).xml_parse ('<?xml ...')
+#
+# for which the C parser can be optimized.
+#  
+# The result would be a fast "sparse" parser, a fast "sparse" tree-maker,
+# with the most practical interface available to develop extensible, object
+# oriented and yet buffering XML processor like the PNS/XML articulator.
+# 
+# Combined with a C implementation of xml_unicode and xml_utf8 (they are
+# quite stable now), an eventual xml_c modules will deliver performances
+# not worse than celementtree when applied. Globbing a megabyte long and
+# deep XML documents in memory will allways be faster with celementtree,
+# but a simpler Allegra XML parser will "iter" through that same megabyte
+# and process at a marginally greater speed if some of its markup can be
+# dropped.
+#
+#
+# Lesson
+#
+# Practically, the lesson of all the wandering around XML in Python (from
+# qp_xml.py, pyexpat, a full SIG, then bloatware, then back to qp_xml.py
+# via ElementTree and finally back to square zero with the so much needed 
+# iterparse interface), is that people don't benchmark the basics and forget
+# easely their context.
+#
+# Python is made to integrate, prototype and test C libraries. It is a very
+# powerfull application language because those three functions are the bread
+# and butter of software developpers. But CPython is not a fast language.
+#
+# Notably, it is terribly slow at two articulations: interpreter call-back
+# and object instanciation.
+#
+# As Python packages and modules, the 4XML suite and even celementtree are
+# out of context. The first one should be (and is but by others) written
+# in C and then wrapped for Python. The second one, although close, does 
+# not provide a new point of articulation not yet made available by expat
+# itself: it is a fast but indiscriminate tree-maker that only has
+# an after-though iteration interface to develop parsers, it is a specialized
+# version of expat.
+
+# xml_dom is a different interface developped in Python, more practical for
+# Python XML processor programming and optimizable in C as a marginal 
+# enhancement of Python expat module (namely the ability to register
+# an element type map, a default type, maybe a prefix map and a processing
+# instruction list). xml_dom is an object-oriented interface for expat
+# designed to support the developpement of non-blocking object-oriented 
+# processors.
+#
+# I'm too lazy to loose focus on the context, and I did not forget my
+# benchmarks of expat: when parsing, the Python interface will cost nothing
+# until event handlers are registered, called-back and object instanciated.
+# cElementTree is *so* close to expat in the effbot benchmark, but only
+# without use of the iterparse interface.
+#
+# If you *need* to program your XML processing in Python rather than in 
+# XSLT, then you will probably end up instanciating specialized objects 
+# for many tags, paying the full price on top of the time allready spent
+# to create the cElement instance (however lite).
+#

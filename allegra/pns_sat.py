@@ -110,24 +110,21 @@ SAT_ARTICULATE_EN = (
         # quotes and a common web separator
         re.compile ('["&|]'), 
         # The Verb Came First? of those, "to be" and "to have" probably
-        #sat_articulators_re ((
-        #        'am', 'is', 'are', 'was', 'were',
-        #        'have', 'has', 'had',
-        #        )),
+        sat_articulators_re ((
+                'am', 'is', 'are', 'was', 'were',
+                'have', 'has', 'had',
+                )),
         # Subordinating Conjunctions
         sat_articulators_re ((
                 'after', 'although', 'because', 'before', 
                 'once', 'since', 'though', 'till', 'unless', 'until', 'when', 
                 'whenever', 'where', 'whereas', 'wherever', 'while', 
-                'as\\s+if', 'as\\s+long\\s+as', 'as\\s+though', 'as', 
-                'even\\s+though', 'even\\s+if', 'if\\s+only', 'if', 
-                'in\\s+order\\s+that', 'now\\s+that', 'so\\s+that', 'that', 
-                'rather\\s+than', 'than', 
+                'as', 'even', 'if', 'that', 'than',
                 )), 
         # Coordinating and Correlative Conjunctions
         sat_articulators_re ((
                 'and', 'but', 'or', 'yet', 'for', 'nor', 'so',
-                'both', 'not\\s+only', 'but\\s+also', 'either', 'neither', 
+                'both', 'not', 'but', 'either', 'neither', 
                 'whether', 
                 )), 
         # Prepositions: Locators in Time and Place
@@ -139,7 +136,7 @@ SAT_ARTICULATE_EN = (
                 'a', 'an', 'the', 
                 )),
         # Noun (Upper case, like "D.J. Bernstein" or "RDF")
-        re.compile ('((?:[A-Z]+[^\\s]*?\\s+)+)'),
+        re.compile ('(?:^|\\s+)((?:[A-Z]+[^\\s]*?(?:\\s+|$))+)'),
         # whitespaces
         re.compile ('\\s'), 
         # all sorts of hyphens 
@@ -323,29 +320,27 @@ def pns_sat_articulate (
 # but because text *is* simply articulated ... and thanks to Larry's
 # Perl Regular Expressions.
 #
-# How well text is articulated, that all depends first on the author.
+# Process
 #
-# Public Names can preserve articulation, articulators should provide
-# as much as practically possible.
+# 1. articulate text around the Public Names found in it (if any)
 #
-# It's up to the user to articulate ideas, the computer can't.
+# 2. using the same stack of RE, articulate chunks below a maximum size
+#    and then articulate each chunk.
 #
-# To infer semantic articulation to an unarticulated text is possible,
-# and there are enough natural language toolkits that will do it a lot
-# better than pns_sat.py. However, because articulators are specific
-# and text is simply articulated, most applications of Public Names do
-# not need much more than SAT to start with.
+# 3. try to articulate articulators
 #
+#
+# Localization
+# 
 # Python comes with first-class PCRE support and this module implements
 # a generic algorithm that articulates a text string against a stack
 # of regular expressions.
 #
 # Each language should have its own stack. Dialects, jargons and protocols
-# will have shorter stack than French or Japanese.
-#
-# Short formal text, like the RSS pubDate element or the HTML href attribute
-# do not need a stack. A single regular expression that can yield a two level
-# articulation is enough in most of those cases.
+# will have shorter stack than French or Japanese. Short formal text, like
+# the RSS pubDate element or the HTML href attribute do not need a stack.
+# A single regular expression that can yield a two level articulation is 
+# enough in most of those cases.
 #
 
 # The 8-bit byte string articulators and regular expressions provided are
@@ -393,4 +388,16 @@ def pns_sat_articulate (
 # Use a regular expression to articulate a statement first around the 
 # URI, e-mail, DNS domains and other computer references. Then SAT what
 # is simple articulated text.
+#
+#
+# How well text is articulated, that all depends first on the author.
+# Public Names can preserve articulation, articulators should provide
+# as much as practically possible. It's up to the user to articulate
+# ideas well, the computer can't do that.
+#
+# To infer semantic articulation to an unarticulated text is possible,
+# and there are enough natural language toolkits that will do it a lot
+# better than pns_sat.py. However, because articulators are specific
+# and text is simply articulated, most applications of Public Names do
+# not need much more than SAT to start with.
 #

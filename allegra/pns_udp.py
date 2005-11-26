@@ -17,11 +17,7 @@
 
 ""
 
-from allegra import netstring
-
-from allegra.pns_model import pns_name, pns_quintet
-from allegra.timeouts import Timeouts
-from allegra.udp_channel import UDP_dispatcher
+from allegra import netstring, timeouts, udp_peer, pns_model
 
 
 def is_ip (name):
@@ -48,7 +44,7 @@ def long_ip (i):
 	return '.'.join (l)
 
 
-class PNS_circle (UDP_dispatcher):
+class PNS_circle (udp_peer.UDP_dispatcher):
 	
 	def __init__ (self, pns_peer, name, subscribers=None):
 		self.PNS_SP= '%d:%s,0:,' % (len (name), name)
@@ -94,7 +90,7 @@ class PNS_circle (UDP_dispatcher):
 	# PNS/TCP continuation
 
 	def pns_tcp_continue (self, model, direction):
-		encoded = pns_quintet (model, direction)
+		encoded = pns_model.pns_quintet (model, direction)
 		for subscriber in self.pns_subscribers:
 			subscriber.async_net_push ((encoded,))
 
@@ -172,7 +168,7 @@ class PNS_circle (UDP_dispatcher):
 		model = list (netstring.decode (datagram))
 		if (
 			len (model) != 2 or 
-			model[0] != pns_name (model[0])
+			model[0] != pns_model.pns_name (model[0])
 			):
 			assert None == self.log (
 				datagram, 'invalid-question'
@@ -272,7 +268,7 @@ class PNS_circle (UDP_dispatcher):
         		(len (model[0]) + len (model[1]) + len (
         			'%d%d' % (len (model[0]), len (model[1]))
                         	)) > 512 or
-        		model[0] != pns_name (model[0])
+        		model[0] != pns_model.pns_name (model[0])
         		):
 			assert None == self.log (
 				datagram, 'invalid-question'
@@ -443,7 +439,7 @@ class PNS_circle (UDP_dispatcher):
 		assert None == self.log ('root ip="%s"' % right[0], 'debug')
 		self.pns_left = right[0]
 		if not self.connected:
-			UDP_dispatcher.__init__ (
+			udp_peer.UDP_dispatcher.__init__ (
 				self, self.pns_peer.pns_udp.addr[0]
 				)
 		self.pns_in_circle (right)
@@ -567,7 +563,7 @@ class PNS_axis (PNS_circle):
 		self.log ('joined-drop ip="%s"' % right[0], 'error')
 
 
-class PNS_UDP_peer (UDP_dispatcher, Timeouts):
+class PNS_UDP_peer (udp_peer.UDP_dispatcher, timeouts.Timeouts):
 
 	# PNS/UDP, at 320Kbps may set 80 timeouts per seconds, one every
 	# 12,5 millisecond which would amount to 240 timeouts in 3 seconds.
@@ -591,8 +587,8 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 		self.pns_peer = pns_peer
 		self.pns_joined = {}
 		self.pns_accepted = {}
-		Timeouts.__init__ (self, self.pns_timeout, 3, 0.3)
-		UDP_dispatcher.__init__ (self, ip, 3534)
+		timeouts.Timeouts.__init__ (self, self.pns_timeout, 3, 0.3)
+		udp_peer.UDP_dispatcher.__init__ (self, ip, 3534)
 		for name in self.pns_peer.pns_subscribed.keys ():
 			self.pns_peer.pns_subscribed[
 				name
@@ -629,7 +625,7 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 		if (
 			len (model) != 2 or
 			model[0] == '' or
-			model[0] != pns_name (model[0])
+			model[0] != pns_model.pns_name (model[0])
 			):
 			# log and drop invalid out-of-circle question ...
 			self.log (
@@ -653,11 +649,11 @@ class PNS_UDP_peer (UDP_dispatcher, Timeouts):
 	def handle_close (self):
 		self.close ()
 		for circle in self.pns_joined.values ():
-			circle.close ()
-		self.timeouts_defer = self.timeouts_stop
+			circle.handle_close ()
+		self.timeouts_continue = self.timeouts_stop
 
 	def timeouts_stop (self, when):
-		Timeouts.timeouts_stop (self, when)
+		timeouts.Timeouts.timeouts_stop (self, when)
 		self.pns_peer.pns_udp_finalize ()
 		del self.pns_peer
 

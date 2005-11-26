@@ -47,28 +47,29 @@ def pns_name (encoded, horizon, HORIZON=126):
         # does more than just assert that the encoded 8-bit byte string is
         # a valid public name: it transform it to a valid public name.
         #
-        # Pub Names is a protocol.
-        #
+        # try to decode the articulated public names
         names = [n for n in netstrings.decode (encoded) if n]
         if not names:
                 if encoded not in horizon and pns_name_clean (encoded):
+                        # clean name new in this horizon
                         horizon.add (encoded)
                         return encoded
                         
+                # unsafe 8-bit byte string or Public Name in the in horizon
                 return ''
 
-        # possibly a valid composed public name, must not be
-        # dispersed, recursively validate
+        # possibly a valid composed public name, must not be dispersed
         valid = []
         for name in names:
+                # recursively validate each articulated name in this horizon
                 name = pns_name (name, horizon, HORIZON)
                 if name:
                         valid.append (name)
-                        if len (horizon) == HORIZON:
+                        if len (horizon) >= HORIZON:
                                 break
                                 
         if len (valid) > 1:
-                # sort composing names and encode
+                # sort articulated names and encode
                 valid.sort ()
                 return netstring.encode (valid)
                 
@@ -76,7 +77,7 @@ def pns_name (encoded, horizon, HORIZON=126):
                 # return singleton as allready encoded
                 return valid[0]
                 
-        return '' # return NULL
+        return '' # nothing valid to articulate in this horizon
 
 
 def pns_quatuor (encoded, pns_names, PNS_LENGTH=1024):

@@ -23,7 +23,7 @@
 
 import time
 
-from allegra import async_loop, udp_channel, tcp_client
+from allegra import async_loop, udp_peer, tcp_client
 
 
 # unpack and parse names, ttl and preference from resource DNS records
@@ -259,7 +259,7 @@ DNS_requests = {
         }
 
 
-class DNS_client (udp_channel.UDP_dispatcher):
+class DNS_client (udp_peer.UDP_dispatcher):
 
         udp_datagram_size = 512
 
@@ -353,7 +353,7 @@ class DNS_client (udp_channel.UDP_dispatcher):
                 if ip == None:
                         import socket
                         ip = socket.gethostbyname (socket.gethostname ())
-                udp_channel.UDP_dispatcher.__init__ (self, ip)
+                udp_peer.UDP_dispatcher.__init__ (self, ip)
 
         def dns_send (self, request, when):
                 assert None == self.log (
@@ -452,7 +452,7 @@ class TCP_client_DNS (tcp_client.TCP_client):
 if __name__ == '__main__':
         import sys
         from allegra import netstring, loginfo
-        loginfo.log (
+        assert None == loginfo.log (
                 'Allegra DNS/UDP Client'
                 ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
                 'info'
@@ -475,20 +475,14 @@ if __name__ == '__main__':
                 servers = sys.argv[3:]
         else:
                 servers = dns_servers ()
-        dns_resolver = DNS_client (servers)
         if len (sys.argv) > 1:
                 if len (sys.argv) > 2:
-                        dns_resolver.dns_resolve (
-                                tuple (sys.argv[1:3]), resolve
-                                )
+                        question = tuple (sys.argv[1:3])
                 else:
-                        dns_resolver.dns_resolve (
-                                (sys.argv[1], 'A'), resolve
-                                )
+                        question = (sys.argv[1], 'A')
         else:
-                dns_resolver.dns_resolve (
-                        ('localhost', 'A'), resolve
-                        )
+                question = ('localhost', 'A')
+        DNS_client (servers).dns_resolve (question, resolve)
         async_loop.loop ()
         
         

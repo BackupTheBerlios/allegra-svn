@@ -24,7 +24,7 @@ class Async_net (async_core.Async_dispatcher):
 
         an_in_buffer_size = an_out_buffer_size = 4096
         
-        async_net_buffer = 1<<16 # buffer maximum 64KB netstrings
+        async_net_buffer = 1<<16 # buffer 64KB maximum
         
         def __init__ (self, conn=None):
                 self.an_in_buffer = ''
@@ -61,30 +61,30 @@ class Async_net (async_core.Async_dispatcher):
                         if pos < 0:
                                 if not self.an_in_buffer.isdigit ():
                                         self.async_net_error (
-                                                'not a netstring'
+                                                '1 not a netstring'
                                                 )
-                                break
+                                return
                                 
                         try:
                                 next = pos + int (self.an_in_buffer[:pos]) + 1
                         except:
-                                self.async_net_error ('not a valid length')
+                                self.async_net_error ('2 not a length')
                                 return
                                 
-                        if next > self.async_net_buffer:
-                                self.async_net_error ('buffer limit')
-                                break
+                        if 0 < self.async_net_buffer < next:
+                                self.async_net_error ('3 buffer limit')
+                                return
                                 
                         if next >= len (self.an_in_buffer):
-                                break
+                                return # ... buffer more
                         
                         if self.an_in_buffer[next] == ',':
                                 self.async_net_continue (
                                         self.an_in_buffer[pos+1:next]
                                         )
                         else:
-                                self.async_net_error ('missing end')        
-                                break
+                                self.async_net_error ('4 missing end')        
+                                return
                                 
                         self.an_in_buffer = self.an_in_buffer[next+1:]
 
