@@ -19,8 +19,7 @@
 
 import re
 
-from allegra import netstring
-from allegra.pns_model import pns_name
+from allegra import netstring, pns_model
 
 
 # Articulators an whitespaces for the roman alphabet, ymmv :-)
@@ -47,39 +46,33 @@ def pns_sat_utf8 (
         HORIZON=126, depth=0, articulators=SAT_SPLIT_UTF8
         ):
         "a simplistic lexer for short UTF-8 text"
-        while articulated.find (articulators[depth]) < 0:
-                depth += 1
-                if depth < len (articulators):
-                        continue
-                
-                return articulated
-
-        if depth+1 < len (articulators):
-                names = []
-                for name in articulated.split (articulators[depth]):
-                        if name == '':
-                                continue
-                                
-                        name = pns_sat_utf8 (
-                                name, horizon, HORIZON, depth+1, articulators
-                                ) 
-                        if name != '':
-                                names.append (name)
-                                if len (horizon) > HORIZON:
-                                        break
-        else:
+        bottom = len (articulators)
+        while True:
                 names = articulated.split (articulators[depth])
-        if len (names) > 1:
-                name = pns_name (netstring.encode (names), set ())
-                if not name or name in horizon:
+                if names:
+                        break
+
+                depth += 1
+                if depth == bottom:
+                        # not match found, bottom of the stack reached.
+                        return articulated
+                
+        if depth + 1 < bottom:
+                names = [pns_sat_utf8 (
+                        name, horizon, HORIZON, depth+1, articulators
+                        ) for name in names]
+        h = set ()
+        name = pns_model.pns_name (netstring.encode (names), h)
+        if len (h) > 1:
+                if name in horizon:
                         return ''
                         
+                # articulated Public Names
                 horizon.add (name)
                 return name
                 
-        if len (names) > 0 and names[0]:
-                horizon.add (names[0])
-                return names[0]
+        elif name:
+                return name
                 
         return ''
         
@@ -89,7 +82,7 @@ def pns_sat_utf8 (
 def sat_articulators_re (articulators):
         return re.compile (
                 '(?:^|\\s+)'
-                '(?:(?:%s))'
+                '((?:%s))'
                 '(?:$|\\s+)' % ')|(?:'.join (articulators)
                 )
 
@@ -109,11 +102,6 @@ SAT_ARTICULATE_EN = (
         re.compile ('[(]|[)]|[[]|[]]|{|}|\\s+-+\\s+'),
         # quotes and a common web separator
         re.compile ('["&|]'), 
-        # The Verb Came First? of those, "to be" and "to have" probably
-        sat_articulators_re ((
-                'am', 'is', 'are', 'was', 'were',
-                'have', 'has', 'had',
-                )),
         # Subordinating Conjunctions
         sat_articulators_re ((
                 'after', 'although', 'because', 'before', 
@@ -144,7 +132,7 @@ SAT_ARTICULATE_EN = (
         )
 
 
-# The lexer itself ...
+# the SAT Regular Expression lexer itself ...
 #
 
 def pns_sat_re (
@@ -153,15 +141,33 @@ def pns_sat_re (
         articulators=SAT_ARTICULATE_EN, 
         whitespaces=SAT_STRIP_UTF8
         ):
-        while articulators[depth].search (articulated) == None:
-                depth += 1
-                if depth < len (articulators):
-                        continue
-                
-                return articulated
+        # move down the stack until an articulator pattern is matched ...
+        bottom = len (articulators)
+        while True:
+                matched = articulators[depth].findall (articulated)
+                if matched:
+                        break
 
-        if depth+1 < len (articulators):
+                depth += 1
+                if depth == bottom:
+                        # not match found, bottom of the stack reached.
+                        return articulated
+                
+        if type (matched[0]) == tuple:
+                # validate "grouping" articulators as Public Names and add
+                # them to the list of names articulated ...
+                names = [
+                        pns_model.pns_name (netstring.encode ([
+                                s.strip (whitespaces) for s in groups
+                                ]), horizon) for groups in matched
+                        ]
+        else:
                 names = []
+        if depth + 1 == bottom:
+                # bottom of the stack reached, simply split
+                names.extend (articulators[depth].split (articulated))
+        else:
+                # not yet at the bottom of the stack, recurse
                 for text in articulators[depth].split (articulated):
                         if text.strip (whitespaces) == '':
                                 continue
@@ -173,17 +179,18 @@ def pns_sat_re (
                                 names.append (name)
                                 if len (horizon) > HORIZON:
                                         break
-                                        
-        else:
-                names = articulators[depth].split (articulated)
+                                                       
+        # validate the articulated name(s) as a Public Names
         if len (names) > 1:
-                return pns_name (netstring.encode (names), horizon)
+                return pns_model.pns_name (netstring.encode (names), horizon)
                 
         if len (names) > 0 and names[0]:
                 return names[0]
                 
         return ''
         
+                
+# SAT chunking interface 
         
 def pns_sat_chunk (
         articulated, horizon, chunks, 
@@ -191,18 +198,21 @@ def pns_sat_chunk (
         articulators=SAT_ARTICULATE_EN, CHUNK=507,
         whitespaces=SAT_STRIP_UTF8
         ):
+        bottom = len (articulators)
         # move down the stack of regexp until ...
         while articulators[depth].search (articulated) == None:
                 depth += 1
-                if depth < len (articulators):
+                if depth < bottom:
                         continue
                 
                 # ... the end.
                 return articulated
 
-        # ... until an articulation is found.
-        if depth+1 < len (articulators):
+        # ... an articulation is found.
+        if depth + 1 < bottom:
+                # not yet at the bottom of the stack, recurse ...
                 if len (articulated) > CHUNK:
+                        # chunk more ...
                         for text in articulators[depth].split (articulated):
                                 if text.strip (whitespaces) == '':
                                         continue
@@ -213,6 +223,7 @@ def pns_sat_chunk (
                                         ))
                         return horizon
                         
+                # chunk no more, articulate ...
                 horizon = horizon.copy ()
                 chunks.append ((
                         pns_sat_re (
@@ -222,15 +233,18 @@ def pns_sat_chunk (
                         ))
                 return horizon
                 
+        # bottom of the stack reached, split ...
         names = articulators[depth].split (articulated)
         if len (names) > 1:
-                name = pns_name (netstring.encode (names), horizon)
+                name = pns_model.pns_name (netstring.encode (names), horizon)
                 if name:
                         chunks.append ((name, articulated))
         elif len (names) > 0 and names[0]:
                 chunks.append ((names[0], None))
         return horizon
         
+        
+# cleasing out Public Names from SAT.
         
 NETSTRING_RE = re.compile ('[1-9][0-9]*:')
 
@@ -289,11 +303,11 @@ def pns_sat_articulate (
                         if n != None and n.strip (whitespaces)
                         ]
                 if names:
-                        name = pns_name (
+                        name = pns_model.pns_name (
                                 netstring.encode (names), horizon, HORIZON
                                 )
                 else:
-                        name = pns_name (m.group (), horizon, HORIZON)
+                        name = pns_model.pns_name (m.group (), horizon, HORIZON)
                 if name:
                         chunks.append ((name, m.group ()))
                 articulated = articulated[m.end ():]
@@ -310,94 +324,29 @@ def pns_sat_articulate (
                         ), text))
         
         
-# TODO: a system pipe to articulate mime messages in pns_mime.py ;-)
-        
+# TODO: a simplification of SAT, making it tolerant to Public Names and
+#       netstrings (simply, validate them!) and "grouping" at inside
+#       the regexp at the same level as the articulated parts, effectively
+#       allowing to keep *and* rearticulate some of the patterns matched
+#       with the rest of the stack beneath.
+#
+#       writing a natural language lexer as a stack of RE is both practical
+#       and effective: CPython's SRE library is compliant and fast, and a
+#       stack is one of the easiest programming pattern possible.
+#
+#       yet the result are surprisingly good for such vocabulary and formal
+#       pattern articulation (punctuation, case, etc). with as little loss
+#       as possible a SAT lexer can produce very well-articulated Public
+#       Names, but only time and test will tell which RE stack will prevail
+#       or carve a contextual niche and which will be abandonned.
+
 # Note about this implementation
 #
-# Although "cheap", this is a multipurpose SAT articulator that will 
-# fit many simple text articulations. As-is, it can articulate common
-# UTF-8 text file, with an impressive depth. Not because it is complex,
-# but because text *is* simply articulated ... and thanks to Larry's
-# Perl Regular Expressions.
+# What a PNS/SAT articulator does is "read" a text by chunks and produce
+# for each chunk a sequence of statements:
 #
-# Process
+#        3:The,11:articulated,5:first,4:text,
+#        sat
+#        The first articulated text
 #
-# 1. articulate text around the Public Names found in it (if any)
-#
-# 2. using the same stack of RE, articulate chunks below a maximum size
-#    and then articulate each chunk.
-#
-# 3. try to articulate articulators
-#
-#
-# Localization
-# 
-# Python comes with first-class PCRE support and this module implements
-# a generic algorithm that articulates a text string against a stack
-# of regular expressions.
-#
-# Each language should have its own stack. Dialects, jargons and protocols
-# will have shorter stack than French or Japanese. Short formal text, like
-# the RSS pubDate element or the HTML href attribute do not need a stack.
-# A single regular expression that can yield a two level articulation is 
-# enough in most of those cases.
-#
-
-# The 8-bit byte string articulators and regular expressions provided are
-# not applicable to all simple articulated text, but they will do nicely
-# for most ASCII english web content out there. That's the biggest chunk
-# available for large test purposes.
-#
-# The generic interface is this:
-#
-#        pns_sat (string, horizon, articulated=[], HORIZON=507)
-#
-# and fills a list with pairs:
-#
-#        [(public_name, articulated_text)]
-#       
-# This is practical to provide the accessor with the extracted regular
-# expressions and chunks of natural language articulation separately, 
-# ready for PNS statement.
-#
-#
-# SAT for byte strings
-#
-#        horizon = set ()
-#        name = pns_sat_utf8 ('This is a test.', horizon)
-#
-# Consume the string an build a public name until a given horizon from a 
-# Simple Articulated Text encoded (SAT) in UTF-8 (or any other byte string).
-#
-# The first articulators are supposed to delimit less articulated text. 
-# For instance a sentence delimited by a dot is usually more articulated than
-# a sequence of words delimited by a coma, etc.
-#
-#
-# SAT for web 
-#
-#        horizon = set ()
-#        chunks = []
-#        name = pns_sat_articulate (
-#                'This is a test about laurentsyster.be. '
-#                'e-mail: <contact@laurentszyster.be> '
-#                'homepage: http://laurentszyster.be/blog/ ', 
-#                horizon, chunks
-#                )
-#
-# Use a regular expression to articulate a statement first around the 
-# URI, e-mail, DNS domains and other computer references. Then SAT what
-# is simple articulated text.
-#
-#
-# How well text is articulated, that all depends first on the author.
-# Public Names can preserve articulation, articulators should provide
-# as much as practically possible. It's up to the user to articulate
-# ideas well, the computer can't do that.
-#
-# To infer semantic articulation to an unarticulated text is possible,
-# and there are enough natural language toolkits that will do it a lot
-# better than pns_sat.py. However, because articulators are specific
-# and text is simply articulated, most applications of Public Names do
-# not need much more than SAT to start with.
-#
+# to make in a context named after the chunk's semantic horizon.
