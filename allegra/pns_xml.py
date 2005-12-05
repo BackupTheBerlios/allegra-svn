@@ -17,27 +17,21 @@
 
 ""
 
-from allegra.pns_model import pns_name
-from allegra.pns_sat import \
-        pns_sat_utf8, pns_sat_articulate, \
-        SAT_STRIP_UTF8, SAT_SPLIT_UTF8, SAT_ARTICULATE_EN, SAT_RE_WWW
-from allegra.xml_dom import \
-        XML_dom, XML_element, xml_delete, xml_orphan
-        
-from allegra import netstring, xml_utf8, xml_unicode                                                
+from allegra import \
+        netstring, xml_dom, xml_utf8, xml_unicode, pns_model, pns_sat
 
 
-# XML to PNS
+# XML to PNS articulation
 
-class XML_PNS_articulate (XML_element):
+class XML_PNS_articulate (xml_dom.XML_element):
         
         # The basic SAT and RE articulator, your mileage may vary ...
         
         pns_context = pns_subject = pns_object = xml_string = ''
         
-        sat_re = SAT_RE_WWW
-        sat_strip = SAT_STRIP_UTF8
-        sat_articulators = SAT_ARTICULATE_EN
+        sat_re = pns_sat.SAT_RE_WWW
+        sat_strip = pns_sat.SAT_STRIP_UTF8
+        sat_articulators = pns_sat.SAT_ARTICULATE_EN
         sat_horizon = 126
 
         pns_articulated = set ()
@@ -91,7 +85,7 @@ class XML_PNS_articulate (XML_element):
                                         )
                                 ]
                         if len (names) > 1:
-                                self.pns_subject = pns_name (
+                                self.pns_subject = pns_model.pns_name (
                                         netstring.encode (names),
                                         self.pns_horizon
                                         )
@@ -116,7 +110,7 @@ class XML_PNS_articulate (XML_element):
                 # rest of the text as one public name (save the horizon
                 # for latter use ...).
                 if self.pns_object:
-                        pns_sat_articulate (
+                        pns_sat.pns_sat_articulate (
                                 self.pns_object, 
                                 self.pns_horizon, 
                                 self.pns_sats,
@@ -129,7 +123,7 @@ class XML_PNS_articulate (XML_element):
                                 len (self.pns_sats) > 1 and 
                                 len (self.pns_horizon) < self.sat_horizon
                                 ):
-                                self.pns_subject = pns_name (
+                                self.pns_subject = pns_model.pns_name (
                                         netstring.encode ([
                                                 item[0] 
                                                 for item in self.pns_sats
@@ -204,7 +198,7 @@ class XML_PNS_context (XML_PNS_articulate):
                 self.pns_articulate (
                         self.pns_subject, parent.pns_subject, dom
                         )
-                xml_delete (self)
+                xml_dom.xml_delete (self)
         
         def pns_articulate (self, subject, context, dom):
                 # XML, no SAT for a context!
@@ -232,7 +226,7 @@ class XML_PNS_validate (XML_PNS_articulate):
                 # recode the original CDATA first, for instance HTML using
                 # Tidy and some UNICODE magic ... but that's another story).
                 #
-                valid = XML_dom ()
+                valid = xml_dom.XML_dom ()
                 valid.xml_unicoding = 0
                 valid.xml_parser_reset ()
                 e = valid.xml_parse_string (self.xml_first)
@@ -249,7 +243,7 @@ class XML_PNS_validate (XML_PNS_articulate):
                         return
                         
                 # articulate cleansed CDATA
-                pns_sat_articulate (
+                pns_sat.pns_sat_articulate (
                         self.pns_object, 
                         self.pns_horizon,
                         self.pns_sats, 
@@ -262,7 +256,7 @@ class XML_PNS_validate (XML_PNS_articulate):
                         len (self.pns_sats) > 1 and 
                         len (self.pns_horizon) < self.sat_horizon
                         ):
-                        self.pns_subject = pns_name (
+                        self.pns_subject = pns_model.pns_name (
                                 netstring.encode (self.pns_sats),
                                 set ()
                                 )
@@ -291,22 +285,22 @@ class XML_PNS_validate (XML_PNS_articulate):
                 # undispersed XML "porte-manteaux".
                 
                                                           
-class XML_PNS_delete (XML_element):
+class XML_PNS_delete (xml_dom.XML_element):
         
         # drop the element from the articulated XML tree 
         
         def xml_valid (self, dom):
-                xml_delete (self)
+                xml_dom.xml_delete (self)
 
 
-class XML_PNS_orphan (XML_element):
+class XML_PNS_orphan (xml_dom.XML_element):
         
         # remove the element from the tree and move its orphans to its
         # parent children, effectively making the element shallow to
         # the articulator
 
         def xml_valid (self, dom):
-                xml_orphan (self)
+                xml_dom.xml_orphan (self)
 
 
 # PNS to XML model
@@ -645,10 +639,10 @@ if __name__ == '__main__':
                 
                 about = sys.argv[1]
                 t = time.time ()
-                dom = XML_dom ()
+                dom = xml_dom.XML_dom ()
                 dom.xml_unicoding = 0
-                dom.xml_class = XML_PNS_articulate
-                dom.xml_classes = {}
+                dom.xml_type = XML_PNS_articulate
+                dom.xml_types = {}
                 dom.xml_parser_reset ()
                 dom.pns_subject = about
                 dom.pns_statement = pns_stdio_statement
@@ -661,3 +655,71 @@ if __name__ == '__main__':
         t = time.time () - t
         sys.stderr.write ('Transformed in %f secs\n' % t) 
         sys.exit ()
+
+
+# PNS/XML Synopsis:
+#
+# GET http://home.com/mypage.html HTTP/1.1
+# <html>
+# <head><title>My Home Page</title>
+# <body>This is my home page on the 
+# <a href="www.w3.org">World Wide Web</a>.</body>
+# </html>
+#
+# 4:Home,2:My,4:Page,
+# title
+# <title>My Home Page</title>
+# http://home.com/mypage.html
+#
+# 4:This,...
+# body
+# <body>This is my home page on the <a name="3:Web,4:Wide,6:World,"/>.</body>
+# http://home.com/mypage.html
+#
+# 3:Web,4:Wide,6:World,
+# a
+# <a href="www.w3.org">World Wide Web</a>.
+# 4:This,...
+#
+# http://home.com/mypage.html
+# html
+# <head><title name="4:Home,2:My,4:Page,"/></head><body name="4:This,..."/>
+# 19:4:Home,2:My,4:Page,,?4:This,...
+#
+# 
+# An PNS/XML Metabase
+#
+# This module is designed to transform an XML string into a string of
+# Public RDF statements. It will "granularize" any large and complex
+# document into a sequence of well-articulated statements made to a
+# PNS metabase. And it does it as to allow a PNS user agent to aggregate
+# the documents or parts of it by "pulling" the document as far as required
+# for its application.
+#
+# What a PNS/XML metabase contains is a large set of atomic statements
+# with an UTF-8 encoded XML string as object (and possibly an invalid
+# one, trunkated to the limit of the PNS/UDP datagram size).
+#
+# The challenge for a PNS/XML user agent is to slice input in such way
+# as to produce statements that fill most of the PNS/UDP datagram but
+# not all. For instance, most of the essential markup and CDATA of an
+# RSS item may fit a 1024 bytes datagram, but certainly not a fat one
+# with all its description, content and application links.
+#
+# The X classes provided to develop simple PNS/XML articulators fit
+# common cases: 
+#
+# 1. no children and large text, an RSS description.
+# 2. no children and small text, RSS title and HTML anchors.
+# 3. children, RSS item or HTML paragraph.
+#
+#
+# Caveat!
+#
+# Any PNS/XML application should validate an XML string and must validate
+# the one that fills the PNS/UDP datagram. Under the assumption of a strictly
+# private metabase fed with valid XML strings only, a PNS/XML metabase
+# application may simply dump the XML retrieved.
+#
+# Note also that the PNS/XML transformer expect expat to return UTF-8 encoded
+# 8-bit byte strings, not UNICODE.

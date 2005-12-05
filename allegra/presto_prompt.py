@@ -19,11 +19,7 @@
 
 import re, types
 
-from allegra.prompt import compact_traceback, python_prompt
-from allegra.producer import Simple_producer
-from allegra.xml_unicode import xml_attr
-from allegra.xml_dom import XML_element
-from allegra.presto import presto_xml, presto_synchronize
+from allegra import prompt, producer, xml_unicode, xml_dom, presto
 
 
 # The PRESTo XML flavour of Python's builtin dir()
@@ -44,12 +40,14 @@ PRESTo_types = (types.InstanceType, object)
 class _NO_INSTANCE: pass
 
 def presto_xdir (self, instance):
-        e = XML_element ()
+        e = xml_dom.XML_element ()
         e.xml_name = u'http://presto/ dir'
         if instance == _NO_INSTANCE:
                 e.xml_children = [
-                        presto_xml (None, set ()),
-                        presto_xml (self.presto_prompt_env.keys (), set ())
+                        presto.presto_xml (None, set ()),
+                        presto.presto_xml (
+                                self.presto_prompt_env.keys (), set ()
+                                )
                         ]
                 return e
 
@@ -68,11 +66,11 @@ def presto_xdir (self, instance):
         else:
                 names = list (set (names).difference (properties))
         e.xml_children = [
-                presto_xml (instance, set (walked)),
-                presto_xml (names, set ())
+                presto.presto_xml (instance, set (walked)),
+                presto.presto_xml (names, set ())
                 ]
         if properties:
-                e.xml_children.append (presto_xml (dict ([
+                e.xml_children.append (presto.presto_xml (dict ([
                         (n, instance.__dict__.get (n)) for n in properties
                         ]), set (walked)))
         # self.presto_prompt_env['__builtins__'] = None
@@ -103,7 +101,7 @@ def presto_prompt_async (self, reactor):
         # (to prevent circular reference and ensuing memory
         # leak) then return the XML producer.
         #
-        method, result = python_prompt (
+        method, result = prompt.python_prompt (
                 self.presto_prompt_line, self.presto_prompt_env
                 )
         # do not walk the __builtins__ or the prompt environnement
@@ -134,17 +132,17 @@ def presto_prompt_async (self, reactor):
         # simply result in an empty element.
         #
         if method == 'excp':
-                result = presto_xml (result, set (walked))
+                result = presto.presto_xml (result, set (walked))
         elif hasattr (result, 'xml_name') or (
                 result != reactor and hasattr (result, 'more')
                 ):
-                e = XML_element ()
+                e = xml_dom.XML_element ()
                 e.xml_name = u'http://presto/ %s' % method
                 e.xml_children = [result]
                 return e
                 
         elif self.presto_prompt_env.has_key ('__builtins__'):
-                result = presto_xml (result, set (walked))
+                result = presto.presto_xml (result, set (walked))
                 del self.presto_prompt_env['__builtins__']
         return (
                 '<presto:%s'
@@ -185,9 +183,9 @@ def presto_prompt_sync (self, reactor):
                 env = {} 
         env['reactor']= reactor
         env['self'] = self
-        method, result = python_prompt (line, env)
+        method, result = prompt.python_prompt (line, env)
         reactor ('<presto:%s xmlns:presto="http://presto/">' % method)
-        reactor (presto_xml (result, set ()))
+        reactor (presto.presto_xml (result, set ()))
         reactor ('</presto:%s>' % method)
         reactor ('')
 
@@ -210,7 +208,7 @@ def presto_debug_sync (Debug):
         #
         presto_debug_async (Debug)
         # Debug.presto_prompt_sync = presto_prompt_sync
-        Debug.presto_methods[u'sync'] = presto_synchronize (
+        Debug.presto_methods[u'sync'] = presto.presto_synchronize (
                 presto_prompt_sync
                 )
 

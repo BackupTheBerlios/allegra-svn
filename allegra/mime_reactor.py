@@ -20,7 +20,7 @@ from allegra import \
 	finalization, async_chat, collector, producer, reactor, mime_headers
 
 
-class MIME_producer:
+class MIME_producer (object):
 	
 	mime_producer_lines = \
 		mime_producer_headers = mime_producer_body = None
@@ -43,7 +43,7 @@ class MIME_producer:
 			)
 
 
-class Escaping_producer:
+class Escaping_producer (object):
 
 	"A producer that escapes a sequence of characters"
 
@@ -77,7 +77,7 @@ class Escaping_producer:
 		return buffer
 
 
-class MIME_collector:
+class MIME_collector (object):
 	
 	"""A collector implementation for all MIME collectors protocols,
 	like MULTIPART but also SMTP, HTTP, etc ..."""
@@ -85,34 +85,8 @@ class MIME_collector:
 	collector_is_simple = False
 	
 	mime_collector_buffer = ''
-	mime_collector_lines = None
-	mime_collector_body = None
-
-	def __init__ (
-		self, headers=None, set_terminator=None, Collector=None
-		):
-		# first maybe attribute another set_terminator method,
-		if set_terminator != None:
-			self.set_terminator = set_terminator
-		self.MIME_collector = Collector or reactor.Buffer_reactor
-		if headers == None:
-			# if no headers have been provided, get them and so
-			# set the terminator to '\r\n\r\n'
-			#
-			self.set_terminator ('\r\n\r\n')
-		else:
-			# or consider the headers as allready collected and
-			# immediately set the body collector to the result of
-			# the continuation ...
-			#
-			self.mime_collector_headers = headers
-			self.mime_collector_body = \
-				self.mime_collector_continue ()
-		#
-		# This "akward" initialisation does actually match a very
-		# practical application of MULTIPART collector. And it also 
-		# serves decently when mixing with an asynchat channel to
-		# form HTTP or SMTP servers and clients. 
+	mime_collector_lines = \
+		mime_collector_headers = mime_collector_body = None
 
 	def collect_incoming_data (self, data):
 		# collect the MIME body or its headers
@@ -131,24 +105,22 @@ class MIME_collector:
 			self.mime_collector_buffer = ''
 			self.mime_collector_body = \
 				self.mime_collector_continue ()
-		else:
+		elif self.mime_collector_body.found_terminator ():
 			# if the MIME body final terminator is reached,
 			# finalize it and reset the state of the collector
-			if self.mime_collector_body.found_terminator ():
-				self.mime_collector_finalize ()
-				self.mime_collector_buffer = ''
-				self.set_terminator ('\r\n\r\n')
+			self.mime_collector_buffer = ''
+			self.mime_collector_finalize ()
 
 	def mime_collector_continue (self):
-		return self.MIME_collector ()
+		return reactor.Buffer_reactor ()
 
-	def mime_collector_finalize (self, collector):
-		self.mime_collector_headers = \
-			self.mime_collector_body = \
-			self.mime_collector_lines = None
+	def mime_collector_finalize (self):
+		self.mime_collector_lines = \
+			self.mime_collector_headers = \
+			self.mime_collector_body = None
 	
 
-class MULTIPART_collector:
+class MULTIPART_collector (object):
 	
 	"A recursive MIME/MULTIPART collector wrapper"
 
@@ -223,8 +195,24 @@ class MIME_reactor (
 	MIME_collector, MIME_producer, finalization.Finalization
 	):
 
-	__init__ = MIME_collector.__init__
-		
+	def __init__ (self, headers=None, set_terminator=None):
+		# first maybe attribute another set_terminator method,
+		if set_terminator != None:
+			self.set_terminator = set_terminator
+		if headers == None:
+			# if no headers have been provided, get them and so
+			# set the terminator to '\r\n\r\n'
+			#
+			self.set_terminator ('\r\n\r\n')
+		else:
+			# or consider the headers as allready collected and
+			# immediately set the body collector to the result of
+			# the continuation ...
+			#
+			self.mime_collector_headers = headers
+			self.mime_collector_body = \
+				self.mime_collector_continue ()
+
 	def mime_collector_continue (self):
 		body = reactor.Buffer_reactor ()
 		MIME_producer.__init__ (
@@ -271,10 +259,10 @@ if __name__ == '__main__':
 #
 # The lifecycle of a one way MIME proxy is usally this one:
 #
-#	0. instanciated, completed and set as its mime_body_collector
+#	0. instanciated, completed and set as its mime_collector_body
 #          by the MIME collector channel, with a Buffer_reactor as body
-#	1. pushed to the MIME producer channel with its mime body
-#	   producer set to its mime_body_collector
+#	1. pushed to the MIME producer channel with its mime_producer_body
+#	   set to its mime_collector_body
 #	2. dereferenced by the collector channel when collected
 #	3. dereferenced by the producer channel when produced
 #	4. finalized
@@ -286,12 +274,11 @@ if __name__ == '__main__':
 # A MIME server can also be considered a one-way proxy using the same
 # channel to collect requests from and produce responses to ;-)
 #
-#	0. instanciated, completed and and set as its mime_body_collector
+#	0. instanciated, completed and and set as its mime_collector_body
 #          by the MIME collector channel if there is a body to collect
 #	1. pushed to the server channel
-#	2. dereferenced by the server channel when collected
-#	3. dereferenced by the server channel when produced
-#	4. finalized
+#	2. dereferenced by the server channel when produced
+#	3. finalized
 #
 # The full implication of that original design of a MIME server, is
 # that you can pipeline HTTP/1.1 requests like POST and PUT and still
@@ -302,8 +289,7 @@ if __name__ == '__main__':
 #
 #	0. instanciated and completed by a MIME client channel
 #	1. pushed to the client channel
-#	2. dereferenced by the client channel when produced
-#	3. dereferenced by the client channel when collected
-#	4. finalized
+#	2. dereferenced by the client channel when collected
+#	3. finalized
 #
 

@@ -46,6 +46,9 @@ class NNRP_client_channel (
                         
                 if nnrp_response == '':
                         pass
+                        
+        def nnrp_user (self, name, password):
+                pass
                 
         def nnrp_group (self, name):
                 pass

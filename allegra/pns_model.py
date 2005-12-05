@@ -48,7 +48,7 @@ def pns_name (encoded, horizon, HORIZON=126):
         # a valid public name: it transform it to a valid public name.
         #
         # try to decode the articulated public names
-        names = [n for n in netstrings.decode (encoded) if n]
+        names = [n for n in netstring.decode (encoded) if n]
         if not names:
                 if encoded not in horizon and pns_name_clean (encoded):
                         # clean name new in this horizon
@@ -58,7 +58,7 @@ def pns_name (encoded, horizon, HORIZON=126):
                 # unsafe 8-bit byte string or Public Name in the in horizon
                 return ''
 
-        # possibly a valid composed public name, must not be dispersed
+        # articulated Public Names
         valid = []
         for name in names:
                 # recursively validate each articulated name in this horizon
@@ -66,15 +66,15 @@ def pns_name (encoded, horizon, HORIZON=126):
                 if name:
                         valid.append (name)
                         if len (horizon) >= HORIZON:
-                                break
+                                break # but only under this HORIZON
                                 
         if len (valid) > 1:
-                # sort articulated names and encode
+                # sort Public Names and encode
                 valid.sort ()
                 return netstring.encode (valid)
                 
         if len (valid) > 0:
-                # return singleton as allready encoded
+                # return a "singleton"
                 return valid[0]
                 
         return '' # nothing valid to articulate in this horizon
@@ -83,7 +83,7 @@ def pns_name (encoded, horizon, HORIZON=126):
 def pns_quatuor (encoded, pns_names, PNS_LENGTH=1024):
         # a valid quatuor must have subject, predicate, object and context
         #
-        model = list (netstrings.decode (encoded))
+        model = list (netstring.decode (encoded))
         if len (model) != 4:
                 return None, '1 not a quatuor'
         
@@ -154,39 +154,34 @@ def pns_quintet (model, direction):
         
         
 if __name__ == '__main__':
-        import sys, time
-        assert None == sys.stderr.write (
+        import sys, time, exceptions
+        from allegra import loginfo
+        assert None == loginfo.log (
                 'Allegra PNS/Model Validation'
-                ' - Copyright 2005 Laurent A.V. Szyster\n'
+                ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0', 
+                'info'
                 )
-        from exceptions import StopIteration
         def benchmark (t, c):
                 t = (time.time () - t)
-                sys.stderr.write ('\n\n%d in %f seconds (%f/sec)\n' % (
-                        c, t, (c/t)
-                        ))
+                loginfo.log (
+                        'Validated %d statements in %f seconds'
+                        ' (%f/sec)' % (c, t, (c/t)), 'info'
+                        )
         timer = time.time ()
         counter = 0
         pipe = netstrings.netpipe (lambda: sys.stdin.read (4096))
-        while 1:
+        while True:
                 try:
                         encoded = pipe.next ()
-                        model, error = pns_quatuor (encoded, ())
-                        counter += 1
-                        if model:
-                                sys.stdout.write (
-                                        '%d:%s,' % (len (encoded), encoded)
-                                        )
-                        else:
-                                sys.stderr.write (
-                                        '%d:%s,' % (len (encoded), encoded)
-                                        )
-                                sys.stderr.write (
-                                        '%d:%s,' % (len (error), error)
-                                        )
-                except StopIteration:
+                except exceptions.StopIteration:
                         break
 
+                model, error = pns_quatuor (encoded, ())
+                counter += 1
+                if model:
+                        loginfo.log (encoded)
+                else:
+                        loginfo.log (encoded, error)
         assert None == benchmark (timer, counter)
         #
         # Validate a PNS/TCP session, valid goes to STDOUT, invalid to STDERR.

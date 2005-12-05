@@ -454,7 +454,7 @@ class PRESTo_root (loginfo.Loginfo):
                         'debug'
                         )
                 reactor.presto_dom = xml_dom.XML_dom ()
-                reactor.presto_dom.xml_classes = self.presto_classes
+                reactor.presto_dom.xml_types = self.presto_classes
                 reactor.presto_dom.presto_path = path
                 if root == None:
                         reactor.presto_dom.xml_parser_reset ()
@@ -553,7 +553,7 @@ def presto_rest (reactor, handler):
         #     also, make a set of this "masked" state interfaces and
         #     attach both to the reactor ...
         #
-        #     the purpose of this implementation is filter out undefined
+        #     the purpose of this implementation is to filter out undefined
         #     interfaces, complete the REST vector with XML attributes
         #     values (if they are available), and provide PRESTo methods
         #     with an independant copy of the method/instance REST state
@@ -639,25 +639,23 @@ def presto_rest (reactor, handler):
 # Seven Points of Articulations, Eight Degrees of Freedom
 #
 # Allegra's PRESTo adds PNS to the standard six points of articulation in
-# web development and integrates that stack for application peers:
+# web development,integrates that stack for application peers:
 #
-# 1. PNS               Semantic Metabase | Distribution, Inference, ...
-# 2. XML               Data Model | Aggregation, Persistence, ...
+# 1. PNS               Metabase | Distribution, Inference, ...
+# 2. XML               Data | Aggregation, Persistence, ...
 # 3. HTTP              The Network API for all services
-# 4. XSLT              Display | Localisation, Local Transformation, ...
+# 4. XSLT              Display | Localisation, Transformation, ...
 # 5. CSS               Look & Feel | Themes, Animation, ...
-# 6. HTML              Web Integration | 
-# 7. JavaScript        Local Interactivity | AJAX, Greasemonkey
+# 6. HTML              Web | User Interface, Integration, ...
+# 7. JavaScript        Scripting | Interaction, AJAX, Greasemonkey, ...
 #
-# and provide a host for the first three. You can use Eclipse and various free
-# pluggins to integrate development with the last four. And with Allegra's
-# practical logging and prompt interfaces, it proves to be a very effective
-# workbench for network applications development.
+# and provide a host for the first three. You can use Eclipse to integrate 
+# development with the last four.
 #
 # Although there is no such thing as a "common" web application, those seven
 # points provide enough degrees of freedom to develop the most complex
 # statefull web peer applications you can dream of ... or write a quick and
-# dirty CGI script (which is what you should do first, of course).
+# dirty CGI-like script (which is what you should do first, of course).
 #
 #
 # Make No Mistake ...
@@ -695,6 +693,18 @@ def presto_rest (reactor, handler):
 #
 #    And damn fast.
 #
+#    On a modest modern PC (1.5Ghz), a PRESTo request submitted by HTTP for
+#    a cached instance is dispatched in much less than a millisecond when
+#    handling the REST of the request is defered. 
+#
+#    So, practically, a modest PRESTo peer can handle more than one thousand
+#    requests per seconds as long as there is enough memory available to
+#    cache every instance, and that each method accessed consist in a few
+#    simple lines of Python or synchronized interfaces to a fast C module
+#    that is thread-safe and GIL-releasing.
+#
+#    Safely.
+#
 #    Finally, to access blocking API you can easely mix-in synchronized
 #    methods, audit their thread-safety and restrict their CPU resources 
 #    to a managed array of threads.
@@ -725,6 +735,13 @@ def presto_rest (reactor, handler):
 #
 # 3. Productivity.
 #
+#    A PRESTo application can be consistently specified in XML first, then 
+#    distributed to its system administrator, architect, analyst-programmers
+#    and UI designers. Each one will use the same XML representation of a
+#    component instance to design style sheets, program functions and test
+#    the integration of a new component type of instance in a distributed 
+#    metabase application.
+#
 #    The well-articulated development process of a PRESTo application serves
 #    a very important purpose for "entreprise software development":
 #    developpers accountability. Deliverables for every "points of
@@ -736,6 +753,13 @@ def presto_rest (reactor, handler):
 #    Allegra's PRESTo development stack is fully supported by Eclipse
 #    and its Python, XML, CSS and JavaScript pluggins. It blends beautifully
 #    in the stack of defacto open source standards for web development.
+#
+#    Finally, PRESTo is a productive investment because it scales simply.
+#
+#    If one peer can handle one thousand request per seconds, ten PRESTo
+#    peers will together handle 10 times more. And nothing in the application
+#    design, architecture or infrastructure will prevent it to scale because
+#    it is distributed between peer from the ground up.
 #
 #
 # 4. For the best programming language implementation available today.
@@ -783,6 +807,18 @@ def presto_rest (reactor, handler):
 #    server that can easely hold the state of thousands of users concurrently
 #    without actually spending a single CPU cycle of its own.
 #
+#    "But Python is 100 times slower than C!"
+#
+#    Yes. That's why good Python applications spend most of their time 
+#    executing thread-safe, GIL-releasing, compiled code from C libraries
+#    like the BSDDB database module. Python applications that "glue" C
+#    libraries safely together are marginaly slower than a functionnaly
+#    equivalent C implementation.
+#
+#    Of course the "pure" Python of Allegra is slow at things like XML
+#    serialization or Public Names validation, but it has allready a clear
+#    C optimization strategy (Rome was not built in one day ;-)
+#
 #    "An asynchronous component could bring the whole server down, or do
 #    many other malicious things!"
 #
@@ -792,6 +828,3 @@ def presto_rest (reactor, handler):
 #
 #    PRESTo is as safe as you develop and implement, no more and no less. 
 #
-#    On the other hand, support for asynchrony provides developpers with 
-#    smaller, simpler and more efficient implemtations, that are also less
-#    expensive to test and to audit. Just because they are shorter.

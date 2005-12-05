@@ -32,6 +32,8 @@ else:
 
 class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         
+        mime_collector_body = None
+        
         def __repr__ (self):
                 return 'http-server-reactor id="%x"' % id (self)
         
@@ -53,7 +55,7 @@ class HTTP_server_channel (
 
 	def __init__ (self, conn):
 		async_chat.Async_chat.__init__ (self, conn)
-                mime_reactor.MIME_collector.__init__ (self)
+                self.set_terminator ('\r\n\r\n')
 
         def __repr__ (self):
                 return 'http-server-channel id="%x"' % id (self)                
@@ -75,12 +77,8 @@ class HTTP_server_channel (
                 mime_reactor.MIME_collector.found_terminator
 
 	def mime_collector_continue (self):
-                # handle the HTTP request line and MIME headers
                 #
-                # "as per the suggestion of http-1.1 section 4.1, (and
-                #  Eric Parker <eparker@zyvex.com>), ignore a leading blank
-                #  lines (buggy browsers tack it onto the end of POST
-                #  requests)" - Sam Rushing
+                # 1. Grok The Request
                 #
 		while (
                         self.mime_collector_lines and not 
@@ -89,6 +87,13 @@ class HTTP_server_channel (
 			self.mime_collector_lines.pop (0)
                 if not self.mime_collector_lines:
                         return
+                        #
+                        # From Medusa's http_server.py Original Comment:
+                        #
+                        # "as per the suggestion of http-1.1 section 4.1, (and
+                        #  Eric Parker <eparker@zyvex.com>), ignore a leading
+                        #  blank lines (buggy browsers tack it onto the end of
+                        #  POST requests)" - Sam Rushing
 
                 # instanciate a reactor that will hold all states for the 
                 # HTTP request and response.
@@ -137,18 +142,29 @@ class HTTP_server_channel (
                 reactor.mime_producer_headers = {} # TODO: complete?
 		if self.http_version != version[-3:]:
 			self.http_version = version[-3:]
+                #
+                # 2. Handle The Request
+                #
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
-                self.http_continue (reactor)
+                #
+                self.http_continue (reactor) # *The* HTTP continuation
+                # if self.http_continue (reactor):
+                #        
+                #        return False # break asynchat loop, wait
+                #
+                # 3. Continue The Request
+                #
                 if method in ('GET', 'HEAD', 'DELETE'):
+                        # finalize now commands without a MIME body
                         self.mime_collector_finalize (reactor)
                         return
 
+                # finalize POST and PUT when their body is collected, or
+                # close the connection for reason of unimplemented 
+                # method (do not waiste bandwith on bogus file uploads).
+                #
                 if reactor.mime_collector_body == None:
-                        # close the connection for reason of unimplemented 
-                        # method (do not waiste bandwith on bogus file 
-                        # uploads).
-                        #
                         reactor.mime_producer_headers[
                                 'Connection'
                                 ] = 'close'
@@ -161,17 +177,23 @@ class HTTP_server_channel (
                 # wraps the POST or PUT body collector with the appropriate 
                 # decoding collectors, and continue ...
                 #
-                return self.http_collector_continue (reactor)
+                self.http_collector_continue (
+                        reactor.mime_collector_body
+                        )
+                # return True
                         
         http_collector_continue = http_reactor.http_collector_continue
 
         def mime_collector_finalize (self, reactor):
-                # set a response entity if one is required for the request's
-                # method and that none has been assigned by a previous handler
+                #
+                # 1. complete and push the HTTP response producer
                 #
                 if reactor.http_request[0] in (
                         'GET', 'POST'
                         ) and  reactor.mime_producer_body == None:
+                        # supply a response entity if one is required for the
+                        # request's method and that none has been assigned
+                        # by a previous handler
                         reactor.mime_producer_body = producer.Simple_producer (
                                 self.HTTP_SERVER_RESPONSE % (
                                         reactor.http_response,
@@ -195,10 +217,10 @@ class HTTP_server_channel (
                                 http_reactor.Chunk_producer (
                                         reactor.mime_producer_body
                                         )
-                # Do not keep-alive without chunk-encoding
                 if reactor.mime_producer_headers.get (
                         'Transfer-Encoding'
                         ) != 'chunked':
+                        # Do not keep-alive without chunk-encoding
                         reactor.mime_producer_headers[
                                 'Connection'
                                 ] = 'close'
@@ -216,7 +238,6 @@ class HTTP_server_channel (
                 # Push the completed request head and maybe body in the 
                 # channel's output fifo, then decide wether or not to close 
                 # when done ...
-                #
                 self.producer_fifo.append (
                         ''.join (reactor.mime_producer_lines)
                         )
@@ -227,7 +248,15 @@ class HTTP_server_channel (
                         'connection'
                         ) != 'keep-alive':
                         self.close_when_done ()
-                reactor.log (reactor.mime_producer_lines[0], 'response')
+                # finally log the response's first line
+                reactor.log (reactor.mime_producer_lines[0][:-2], 'response')
+                #
+                # 2. reset the channel's and MIME collector's state
+                #
+                self.set_terminator ('\r\n\r\n')
+                self.mime_collector_headers = \
+                        self.mime_collector_lines = \
+                        self.mime_collector_body = None
 
         HTTP_SERVER_RESPONSE = (
                 '<html>'
@@ -297,6 +326,7 @@ def http_continue (server, reactor):
         return False
         #
         # 404 - Not Found
+
 
 def http_server_accept (server, channel):
         channel.http_continue = server.http_continue
@@ -450,3 +480,25 @@ if __name__ == '__main__':
 # Allegra's HTTP server final objective is to deliver a simple full stack 
 # for an web peer, that takes care of the protocol and provides developers
 # with a practical model.
+#
+# 
+# An Asynchronous Web Server
+#
+# Allegra's HTTP server handles request in three asynchronous steps:
+#
+# 1. Handle
+# 2. Collect
+# 3. Continue
+#
+# leaving to the handler the ability and responsability to continue or
+# defer either when matching the URI requested to a resource, or when
+# collecting the request MIME body, or at both points.
+#
+# This is a practical requirement to enable an HTTP server to "load"
+# the resources served asynchronously. For instance, it allows a static
+# file web server to thread calls to os.stat and defer steps 2 and 3
+# without blocking when matching a request against the filesystem.
+#
+# The benefit of such asynchronous web server is that it may not block
+# when accessing non-cached resources, provided that an asynchronous
+# interfaceooooooooo

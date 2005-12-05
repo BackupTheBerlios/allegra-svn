@@ -18,13 +18,13 @@
 ""
 
 import os, glob, urllib
-from urllib import unquote, unquote_plus
 
 from allegra import \
         loginfo, async_loop, producer, mime_reactor, http_server, presto
 
 
 def presto_decode (urlencoded_form_data, result, encoding='UTF-8'):
+        "index URL encoded form data into a dictionnary"
         urlencoded_form_data = urlencoded_form_data.replace ('+', ' ')
         for param in urlencoded_form_data.split ('&'):
                 if param.find ('=') > -1:
@@ -42,6 +42,7 @@ def presto_decode (urlencoded_form_data, result, encoding='UTF-8'):
         return result
 
 
+
 class PRESTo_http_root (presto.PRESTo_root, http_server.HTTP_root):
         
         def __init__ (self, path):
@@ -52,19 +53,19 @@ class PRESTo_http_root (presto.PRESTo_root, http_server.HTTP_root):
                 return 'presto-http-root host="%s"' % self.http_host
 
         def http_match (self, reactor):
+                url = reactor.http_uri[2]
                 # Direct Cache "Hit"
-                if self.presto_dom (reactor, reactor.http_uri[2]):
+                if self.presto_dom (reactor, url):
                         return True
                         
                 # Cached Folders "Catch"
-                if self.presto_folder (reactor, reactor.http_uri[2], '/'):
+                if self.presto_folder (reactor, url, '/'):
                         return True
                 
                 # Persistent HTTP root filesystem match, load to cache
                 if http_server.HTTP_root.http_match (self, reactor, ''): 
                         self.presto_cache (
-                                reactor,
-                                reactor.http_uri[2],
+                                reactor, url,
                                 reactor.http_handler_filename
                                 )
                         return True
@@ -72,6 +73,39 @@ class PRESTo_http_root (presto.PRESTo_root, http_server.HTTP_root):
                 return False
                 
         
+def presto_http_continue (reactor, method, result):
+        if (
+                reactor.mime_producer_body == None and 
+                method in ('GET', 'POST')
+                ):
+                # if there is no body, supply one PRESTo!
+                if __debug__:
+                        reactor.mime_producer_body = \
+                                presto.presto_producer (
+                                        reactor, result, 'UTF-8',
+                                        reactor.http_request_time
+                                        )
+                else:
+                        reactor.mime_producer_body = \
+                                presto.presto_producer (
+                                        reactor, result, 'UTF-8'
+                                        )
+                reactor.mime_producer_headers [
+                        'Content-Type'
+                        ] = 'text/xml; charset=UTF-8'
+        if reactor.http_response == None:
+                reactor.http_response = 200 # Ok by default
+        #
+        # ? reactor.presto_root = reactor.presto_dom = None
+        #
+        # Note that http_presto.py only supports UTF-8 as encoding
+        # for XML. I don't expect Allegra to be used with something
+        # else than Firefox for now. However, upgrading to a public
+        # web peer implies either public UTF-8 implementation or
+        # "downgrading" to the 7bit ASCII charset (and XML character
+        # references).
+
+
 class PRESTo_handler (loginfo.Loginfo):
         
         def __init__ (self, root):
@@ -115,38 +149,68 @@ class PRESTo_handler (loginfo.Loginfo):
                 reactor.presto_vector[u'presto-path'] = unicode (
                         reactor.http_uri[2] or '', 'UTF-8'
                         )
-                # do the REST of the request ;-)
+                # do the REST of the request ...
                 result = presto.presto_rest (reactor, self)
-                if (
-                        reactor.mime_producer_body == None and 
-                        method in ('GET', 'POST')
-                        ):
-                        # if there is no body, supply one PRESTo!
-                        if __debug__:
-                                reactor.mime_producer_body = \
-                                        presto.presto_producer (
-                                                reactor, result, 'UTF-8',
-                                                reactor.http_request_time
-                                                )
-                        else:
-                                reactor.mime_producer_body = \
-                                        presto.presto_producer (
-                                                reactor, result, 'UTF-8'
-                                                )
-                        reactor.mime_producer_headers [
-                                'Content-Type'
-                                ] = 'text/xml; charset=UTF-8'
-                if reactor.http_response == None:
-                        reactor.http_response = 200 # Ok by default
+                if reactor.mime_collector_body != None:
+                        return # ... maybe twice ...
+                        
+                # ... or continue and push the HTTP response now.
+                presto_http_continue (reactor, method, result)
+                        
+
+class PRESTo_form_collector (object):
+        
+        # a simple collector for URL encoded form data submitted by POST
+        
+        __slots__ = ('data', 'reactor', 'logger')
+        
+        def __init__ (self, logger, reactor, BUFFER_SIZE=0):
+                self.data = ''
+                self.reactor = reactor
+                self.logger =logger
+
+        def collect_incoming_data (self, data):
+                if not (0 < BUFFER_SIZE < len (data)):
+                        self.data += data
+
+        def found_terminator (self):
+                # update the reactor's presto vector, REST again and
+                # let PRESTo continue to push the HTTP response now.
                 #
-                # ? reactor.presto_root = reactor.presto_dom = None
+                presto_decode (self.data, self.reactor.presto_vector)
+                result = presto.presto_rest (self.reactor, self.logger)
+                presto_http_continue (self.reactor, 'POST', result)
+                # self.reactor = self.logger = None # ? just to be safe
+                return True
+                
+
+def presto_form (self, reactor):
+        if (
+                reactor.http_command == 'POST' and 
+                reactor.mime_body_collector == None
+                ):
+                reactor.mime_body_collector = PRESTo_form_collector (
+                        self, reactor, 1<<16
+                        )
+                return True
                 #
-                # Note that http_presto.py only supports UTF-8 as encoding
-                # for XML. I don't expect Allegra to be used with something
-                # else than Firefox for now. However, upgrading to a public
-                # web peer implies either public UTF-8 implementation or
-                # "downgrading" to the 7bit ASCII charset (and XML character
-                # references).
+                # handle POST: set a URL encoded form data collector of 
+                # maximum 64KB in length as the request's MIME body
+                # collector. when collected, it will decode itself and
+                # call PRESTo's REST function to call back this method
+
+        return False
+        #
+        # handle GET and the POSTed form data
+        #
+        #
+        # Synopsis in a PRESTo method:
+        #
+        # if presto_form (self, reactor):
+        #         return # collect URL encoded form data POSTed
+        #
+        # ... handle the REST request GETed or POSTed ...
+        #
 
 
 class PRESTo_http (http_server.HTTP_server):
@@ -162,7 +226,7 @@ class PRESTo_http (http_server.HTTP_server):
                 async_loop.async_catch = self.async_catch
                 self.async_catch = None
                 self.handle_close ()
-                return False
+                return True
 
 
 if __name__ == '__main__':

@@ -118,10 +118,12 @@ RSS_NAMESPACE = {
 
 if __name__ != '__main__':
         import presto_pns
-        presto_components = (presto_pns.PRESTo_articulator, )
+        presto_components = (presto_pns.PRESTo_pns_articulator, )
         if __debug__:
                 from allegra import presto_prompt 
-                presto_prompt.presto_debug_async (presto_pns.PRESTo_articulator)
+                presto_prompt.presto_debug_async (
+                        presto_pns.PRESTo_pns_articulator
+                        )
         
         def presto_reload ():
                 for module in (
@@ -161,8 +163,8 @@ else:
         t = time.time ()
         dom = xml_dom.XML_dom ()
         dom.xml_unicoding = 0 # UTF-8 only!
-        dom.xml_class = pns_xml.XML_PNS_articulate
-        dom.xml_classes = RSS_NAMESPACE
+        dom.xml_type = pns_xml.XML_PNS_articulate
+        dom.xml_types = RSS_NAMESPACE
         dom.xml_parser_reset ()
         dom.pns_statement = pns_stdio_statement
         dom.PNS_HORIZON = 126

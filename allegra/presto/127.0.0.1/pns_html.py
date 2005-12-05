@@ -127,8 +127,8 @@ if __name__ == '__main__':
         t = time.time ()
         dom = xml_dom.XML_dom ()
         dom.xml_unicoding = 0 # UTF-8 only!
-        dom.xml_class = xml_pns.XML_pns_orphan
-        dom.xml_classes = {}
+        dom.xml_type = xml_pns.XML_pns_orphan
+        dom.xml_types = {}
         dom.xml_parser_reset ()
         dom.pns_statement = pns_stdio_statement
         dom.PNS_HORIZON = 126

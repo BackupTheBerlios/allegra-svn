@@ -171,8 +171,8 @@ if __name__ == '__main__':
         t = time.time ()
         dom = xml_dom.XML_dom ()
         dom.xml_unicoding = 0 # UTF-8 only!
-        dom.xml_class = pns_xml.XML_PNS_articulate
-        dom.xml_classes = RSS_DC_NAMESPACE
+        dom.xml_type = pns_xml.XML_PNS_articulate
+        dom.xml_types = RSS_DC_NAMESPACE
         dom.xml_parser_reset ()
         dom.pns_statement = pns_stdio_statement
         dom.PNS_HORIZON = 126

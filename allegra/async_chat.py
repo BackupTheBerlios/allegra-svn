@@ -111,6 +111,17 @@ def consume_buffer (channel):
                         channel.ac_in_buffer = channel.ac_in_buffer[n:]
                         channel.terminator = 0
                         channel.found_terminator ()
+                        # if channel.found_terminator ():
+                        #        return False
+                        #
+                        # ? give the channel the ability to break from the
+                        #   buffer consumer's loop, allowing the collector
+                        #   to manage the channel more safely (I mean, by
+                        #   "stoping" it to change its readable state for
+                        #   instance and remove the channel from the event
+                        #   loop as long as the channel collector waits iddle
+                        #   for another asynchronous event) ?
+                        #
         else:
                 # 3 cases:
                 # 1) end of buffer matches terminator exactly:
@@ -134,6 +145,9 @@ def consume_buffer (channel):
                         # This does the Right Thing if the terminator is
                         # changed here.
                         channel.found_terminator ()
+                        # if channel.found_terminator ():
+                        #        return False
+                        #
                 else:
                         # check for a prefix of the terminator
                         index = find_prefix_at_end (

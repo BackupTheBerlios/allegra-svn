@@ -278,7 +278,12 @@ def loop ():
 		async_clock () 
 		async_finalize ()
 	assert None == loginfo.log ('async_loop_stop', 'debug')
-
+        if __debug__:
+                import gc
+                while async_finalized:
+                        async_finalize ()
+                        gc.collect ()
+                        
 
 def dispatch ():
 	"poll, clock and finalize while there is at least one event"
