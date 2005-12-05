@@ -15,8 +15,6 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
-
 __all__ = [
         #
         # Asynchronous Internet Peer
@@ -51,6 +49,8 @@ __all__ = [
         #
         # 'dns_peer'
         ]
+
+__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
 
 # Note about This Implementation
 #
