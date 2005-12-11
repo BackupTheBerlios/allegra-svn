@@ -28,7 +28,7 @@ __all__ = [
         #
         # Web Application Protocols
         #
-        'dns_client', 'tcp_pipeline', 'mime_headers', 'mime_reactor',
+        'dns_client', 'mime_headers', 'mime_reactor',
         # 'smtp_client', 'pop_client', 'nnrp_client', 
         # 'smtp_server', 'pop_server', 'nnrp_server', 
         'http_reactor', 'http_client', 'http_server', 
