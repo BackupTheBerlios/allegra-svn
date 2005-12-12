@@ -121,6 +121,26 @@ class Composite_producer (object):
 	# a composite producer will glob more or less precise chunks to fill
 	# the accessor's buffer.
 
+
+def false ():
+        return False
+
+class Tee_producer (object):
+        
+        def __init__ (self, buffers, stalled=false):
+                self.index = -1
+                self.buffers = buffers
+                self.producer_stalled = stalled
+                
+        def more (self):
+                self.index += 1
+                try:
+                        return self.buffers[self.index]
+                
+                except:
+                        return ''
+        
+
 class File_producer (object):
 	
 	"producer wrapper for file[-like] objects"
@@ -151,6 +171,9 @@ class Encoding_producer (object):
 			self.encoding, self.option
 			)
 
+
+# Note about this implementation
+#
 # Composite Producer
 #
 # The composite producer let its accessor mix strings and producers
@@ -178,4 +201,14 @@ class Encoding_producer (object):
 # serialize appropriately things like MIME messages, XML strings
 # and cryptographic signatures together. Using it with care can
 # produce fast *and* reliable Internet peers.
-			
+#
+#			
+# Tee producer
+#
+# This is a simple but effective way to tee a buffer (be it a list, a tuple
+# or a deque) or 8-bit byte strings. See http_server.py for a practical
+# use of the Tee_producer class applied to cache in an efficient and non
+# blocking way files to be served asynchronously but read synchronously.
+#
+# Tee_producer is a great example of a simple articulation, with a simple
+# interface and implementation, that makes complex things possible.
