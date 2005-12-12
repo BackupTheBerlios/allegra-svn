@@ -188,8 +188,18 @@ class Thread_loop (threading.Thread, select_trigger.Select_trigger):
 				        queued[0] (*queued[1])
 				except:
 					if self.thread_loop_throw ():
+                                                del queued
                                                 break
                                         
+                                else:
+                                        del queued
+                        #
+                        # note that I make sure to delete the tuple which
+                        # would otherwise hold a reference to the method and
+                        # arguments of the call threaded, preventing garbage
+                        # collection hence finalization and was the source
+                        # of subtle bugs ...
+                        #
 		if self.thread_loop_delete ():
                         trunked = self.thread_loop_queue.trunk ()
                         if trunked:
