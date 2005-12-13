@@ -122,23 +122,30 @@ class Composite_producer (object):
 	# the accessor's buffer.
 
 
-def false ():
-        return False
-
 class Tee_producer (object):
         
-        def __init__ (self, buffers, stalled=false):
+        def __init__ (self, producer):
                 self.index = -1
-                self.buffers = buffers
-                self.producer_stalled = stalled
+                try:
+                        self.buffers = producer.tee_buffers
+                except AttributeError:
+                        self.buffers = producer.tee_buffers = []
+                self.producer = producer
                 
         def more (self):
                 self.index += 1
                 try:
                         return self.buffers[self.index]
                 
-                except:
-                        return ''
+                except IndexError:
+                        self.buffers.append (self.producer.more ())
+                        return self.buffers[-1]
+                
+        def producer_stalled (self):
+                return (
+                        len (self.buffers) == self.index+1 and
+                        self.producer.producer_stalled ()
+                        )
         
 
 class File_producer (object):

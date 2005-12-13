@@ -17,10 +17,11 @@
 
 ""
 
-import types, time, os, stat, glob, mimetypes, urllib, re
+import types, weakref, time, os, stat, glob, mimetypes, urllib, re
 
 from allegra import \
-        loginfo, async_chat, producer, tcp_server, \
+        loginfo, finalization, synchronizer, \
+        async_chat, producer, tcp_server, \
         mime_headers, mime_reactor, http_reactor
         
 
@@ -142,17 +143,24 @@ class HTTP_server_channel (
                 reactor.mime_producer_headers = {} # TODO: complete?
 		if self.http_version != version[-3:]:
 			self.http_version = version[-3:]
-                #
-                # 2. Handle The Request
-                #
+                # and reset the channel's and MIME collector's state
+                self.set_terminator ('\r\n\r\n')
+                self.mime_collector_headers = \
+                        self.mime_collector_lines = \
+                        self.mime_collector_body = None
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
-                #
-                self.http_continue (reactor) # *The* HTTP continuation
-                #
-                # 3. Continue The Request 
-                #
-                if method in ('GET', 'HEAD', 'DELETE'):
+                if self.http_server_continue (reactor):
+                        return
+                        #
+                        # it is up to the reactor's handler to properly
+                        # finalize the HTTP response, here one of the the
+                        # server's virtual hosts instance.
+                
+                self.http_continue (reactor)
+                
+        def http_continue (self, reactor):
+                if reactor.http_request[0] in ('GET', 'HEAD', 'DELETE'):
                         # finalize responses without a MIME body
                         self.mime_collector_finalize (reactor)
                         return
@@ -182,18 +190,10 @@ class HTTP_server_channel (
         http_collector_continue = http_reactor.http_collector_continue
 
         def mime_collector_finalize (self, reactor):
+                # Push the reactor in the channel's output fifo and
+                # complete the HTTP response producer 
                 #
-                # 0. Push the reactor in the channel's output fifo and
-                #    reset the channel's and MIME collector's state
-                #
-                self.set_terminator ('\r\n\r\n')
-                self.mime_collector_headers = \
-                        self.mime_collector_lines = \
-                        self.mime_collector_body = None
                 self.producer_fifo.append (reactor)
-                #
-                # 1. complete the HTTP response producer 
-                #
                 if reactor.http_request[0] in (
                         'GET', 'POST'
                         ) and  reactor.mime_producer_body == None:
@@ -232,7 +232,8 @@ class HTTP_server_channel (
                                 ] = 'close'
                 # Build the response head with the reactor's MIME headers, 
                 # the channel's HTTP version the reactor's HTTP response
-                # code.
+                # code. Then initiate send decide wether or not to close 
+                # when done ...
                 #
                 reactor.mime_producer_lines = mime_headers.lines (
                         reactor.mime_producer_headers
@@ -241,17 +242,13 @@ class HTTP_server_channel (
                         self.http_version, reactor.http_response,
                         self.HTTP_SERVER_RESPONSES[reactor.http_response]
                         ))
-                #
-                # 2. initiate send decide wether or not to close when done
-                #
                 self.handle_write ()
                 if reactor.mime_collector_headers.get (
                         'connection'
                         ) != 'keep-alive':
                         self.close_when_done ()
-                # finally log the response's first line
+                # ... finally, log the response's first line.
                 reactor.log (reactor.mime_producer_lines[0][:-2], 'response')
-                #
 
         HTTP_SERVER_RESPONSE = (
                 '<html>'
@@ -304,138 +301,148 @@ class HTTP_server_channel (
                 }
             
 
-def http_server_accept (server, channel):
-        channel.http_continue = server.http_continue
+# A Static Cache Root
 
-def http_continue (server, reactor):
-        for handler in server.http_handlers:
-                if handler.http_match (reactor):
-                        try:
-                                return handler.http_continue (reactor)
-                                
-                        except:
-                                ctb = server.loginfo_traceback ()
-                                reactor.http_response = 500
-                                return False
-                                #
-                                # 500 - Server Error
-                                
-        reactor.http_response = 404
-        return False
-        #
-        # 404 - Not Found
+def none (): pass
+            
+class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
 
-def http_server_close (server, channel):
-        del channel.http_continue
-
-
-class HTTP_server (tcp_server.TCP_server_limit):
-
-        TCP_SERVER_CHANNEL = HTTP_server_channel
-
-        def __init__ (self, handlers, ip, port=80):
-                self.http_handlers = handlers
-                tcp_server.TCP_server_limit.__init__ (self, (ip, port))
-
-        def __repr__ (self):
-                return 'http-peer id="%x"' % id (self)
-
-        tcp_server_accept = http_server_accept
-
-        tcp_server_close = http_server_close
-
-        http_continue = http_continue
-        
-
-class HTTP_root (loginfo.Loginfo):
-        
+        synchronizer = None
+                
         def __init__ (self, path, host=None):
                 self.http_path = path
                 self.http_host = host or os.path.basename (
                         path
                         ).replace ('-', ':')
+                self.http_cache = {}
+                if self.synchronizer == None:
+                        self.__class__.synchronizer = \
+                                synchronizer.Synchronizer ()
+                self.synchronizer.synchronize (self)
                 assert None == self.log (
                         'loaded path="%s"' % path, 'debug'
                         )
                 
         def __repr__ (self):
-                return 'http-root host="%s"' % self.http_host
+                return 'http-cache host="%s"' % self.http_host
                 
-        def http_match (self, reactor, default='index.html'):
+        def http_continue (self, reactor):
+                if reactor.http_request[0].upper () != 'GET':
+                        reactor.http_response = 405
+                        return False
+                        #
+                        # 405 Method Not Allowed (this *is* a cache)
+                        
                 uri = urllib.unquote (reactor.http_uri[2])
                 if uri[-1] == '/':
-                        uri += default
-                reactor.http_handler_filename = self.http_path + uri
-                try:
-                        reactor.http_handler_stat = os.stat (
-                                reactor.http_handler_filename
-                                )
-                except OSError:
-                        # the handler is "transparent", if the file does not
-                        # exists another handler may be used ...
-                        return False
-                        
-                return stat.S_ISREG (reactor.http_handler_stat[0])
-
-
-class HTTP_handler (loginfo.Loginfo):
-
-	def __init__ (self, root):
-                paths = [r.replace ('\\', '/') for r in glob.glob (root+'/*')]
-                self.http_handler_roots = dict ([
-                        (
-                                os.path.split (r)[1].replace ('-', ':'), 
-                                HTTP_root (r)
-                                )
-                        for r in paths
-                        ])
-                        
-        def __repr__ (self):
-                return 'http-handler'
-                
-	def http_match (self, reactor):
-                http_root = self.http_handler_roots.get (
-                        reactor.mime_collector_headers.get ('host')
-                        )
-                if http_root == None:
-                        return False
-                        
-                return http_root.http_match (reactor)
-
-	def http_continue (self, reactor):
-                # TODO: use asynchronous channel for file I/O instead and
-                #       implement stalled producers in the channel. also,
-                #       handle HEAD method and reply correctly for unhandled
-                #       methods ...
-                #
-                if reactor.http_request[0].upper () == 'GET':
-                        reactor.mime_producer_body = producer.File_producer (
-                                open (reactor.http_handler_filename, 'rb')
-                                ) # TODO: implement gzip, deflate, ...
-                else:
-                        reactor.http_response = 405
-                        return
-                        #
-                        # 405 Method Not Allowed
-                        
-                reactor.mime_producer_headers[
-                        'Last-Modified'
-                        ] = time.asctime (
-                                time.gmtime (reactor.http_handler_stat[7])
-                                ) + (' %d' % time.timezone)
-                content_type, content_encoding = mimetypes.guess_type (
-                        reactor.http_handler_filename
-                        )
-	        reactor.mime_producer_headers[
-                        'Content-Type'
-                        ] = content_type or 'text/html'
-                if content_encoding:
-                        reactor.mime_producer_headers[
-                                'Content-Encoding'
-                                ] = content_encoding
+                        uri += 'index.html'
+                filename = self.http_path + uri
+                teed = self.http_cache.get (filename, none) ()
+                if teed == None:
+                        self.synchronized ((
+                                self.sync_stat, (reactor, filename)
+                                ))
+                        return True
+        
+                reactor.mime_producer_headers.update (teed.mime_headers)
+                reactor.mime_producer_body = producer.Tee_producer (teed)
                 reactor.http_response = 200
-                #
-                # TODO: add last-modified, cache, charset, etc ...
+                return False
+        
+        def sync_stat (self, reactor, filename):
+                try:
+                        result = os.stat (filename)
+                except:
+                        result = None
+                self.select_trigger ((
+                        self.async_stat, (reactor, filename, result)
+                        ))
+        
+        def async_stat (self, reactor, filename, result):
+                if result == None or not stat.S_ISREG (result[0]):
+                        reactor.http_response = 404
+                        reactor.http_channel.mime_collector_finalize (reactor)
+                        return
+                
+                # TODO: implement gzip, deflate, ...
+                teed = synchronizer.Synchronized_open (filename, 'rb')
+                content_type, content_encoding = \
+                        mimetypes.guess_type (filename)
+                teed.mime_headers = {
+                        'Last-Modified': (
+                                time.asctime (time.gmtime (result[7])) + 
+                                (' %d' % time.timezone)
+                                ),
+                        'Content-Type': content_type or 'text/html',
+                        }
+                if content_encoding:
+                        teed.mime_headers['Content-Encoding'] = \
+                                content_encoding
+                reactor.mime_producer_headers.update (teed.mime_headers)
+                reactor.mime_producer_body = producer.Tee_producer (teed)
+                reactor.http_response = 200
+                self.http_cache[filename] = weakref.ref (teed)
+                reactor.http_channel.http_continue (reactor)
+                
+
+# The HTTP Server method and variants
+        
+def http_server_accept (server, channel):
+        channel.http_server_continue = server.http_continue
+        
+def http_server_continue (server, reactor):
+        http_root = server.http_hosts.get (
+                reactor.mime_collector_headers.get ('host')
+                )
+        if http_root == None:
+                reactor.http_response = 404
+                return False
+                
+        return http_root.http_continue (reactor)
+        
+def http_server_close (server, channel):
+        del channel.http_server_continue
+
+def http_server_stop (self):
+        "called once the server stopped, assert debug log and close"
+        self.http_hosts = None
+        assert None == self.log ('stop', 'debug')
+        
+
+class HTTP_peer (tcp_server.TCP_server):
+
+        def __repr__ (self):
+                return 'http-peer id="%x"' % id (self)
+
+        TCP_SERVER_CHANNEL = HTTP_server_channel
+        tcp_server_accept = http_server_accept
+        tcp_server_close = http_server_close
+        http_continue = http_server_continue
+        tcp_server_stop = http_server_stop
+        
+
+class HTTP_server (tcp_server.TCP_server_limit):
+
+        def __repr__ (self):
+                return 'http-server id="%x"' % id (self)
+
+        TCP_SERVER_CHANNEL = HTTP_server_channel
+        tcp_server_accept = http_server_accept
+        tcp_server_close = http_server_close
+        http_continue = http_server_continue
+        tcp_server_stop = http_server_stop
+        
+
+class HTTP_throttler (tcp_server.TCP_server_throttle):
+
+        def __repr__ (self):
+                return 'http-throttler id="%x"' % id (self)
+
+        TCP_SERVER_CHANNEL = HTTP_server_channel
+        tcp_server_accept = http_server_accept
+        tcp_server_close = http_server_close
+        http_continue = http_server_continue
+        tcp_server_stop = http_server_stop
 
 
 if __name__ == '__main__':
@@ -446,12 +453,38 @@ if __name__ == '__main__':
                 ' - Coyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
                 'info'
                 )
-        root, ip, port = ('./http', '127.0.0.1', 80)
+        root, ip, port, host = ('./', '127.0.0.1', 80, None)
         if len (sys.argv) > 1:
                 root = sys.argv[1]
-	HTTP_server ([HTTP_handler (root)], ip, port)
+                if len (sys.argv) > 2:
+                        try:
+                                ip, port = sys.argv[2].split (':')
+                        except:
+                                ip = sys.argv[2]
+                        if (sys.argv) > 3:
+                                host = sys.argv[3]
+        if ip == '127.0.0.1':
+	        server = HTTP_peer ((ip, port))
+        elif ip.startswith ('192.168.') or ip.startswith ('10.') :
+                server = HTTP_server ((ip, port))
+        else:
+                server = HTTP_throttler ((ip, port))
+        if host == None:
+                server.http_hosts = dict ([
+                        (
+                                os.path.split (r)[1].replace ('-', ':'), 
+                                HTTP_cache (r)
+                                )
+                        for r in [
+                                r.replace ('\\', '/') 
+                                for r in glob.glob (root+'/*')
+                                ]
+                        ])
+        else:
+                server.http_hosts = {host: HTTP_cache (root)}
+        server.async_catch = async_loop.async_catch
+        async_loop.async_catch = server.tcp_server_catch
         async_loop.loop ()
-        
         
 # Note about this implementation
 #
@@ -468,11 +501,22 @@ if __name__ == '__main__':
 # web peer, which serves REST methods of component instances loaded
 # from any of the above three type of information storage system.
 #
-# The fact is that this is not *just* a static file server, it acts
-# more like a filesystem cache, globbing in memory the web as it is
-# served, then throwing it as fast as possible. It's a busy-body static
-# web cache that you can tune by adjusting the parameters for the
-# garbage gollector of the CPython VM.
+#
+# A Static Web Cache
+#
+# The http_server.py module implements a simple filesystem web service
+# that publishes static files from a folder for a named host and address:
+#
+#        http_server.py [./] [127.0.0.1] [127.0.0.1]
+#
+# by default the current directory is served at
+#
+#        http://127.0.0.1/
+#
+# The web server acts like a lean filesystem cache, globbing in memory the 
+# web as it is served, then throwing it as fast as possible. In effect it
+# behaves like a busy-body cache whose memory consumption depends on the 
+# parameters set for the garbage gollector of the CPython VM.
 #
 # Note finally that each server is expected to have only one handler
 # implementation, which may delegate a request but must do so explicitely.
@@ -480,4 +524,3 @@ if __name__ == '__main__':
 # Apache-like server. This module is designed to either develop a special
 # purpose web server or a peer for component instances, where functions
 # are not layered as handlers but integrated in a class definition.
-# 

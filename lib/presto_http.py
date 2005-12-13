@@ -220,14 +220,8 @@ class PRESTo_http (http_server.HTTP_server):
                 if ip == '127.0.0.1':
                         self.tcp_server_clients_limit = 64
                 self.async_catch = async_loop.async_catch
-                async_loop.async_catch = self.presto_http_shutdown
+                async_loop.async_catch = self.tcp_server_catch
                 
-        def presto_http_shutdown (self):
-                async_loop.async_catch = self.async_catch
-                self.async_catch = None
-                self.handle_close ()
-                return True
-
 
 if __name__ == '__main__':
         import sys

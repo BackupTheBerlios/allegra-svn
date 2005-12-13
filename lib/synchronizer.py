@@ -41,13 +41,13 @@ class Synchronizer (loginfo.Loginfo):
                         'append %d' % len (self.synchronized_thread_loops), 
                         'synchronizer'
                         )
-		new_thread = thread_loop.Thread_loop ()
-		new_thread.thread_loop_queue.synchronizer_index = len (
+		t = thread_loop.Thread_loop ()
+		t.thread_loop_queue.synchronizer_index = len (
 			self.synchronized_thread_loops
 			)
-		self.synchronized_thread_loops.append (new_thread)
+		self.synchronized_thread_loops.append (t)
 		self.synchronized_instance_count.append (0)
-		new_thread.start ()
+		t.start ()
 		
 	def synchronize (self, instance):
 		assert not hasattr (instance, 'synchronized')
@@ -92,26 +92,14 @@ class Synchronized (finalization.Finalization):
                         self.__class__.synchronizer = Synchronizer ()
                 self.synchronizer.synchronize (self)
                 
-                
-class Synchronized_os (Synchronized):
-        
-        def stat (self, filename):
-                self.synchronized ((self.sync_stat, (filename,)))
-        
-        def sync_stat (self, filename):
-                try:
-                        stat = os.stat (filename)
-                except:
-                        stat = None
-                self.select_trigger ((self.async_stat, (filename, stat)))
-
-        def async_stat (self, filename, stat):
-                assert None == loginfo.log (
-                            'async_stat %r %r' % (filename, stat), 'debug'
-                            )
-        
 
 class Synchronized_open (Synchronized):
+        
+        # either buffers a synchronous file opened read-only and provide
+        # a stallable producer interface, or write synchronously to a
+        # file the data provided by the instance collector interface.
+        #
+        # practically, this is a synchronized file reactor.
         
         collector_is_simple = True
         
@@ -122,7 +110,7 @@ class Synchronized_open (Synchronized):
                 self.mode = mode
                 self.buffer = buffer
                 if mode[0] == 'r':
-                        self.deque = collections.deque([])
+                        self.buffers = collections.deque([])
                 Synchronized.__init__ (self)
                 self.synchronized ((self.sync_open, (filename, mode)))
                         
@@ -141,13 +129,13 @@ class Synchronized_open (Synchronized):
                 
         def more (self):
                 try:
-                        return self.deque.popleft ()
+                        return self.buffers.popleft ()
                         
                 except:
                         return ''
                         
         def producer_stalled (self):
-                return not (self.closed or len (self.deque) > 0)
+                return not (self.closed or len (self.buffers) > 0)
                         
         # >>> Synchronized methods
 
@@ -190,24 +178,26 @@ class Synchronized_open (Synchronized):
         # ... asynchronous continuations
                 
         def async_read (self, data):
-                self.deque.append (data)
+                self.buffers.append (data)
                 self.synchronized ((self.sync_read, ()))
                 
         def async_close (self):
                 self.closed = True
+                self.__del__ () # finalize now!
                 
 
 class Synchronized_popen (Synchronized):
         
-        # provide a synchronized interface to a popened process
-        # STDIN, STDERR and STDOUT.
+        # another reactor interface for synchronous system call, here
+        # a popened process. Data is collected to STDIN, STDOUT is 
+        # buffered to produce output and STDERR is collected.
         
         collector_is_simple = True
         
         buffer = 4096
         
         def __init__ (self, *args, **kwargs):
-                self.deque = collections.deque([])
+                self.buffers = collections.deque([])
                 self.synchronized ((self.sync_popen, (args, kwargs)))
                 
         def collect_incoming_data (self, data):
@@ -219,13 +209,13 @@ class Synchronized_popen (Synchronized):
         
         def more (self):
                 try:
-                        return self.deque.popleft ()
+                        return self.buffers.popleft ()
                         
                 except:
                         return ''
         
         def producer_stalled (self):
-                return not (self.closed or len (self.deque) > 0)
+                return not (self.closed or len (self.buffers) > 0)
         
         #
         
@@ -281,7 +271,7 @@ class Synchronized_popen (Synchronized):
         #
                 
         def async_stdout (self, data):
-                self.deque.append (data)
+                self.buffers.append (data)
                 self.synchronized ((self.sync_poll, ()))
                 
         def async_return (self, code):

@@ -154,7 +154,13 @@ class TCP_server (async_core.Async_dispatcher):
         def tcp_server_stop (self):
                 "called once the server stopped, assert debug log and close"
                 assert None == self.log ('stop', 'debug')
-                        
+                
+        def tcp_server_catch (self):
+                async_loop.async_catch = self.async_catch
+                self.async_catch = None
+                self.handle_close ()
+                return True
+        
 
 class TCP_server_limit (TCP_server):
         
