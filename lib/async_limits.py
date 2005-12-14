@@ -72,7 +72,7 @@ def FourKBps ():
 
 
 def async_throttle_in (channel, when, Bps=FourKBps):
-	channel.async_limit_bytes_in = 1
+	channel.async_limit_bytes_in = Bps ()
 	channel.async_throttle_in_when = when
 	channel.async_throttle_in_Bps = Bps
 	readable = channel.readable
@@ -107,7 +107,7 @@ def async_throttle_in_defer (channel, when):
 
 
 def async_throttle_out (channel, when, Bps=FourKBps):
-	channel.async_limit_bytes_out = 1
+	channel.async_limit_bytes_out = Bps ()
 	channel.async_throttle_out_when = when
 	channel.async_throttle_out_Bps = Bps
 	writable = channel.writable
