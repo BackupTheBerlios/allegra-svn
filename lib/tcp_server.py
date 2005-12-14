@@ -250,19 +250,20 @@ class TCP_server_throttle (TCP_server_limit):
         # and audit of I/O, this is 99% of what you want out-of-the-box
         # from a TCP server base class.
         
-        tcp_server_throttle_in_Bps = 4096 # ac_in_buffer_size
-        tcp_server_throttle_out_Bps = 4096 # ac_in_buffer_size
+        async_throttle_in_Bps = 4096 # ac_in_buffer_size
+        async_throttle_out_Bps = 4096 # ac_in_buffer_size
 
-	def handle_accept (self, conn, addr):
-		channel = TCP_server_limit.handle_accept ()
+	def handle_accept (self):
+		channel = TCP_server_limit.handle_accept (self)
                 if channel == None:
                         return
 
+                when = time.time ()
                 async_limits.async_throttle_in (
-                        channel, self.tcp_server_throttle_in
+                        channel, when, self.tcp_server_throttle_in
                         )
                 async_limits.async_throttle_out (
-                        channel, self.tcp_server_throttle_out
+                        channel, when, self.tcp_server_throttle_out
                         )
 		return channel
 
