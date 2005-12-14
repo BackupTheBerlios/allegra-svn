@@ -83,17 +83,13 @@ class Synchronizer (loginfo.Loginfo):
 		assert None == self.log ('%r' % instance, 'desynchronized')
 
 
-class Synchronized (finalization.Finalization):
-        
-        synchronizer = None
-        
-        def __init__ (self):                        
-                if self.synchronizer == None:
-                        self.__class__.synchronizer = Synchronizer ()
-                self.synchronizer.synchronize (self)
-                
+def synchronize (synchronized):
+        if synchronized.synchronizer == None:
+                synchronized.__class__.synchronizer = Synchronizer ()
+        synchronized.synchronizer.synchronize (synchronized)
 
-class Synchronized_open (Synchronized):
+
+class Synchronized_open (finalization.Finalization):
         
         # either buffers a synchronous file opened read-only and provide
         # a stallable producer interface, or write synchronously to a
@@ -101,6 +97,8 @@ class Synchronized_open (Synchronized):
         #
         # practically, this is a synchronized file reactor.
         
+        synchronizer = None
+
         collector_is_simple = True
         
         closed = False
@@ -111,7 +109,7 @@ class Synchronized_open (Synchronized):
                 self.buffer = buffer
                 if mode[0] == 'r':
                         self.buffers = collections.deque([])
-                Synchronized.__init__ (self)
+                synchronize (self)
                 self.synchronized ((self.sync_open, (filename, mode)))
                         
         def __repr__ (self):
@@ -186,18 +184,21 @@ class Synchronized_open (Synchronized):
                 self.__del__ () # finalize now!
                 
 
-class Synchronized_popen (Synchronized):
+class Synchronized_popen (finalization.Finalization):
         
         # another reactor interface for synchronous system call, here
         # a popened process. Data is collected to STDIN, STDOUT is 
         # buffered to produce output and STDERR is collected.
         
+        synchronizer = None
+
         collector_is_simple = True
         
         buffer = 4096
         
         def __init__ (self, *args, **kwargs):
                 self.buffers = collections.deque([])
+                synchronize (self)
                 self.synchronized ((self.sync_popen, (args, kwargs)))
                 
         def collect_incoming_data (self, data):
