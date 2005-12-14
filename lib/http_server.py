@@ -20,7 +20,7 @@
 import types, weakref, time, os, stat, glob, mimetypes, urllib, re
 
 from allegra import \
-        loginfo, finalization, synchronizer, \
+        loginfo, async_loop, finalization, synchronizer, \
         async_chat, producer, tcp_server, \
         mime_headers, mime_reactor, http_reactor
         
@@ -333,10 +333,9 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         #
                         # 405 Method Not Allowed (this *is* a cache)
                         
-                uri = urllib.unquote (reactor.http_uri[2])
-                if uri[-1] == '/':
-                        uri += 'index.html'
-                filename = self.http_path + uri
+                filename = self.http_path + urllib.unquote (
+                        reactor.http_uri[2]
+                        )
                 teed = self.http_cache.get (filename, none) ()
                 if teed == None:
                         self.synchronized ((
@@ -406,7 +405,7 @@ def http_server_close (server, channel):
 def http_server_stop (self):
         "called once the server stopped, assert debug log and close"
         self.http_hosts = None
-        assert None == self.log ('stop', 'debug')
+        self.log ('stop', 'info')
         
 
 class HTTP_peer (tcp_server.TCP_server):
@@ -415,6 +414,8 @@ class HTTP_peer (tcp_server.TCP_server):
                 return 'http-peer id="%x"' % id (self)
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
+        tcp_server_clients_limit = 64
+        
         tcp_server_accept = http_server_accept
         tcp_server_close = http_server_close
         http_continue = http_server_continue
@@ -427,6 +428,8 @@ class HTTP_server (tcp_server.TCP_server_limit):
                 return 'http-server id="%x"' % id (self)
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
+        tcp_server_clients_limit = 2
+        
         tcp_server_accept = http_server_accept
         tcp_server_close = http_server_close
         http_continue = http_server_continue
@@ -439,6 +442,8 @@ class HTTP_throttler (tcp_server.TCP_server_throttle):
                 return 'http-throttler id="%x"' % id (self)
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
+        tcp_server_clients_limit = 1
+        
         tcp_server_accept = http_server_accept
         tcp_server_close = http_server_close
         http_continue = http_server_continue
@@ -447,7 +452,10 @@ class HTTP_throttler (tcp_server.TCP_server_throttle):
 
 if __name__ == '__main__':
         import sys
-        from allegra import loginfo, async_loop
+        if '-d' in sys.argv:
+                sys.argv.remove ('-d')
+                loginfo.Loginfo_stdio.log = \
+                        loginfo.Loginfo_stdio.loginfo_netlines
         loginfo.log (
                 'Allegra HTTP/1.1 Server'
                 ' - Coyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
