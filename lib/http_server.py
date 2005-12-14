@@ -315,10 +315,7 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         path
                         ).replace ('-', ':')
                 self.http_cache = {}
-                if self.synchronizer == None:
-                        self.__class__.synchronizer = \
-                                synchronizer.Synchronizer ()
-                self.synchronizer.synchronize (self)
+                synchronizer.synchronize (self)
                 assert None == self.log (
                         'loaded path="%s"' % path, 'debug'
                         )
