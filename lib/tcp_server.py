@@ -259,6 +259,7 @@ class TCP_server_throttle (TCP_server_limit):
                         return
 
                 when = time.time ()
+                self.tcp_server_throttle ()
                 async_limits.async_throttle_in (
                         channel, when, self.tcp_server_throttle_in
                         )
@@ -267,6 +268,18 @@ class TCP_server_throttle (TCP_server_limit):
                         )
 		return channel
 
+        def tcp_server_throttle (self):
+                clients = len (self.tcp_server_clients)
+                if clients == 0:
+                        return
+                
+                self.tcp_server_throttle_in_Bps = int (
+                        self.async_throttle_in_Bps / clients
+                        )
+                self.tcp_server_throttle_out_Bps = int (
+                        self.async_throttle_out_Bps / clients
+                        )
+
         def tcp_server_defer (self, when):
                 for channel in self.tcp_server_channels:
                         async_limits.async_throttle_in_defer (channel, when)
@@ -274,16 +287,10 @@ class TCP_server_throttle (TCP_server_limit):
                 return TCP_server_limit.tcp_server_defer (self, when)
         
 	def tcp_server_throttle_in (self):
-		return int (
-                        self.async_throttle_in_Bps / 
-                        len (self.tcp_server_clients)
-                        )
+                return self.tcp_server_throttle_in_Bps
 
 	def tcp_server_throttle_out (self):
-		return int (
-                        self.async_throttle_out_Bps / 
-                        len (self.tcp_server_clients)
-                        )
+                return self.tcp_server_throttle_out_Bps
 
 	def tcp_server_handle_close (self, channel):
                 # remove circular references (a perfect example of why private
@@ -292,6 +299,7 @@ class TCP_server_throttle (TCP_server_limit):
 		TCP_server_limit.tcp_server_handle_close (self, channel)
                 del channel.async_throttle_in_Bps
                 del channel.async_throttle_out_Bps
+                self.tcp_server_throttle ()
                 
                 
 # Note about this implementation
