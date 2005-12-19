@@ -24,7 +24,8 @@ from allegra import loginfo, finalization, thread_loop
 
 class Synchronizer (loginfo.Loginfo):
 
-        def __init__ (self):
+        def __init__ (self, size=2):
+                self.synchronizer_size = size
 		self.synchronized_thread_loops = []
 		self.synchronized_instance_count = []
                 self.synchronized_count = 0
@@ -33,8 +34,6 @@ class Synchronizer (loginfo.Loginfo):
 		return 'synchronizer pid="%x" count="%d"' % (
                         id (self), self.synchronized_count
                         )
-
-	synchronizer_size = 4 # your mileage may vary ...
 
 	def synchronizer_append (self):
 		assert None == self.log (
@@ -61,7 +60,6 @@ class Synchronizer (loginfo.Loginfo):
                 t = self.synchronized_thread_loops[index]
 		instance.synchronized = t.thread_loop_queue
                 instance.select_trigger = t.select_trigger 
-                instance.finalization = self.desynchronize
 		self.synchronized_instance_count[index] += 1
                 self.synchronized_count += 1
 		assert None == self.log ('%r' % instance, 'synchronized')
@@ -83,13 +81,67 @@ class Synchronizer (loginfo.Loginfo):
 		assert None == self.log ('%r' % instance, 'desynchronized')
 
 
-def synchronize (synchronized):
-        if synchronized.synchronizer == None:
-                synchronized.__class__.synchronizer = Synchronizer ()
-        synchronized.synchronizer.synchronize (synchronized)
+def synchronize (instance):
+        if instance.synchronizer == None:
+                instance.__class__.synchronizer = Synchronizer (
+                        instance.synchronizer_size
+                        )
+        instance.synchronizer.synchronize (instance)
 
 
-class Synchronized_open (finalization.Finalization):
+def desynchronize (instance):
+        instance.synchronizer.desynchronize (instance)
+
+
+def synchronized (instance):
+        assert isinstance (instance, finalization.Finalization) 
+        if instance.synchronizer == None:
+                instance.__class__.synchronizer = Synchronizer (
+                        instance.synchronizer_size
+                        )
+        instance.synchronizer.synchronize (instance)
+        instance.finalization = instance.synchronizer.desynchronize
+
+
+# Synchronized methods for file I/O, typical synchronized functions that
+# call thread-safe and GIL-releasing builtin or binded fast C libraries.
+
+def sync_open (self, filename, mode):
+        try:
+                self.sync_file = open (filename, mode)
+        except:
+                self.select_trigger ((self.async_close, ('eo')))
+        if mode[0] == 'r':
+                self.sync_read ()
+        
+def sync_write (self, data):
+        try:
+                self.sync_file.write (data)
+        except:
+                self.select_trigger ((self.async_close, ('ew')))
+        
+def sync_read (self):
+        try:
+                data = self.sync_file.read (self.sync_buffer)
+        except:
+                self.select_trigger ((self.async_close, ('er')))
+        else:
+                if data:
+                        self.select_trigger ((self.async_read, (data, )))
+                else:
+                        self.sync_close ('r')
+        
+def sync_close (self, mode):
+        try:
+                self.sync_file.close ()
+        except:
+                self.select_trigger ((self.async_close, ('ec', )))
+        else:
+                self.select_trigger ((self.async_close, (mode, )))
+        self.sync_file = None
+        
+
+class Synchronized_open (object):
         
         # either buffers a synchronous file opened read-only and provide
         # a stallable producer interface, or write synchronously to a
@@ -98,24 +150,22 @@ class Synchronized_open (finalization.Finalization):
         # practically, this is a synchronized file reactor.
         
         synchronizer = None
-
+        synchronizer_size = 4
+        
         collector_is_simple = True
         
-        closed = False
+        async_buffers = ()
+        async_closed = False
 
         def __init__ (self, filename, mode='r', buffer=4096):
-                self.filename = filename
-                self.mode = mode
-                self.buffer = buffer
+                self.sync_buffer = buffer
                 if mode[0] == 'r':
-                        self.buffers = collections.deque([])
+                        self.async_buffers = collections.deque([])
                 synchronize (self)
                 self.synchronized ((self.sync_open, (filename, mode)))
                         
         def __repr__ (self):
-                return 'synchronized-open filename="%s" mode="%s"' % (
-                        self.filename, self.mode
-                        )
+                return 'synchronized-open id="%x"' % id (self)
                         
         # a reactor interface
                 
@@ -127,62 +177,108 @@ class Synchronized_open (finalization.Finalization):
                 
         def more (self):
                 try:
-                        return self.buffers.popleft ()
+                        return self.async_buffers.popleft ()
                         
                 except:
                         return ''
                         
         def producer_stalled (self):
-                return not (self.closed or len (self.buffers) > 0)
+                return not (
+                        self.async_closed or len (self.async_buffers) > 0
+                        )
                         
         # >>> Synchronized methods
+        
+        sync_open = sync_open
+        sync_write = sync_write
+        sync_read = sync_read
+        sync_close = sync_close
 
-        def sync_open (self, filename, mode):
-                try:
-                        self.file = open (filename, mode)
-                except:
-                        self.select_trigger ((self.async_close, ()))
-                if mode[0] == 'r':
-                        self.sync_read ()
-                
-        def sync_write (self, data):
-                try:
-                        self.file.write (data)
-                except:
-                        self.select_trigger ((self.async_close, ()))
-                
-        def sync_read (self):
-                try:
-                        data = self.file.read (self.buffer)
-                except:
-                        self.select_trigger ((self.async_close, ()))
-                else:
-                        if data:
-                                self.select_trigger ((
-                                        self.async_read, (data, )
-                                        ))
-                        else:
-                                self.sync_close ()
-                
-        def sync_close (self):
-                try:
-                        self.file.close ()
-                except:
-                        pass
-                else:
-                        self.file = None
-                        self.select_trigger ((self.async_close, ()))
-                
         # ... asynchronous continuations
                 
         def async_read (self, data):
-                self.buffers.append (data)
+                self.async_buffers.append (data)
                 self.synchronized ((self.sync_read, ()))
                 
-        def async_close (self):
-                self.closed = True
-                self.__del__ () # finalize now!
+        def async_close (self, mode):
+                self.async_closed = True
+                desynchronize (self)
+                                
+                                
+# Synchronized Subprocess methods
+                                
+def sync_popen (self, args, kwargs):
+        # try to open a subprocess and either write input and/or
+        # poll output. Return on exception.
+        try:
+                self.subprocess = subprocess.Popen (*args, **kwargs)
+        except:
+                self.select_trigger ((self.async_return, (None, )))
+                return
+        
+        if self.subprocess.stdin == None:
+                self.sync_poll ()
+        else:
+                self.sync_stdin ()
+
+def sync_stdin (self, data):
+        # try to write and poll, or return
+        try:
+                self.subprocess.stdin.write (data)
+        except:
+                self.select_trigger ((
+                        self.async_return, ('subprocess.stdin.write error', )
+                        ))
+                return
+        
+        self.sync_poll ()
+        
+def sync_poll (self):
+        # try to poll, return when done or on exception ...
+        try:
+                code = self.subprocess.poll ()
+        except:
+                self.select_trigger ((
+                        self.async_return, ('subprocess.poll error', )
+                        ))
+                return
+        
+        if code != None:
+                self.select_trigger ((self.async_return, (code, )))
+                return
+        
+        # ... continue either by reading stdout and stderr if any
+        if self.subprocess.stdout != None:
+                try:
+                        stdout = self.subprocess.stdout.read (
+                                self.sync_buffer
+                                )
+                except:
+                        self.select_trigger ((
+                                self.async_return, (
+                                        'subprocess.stdout.read error', 
+                                        )
+                                ))
+                        return
                 
+        if self.subprocess.stderr != None:
+                try:
+                        stderr = self.subprocess.stderr.read (
+                                self.sync_buffer
+                                )
+                except:
+                        self.select_trigger ((
+                                self.async_return, (
+                                        'subprocess.stderr.read error', 
+                                        )
+                                ))
+                        return
+                
+        self.select_trigger ((self.async_read, (stdout, stderr)))
+                                
+def sync_wait (self):
+        self.select_trigger ((self.async_return, (self.subproces.wait (), )))
+
 
 class Synchronized_popen (finalization.Finalization):
         
@@ -191,13 +287,15 @@ class Synchronized_popen (finalization.Finalization):
         # buffered to produce output and STDERR is collected.
         
         synchronizer = None
+        synchronizer_size = 4
 
         collector_is_simple = True
         
-        buffer = 4096
+        sync_buffer = 4096
+        async_code = None
         
         def __init__ (self, *args, **kwargs):
-                self.buffers = collections.deque([])
+                self.async_stdout = collections.deque([])
                 synchronize (self)
                 self.synchronized ((self.sync_popen, (args, kwargs)))
                 
@@ -210,74 +308,30 @@ class Synchronized_popen (finalization.Finalization):
         
         def more (self):
                 try:
-                        return self.buffers.popleft ()
+                        return self.async_stdout.popleft ()
                         
                 except:
                         return ''
         
         def producer_stalled (self):
-                return not (self.closed or len (self.buffers) > 0)
+                return not (
+                        self.async_code == None or 
+                        len (self.async_stdout) > 0
+                        )
+
+        sync_popen = sync_popen
+        sync_stdin = sync_stdin
+        sync_poll = sync_poll
+        sync_wait = sync_wait
         
-        #
-        
-        def sync_popen (self, args):
-                try:
-                        self.subprocess = subprocess.Popen (*args, **kwargs)
-                except:
-                        self.select_trigger ((
-                                self.async_return, (None, )
-                                ))
-                else:
-                        if self.subprocess.stdin == None:
-                                self.sync_poll ()
-                        else:
-                                self.sync_stdin ()
-        
-        def sync_stdin (self, data):
-                # first try to write
-                try:
-                        self.subprocess.stdin.write (data)
-                except:
-                        # or stop
-                        self.select_trigger ((
-                                self.async_return, (None, )
-                                ))
-                        return
-                
-                self.sync_poll ()
-                
-        def sync_poll (self):
-                code = self.subprocess.poll ()
-                if code:
-                        self.select_trigger ((
-                                self.async_return, (code, )
-                                ))
-                        return
-                
-                # continue ...
-                if self.subprocess.stdout != None:
-                        try:
-                                data = self.subprocess.stdout.read (
-                                        self.buffer
-                                        )
-                        except:
-                                self.select_trigger ((
-                                        self.async_return, (None, )
-                                        ))
-                        else:
-                                self.select_trigger ((
-                                        self.async_stdout, (data, )
-                                        ))
-                                        
-        #
-                
-        def async_stdout (self, data):
-                self.buffers.append (data)
+        def async_read (self, stdout, stderr):
+                self.async_stdout.append (stdout)
+                self.async_stderr.append (stderr)
                 self.synchronized ((self.sync_poll, ()))
                 
         def async_return (self, code):
+                self.async_code = code
                 assert None == loginfo.log ('%r' % code, 'debug')
-                self.closed = True
         
 # TODO: add synchronized file and process reactors
 #
