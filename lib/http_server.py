@@ -50,8 +50,6 @@ class HTTP_server_channel (
         ac_in_buffer_size = 4096 # 4KB input buffer
         ac_out_buffer_size = 1<<16 # 64KB output buffer
 
-	# HTTP_server_channel
-
 	http_version = '1.0'
 
 	def __init__ (self, conn):
@@ -143,11 +141,13 @@ class HTTP_server_channel (
                 reactor.mime_producer_headers = {} # TODO: complete?
 		if self.http_version != version[-3:]:
 			self.http_version = version[-3:]
-                # and reset the channel's and MIME collector's state
+                # reset the channel's and MIME collector's state
                 self.set_terminator ('\r\n\r\n')
                 self.mime_collector_headers = \
                         self.mime_collector_lines = \
                         self.mime_collector_body = None
+                # push the (stalled) reactor in the channel's output fifo
+                self.producer_fifo.append (reactor)
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
                 if self.http_server_continue (reactor):
@@ -190,10 +190,11 @@ class HTTP_server_channel (
         http_collector_continue = http_reactor.http_collector_continue
 
         def mime_collector_finalize (self, reactor):
-                # Push the reactor in the channel's output fifo and
-                # complete the HTTP response producer 
-                #
-                self.producer_fifo.append (reactor)
+                if reactor.mime_collector_body != None:
+                        # continue once again by the server if there was
+                        # a body to collect ...
+                        self.http_server_continue (reactor)
+                # Complete the HTTP response producer
                 if reactor.http_request[0] in (
                         'GET', 'POST'
                         ) and  reactor.mime_producer_body == None:
@@ -251,13 +252,8 @@ class HTTP_server_channel (
                 reactor.log (reactor.mime_producer_lines[0][:-2], 'response')
 
         HTTP_SERVER_RESPONSE = (
-                '<html>'
-                '<head><title>Error</title></head>'
-                '<body>'
-                '<h1>%d %s</h1>'
-                '<pre>%s</pre>'
-                '</body>'
-                '</html>'
+                '<html><head><title>Error</title></head>'
+                '<body><h1>%d %s</h1><pre>%s</pre></body></html>'
                 )
 
         HTTP_SERVER_RESPONSES = {
@@ -308,14 +304,13 @@ def none (): pass
 class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
 
         synchronizer = None
+        synchronizer_size = 2
                 
-        def __init__ (self, path, host=None):
+        def __init__ (self, path, host):
                 self.http_path = path
-                self.http_host = host or os.path.basename (
-                        path
-                        ).replace ('-', ':')
+                self.http_host = host
                 self.http_cache = {}
-                synchronizer.synchronize (self)
+                synchronizer.synchronized (self)
                 assert None == self.log (
                         'loaded path="%s"' % path, 'debug'
                         )
@@ -329,6 +324,8 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         return False
                         #
                         # 405 Method Not Allowed (this *is* a cache)
+                        #
+                        # TODO: add support for HEAD
                         
                 filename = self.http_path + urllib.unquote (
                         reactor.http_uri[2]
@@ -357,10 +354,9 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
         def async_stat (self, reactor, filename, result):
                 if result == None or not stat.S_ISREG (result[0]):
                         reactor.http_response = 404
-                        reactor.http_channel.mime_collector_finalize (reactor)
+                        reactor.http_channel.http_continue (reactor)
                         return
                 
-                # TODO: implement gzip, deflate, ...
                 teed = synchronizer.Synchronized_open (filename, 'rb')
                 content_type, content_encoding = \
                         mimetypes.guess_type (filename)
@@ -385,6 +381,7 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
         
 def http_server_accept (server, channel):
         channel.http_server_continue = server.http_continue
+        channel.log ('accepted ip="%s" port="%d"' % channel.addr, 'info')
         
 def http_server_continue (server, reactor):
         http_root = server.http_hosts.get (
@@ -447,6 +444,32 @@ class HTTP_throttler (tcp_server.TCP_server_throttle):
         tcp_server_stop = http_server_stop
 
 
+def http_hosts (root, host, port):
+        if port == 80:
+                if host == None:
+                        return [
+                                (os.path.split (r)[1], r)
+                                for r in [
+                                        r.replace ('\\', '/') 
+                                        for r in glob.glob (root+'/*')
+                                        ]
+                                ]
+                                
+                else:        
+                        return ((host, root), )
+        
+        elif host == None:
+                return [
+                        ('%s:%d' % (os.path.split (r)[1], port), r)
+                        for r in [
+                                r.replace ('\\', '/') 
+                                for r in glob.glob (root+'/*')
+                                ]
+                        ]
+                        
+        else:
+                return (('%s:%d' % (host, port), root), )
+
 if __name__ == '__main__':
         import sys
         if '-d' in sys.argv:
@@ -466,27 +489,20 @@ if __name__ == '__main__':
                                 ip, port = sys.argv[2].split (':')
                         except:
                                 ip = sys.argv[2]
+                        else:
+                                port = int (port)
                         if (sys.argv) > 3:
                                 host = sys.argv[3]
-        if ip == '127.0.0.1':
+        if ip.startswith ('127.'):
 	        server = HTTP_peer ((ip, port))
         elif ip.startswith ('192.168.') or ip.startswith ('10.') :
                 server = HTTP_server ((ip, port))
         else:
                 server = HTTP_throttler ((ip, port))
-        if host == None:
-                server.http_hosts = dict ([
-                        (
-                                os.path.split (r)[1].replace ('-', ':'), 
-                                HTTP_cache (r)
-                                )
-                        for r in [
-                                r.replace ('\\', '/') 
-                                for r in glob.glob (root+'/*')
-                                ]
-                        ])
-        else:
-                server.http_hosts = {host: HTTP_cache (root)}
+        server.http_hosts = dict ([
+                (h, HTTP_cache (p, h)) 
+                for h, p in http_hosts (root, host, port)
+                ])
         server.async_catch = async_loop.async_catch
         async_loop.async_catch = server.tcp_server_catch
         async_loop.loop ()
@@ -512,7 +528,7 @@ if __name__ == '__main__':
 # The http_server.py module implements a simple filesystem web service
 # that publishes static files from a folder for a named host and address:
 #
-#        http_server.py [./] [127.0.0.1] [127.0.0.1]
+#        http_server.py [./] [127.0.0.1[:80]] [127.0.0.1]
 #
 # by default the current directory is served at
 #
