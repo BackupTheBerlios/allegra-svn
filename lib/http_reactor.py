@@ -164,12 +164,11 @@ def http_collector_continue (reactor, collected):
                         reactor.mime_collector_body = collected
                         reactor.set_terminator (None)
 
-
-# URLencoded form data collector
-
-
-# TODO: add charset decoding to UNICODE, with RFC-3023 and "bozo" detection
+# TODO: charset and compression decoding.
+#
+# add charset decoding to UNICODE, with RFC-3023 and "bozo"
+# detection a la UFP:
 #
 #        http://feedparser.org/docs/character-encoding.html
 #
-
+# and implement gzip, deflate, ...
