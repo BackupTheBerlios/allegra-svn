@@ -41,7 +41,7 @@ class XML_sparse (object):
                 xml_first = xml_children = xml_follow = None
         
         def xml_valid (self, dom):
-                parent = dom._curr
+                parent = dom.xml_parsed
                 if parent == None:
                         return # do not fold a root element!
                         
@@ -74,6 +74,7 @@ class XML_dom (object):
         xml_type = XML_element
         xml_types = {}
         xml_unicoding = 1
+        xml_expat = xml_parsed = None
 
         def __init__ (self, xml_prefixes=None, xml_pi=None):
                 self.xml_prefixes = xml_prefixes or {}
@@ -117,7 +118,7 @@ class XML_dom (object):
                         #
                         e = self.xml_root
                         self.xml_root = None
-                        del self.xml_expat, self._curr 
+                        self.xml_expat = self.xml_parsed = None
                         return e
                         
                 return True
@@ -127,13 +128,13 @@ class XML_dom (object):
 
         def xml_parse_error (self, error):
                 self.xml_error = error
-                while self._curr != None:
-                        self.xml_expat_END (self._curr.xml_name)
+                while self.xml_parsed != None:
+                        self.xml_expat_END (self.xml_parsed.xml_name)
                 #
                 # validate the XML Document Object Model as much as possible
 
         def xml_parser_reset (self):
-                self.xml_root = self.xml_error = self._curr = None
+                self.xml_root = self.xml_error = self.xml_parsed = None
                 self.xml_expat = pyexpat.ParserCreate (None, ' ')
                 self.xml_expat.returns_unicode = self.xml_unicoding
                 self.xml_expat.buffer_text = 1
@@ -158,18 +159,18 @@ class XML_dom (object):
                         if e.xml_attributes:
                                 attributes.update (e.xml_attributes)
                         e.xml_attributes = attributes
-                e.xml_parent = parent = self._curr
+                e.xml_parent = parent = self.xml_parsed
                 if parent == None:
                         self.xml_root = e
                 elif parent.xml_children:
                         parent.xml_children.append (e)
                 else:
                         parent.xml_children = [e]
-                self._curr = e
+                self.xml_parsed = e
                 
         def xml_expat_END (self, tag):
-                e = self._curr
-                parent = self._curr = e.xml_parent
+                e = self.xml_parsed
+                parent = self.xml_parsed = e.xml_parent
                 if parent:
                         e.xml_parent = weakref.ref (parent)
                         #
@@ -182,9 +183,9 @@ class XML_dom (object):
 
         def xml_expat_CDATA (self, cdata):
                 try:
-                        self._curr.xml_children[-1].xml_follow = cdata
+                        self.xml_parsed.xml_children[-1].xml_follow = cdata
                 except:
-                        self._curr.xml_first = cdata
+                        self.xml_parsed.xml_first = cdata
 
         # The XML_dom instance hosts a "sparse" expat parser and holds the 
         # document's prefixes and processing instructions separately from 
