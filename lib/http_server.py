@@ -20,7 +20,7 @@
 import types, weakref, time, os, stat, glob, mimetypes, urllib, re
 
 from allegra import \
-        loginfo, async_loop, finalization, synchronizer, \
+        netstring, loginfo, async_loop, finalization, synchronizer, \
         async_chat, producer, tcp_server, \
         mime_headers, mime_reactor, http_reactor
         
@@ -34,6 +34,8 @@ else:
 class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         
         mime_collector_body = None
+        
+        http_handler = None
         
         def __repr__ (self):
                 return 'http-server-reactor id="%x"' % id (self)
@@ -150,7 +152,7 @@ class HTTP_server_channel (
                 self.producer_fifo.append (reactor)
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
-                if self.http_server_continue (reactor):
+                if self.http_server.http_continue (reactor):
                         return
                         #
                         # it is up to the reactor's handler to properly
@@ -161,7 +163,7 @@ class HTTP_server_channel (
                 
         def http_continue (self, reactor):
                 if reactor.http_request[0] in ('GET', 'HEAD', 'DELETE'):
-                        # finalize responses without a MIME body
+                        # finalize responses without a MIME body now!
                         self.mime_collector_finalize (reactor)
                         return
 
@@ -185,15 +187,11 @@ class HTTP_server_channel (
                 self.http_collector_continue (
                         reactor.mime_collector_body
                         )
-                # return True
                         
         http_collector_continue = http_reactor.http_collector_continue
 
         def mime_collector_finalize (self, reactor):
-                if reactor.mime_collector_body != None:
-                        # continue once again by the server if there was
-                        # a body to collect ...
-                        self.http_server_continue (reactor)
+                reactor.http_handler.http_finalize (reactor)
                 # Complete the HTTP response producer
                 if reactor.http_request[0] in (
                         'GET', 'POST'
@@ -299,6 +297,13 @@ class HTTP_server_channel (
 
 # A Static Cache Root
 
+def http_log (self, reactor):
+        loginfo.log (netstring.netstrings ((
+                reactor.http_channel.addr,
+                reactor.http_request,
+                reactor.http_response
+                )))
+
 def none (): pass
             
 class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
@@ -342,6 +347,8 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                 reactor.http_response = 200
                 return False
         
+        http_finalize = http_log
+        
         def sync_stat (self, reactor, filename):
                 try:
                         result = os.stat (filename)
@@ -379,69 +386,70 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
 
 # The HTTP Server method and variants
         
-def http_server_accept (server, channel):
-        channel.http_server_continue = server.http_continue
+def http_accept (server, channel):
+        channel.http_server = server
         channel.log ('accepted ip="%s" port="%d"' % channel.addr, 'info')
         
-def http_server_continue (server, reactor):
-        http_root = server.http_hosts.get (
+def http_continue (server, reactor):
+        handler = server.http_hosts.get (
                 reactor.mime_collector_headers.get ('host')
                 )
-        if http_root == None:
+        if handler == None:
                 reactor.http_response = 404
                 return False
-                
-        return http_root.http_continue (reactor)
-        
-def http_server_close (server, channel):
-        del channel.http_server_continue
 
-def http_server_stop (self):
+        reactor.http_handler = handler
+        return handler.http_continue (reactor)
+
+def http_close (server, channel):
+        channel.http_server = None
+
+def http_stop (self):
         "called once the server stopped, assert debug log and close"
         self.http_hosts = None
         self.log ('stop', 'info')
         
 
-class HTTP_peer (tcp_server.TCP_server):
+class HTTP_local (tcp_server.TCP_server):
 
         def __repr__ (self):
-                return 'http-peer id="%x"' % id (self)
+                return 'http-local-server id="%x"' % id (self)
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
         tcp_server_clients_limit = 64
         
-        tcp_server_accept = http_server_accept
-        tcp_server_close = http_server_close
-        http_continue = http_server_continue
-        tcp_server_stop = http_server_stop
+        tcp_server_accept = http_accept
+        tcp_server_close = http_close
+        http_continue = http_continue
+        tcp_server_stop = http_stop
         
 
-class HTTP_server (tcp_server.TCP_server_limit):
+class HTTP_private (tcp_server.TCP_server_limit):
 
         def __repr__ (self):
-                return 'http-server id="%x"' % id (self)
+                return 'http-private-server id="%x"' % id (self)
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
         tcp_server_clients_limit = 2
         
-        tcp_server_accept = http_server_accept
-        tcp_server_close = http_server_close
-        http_continue = http_server_continue
-        tcp_server_stop = http_server_stop
+        tcp_server_accept = http_accept
+        tcp_server_close = http_close
+        http_continue = http_continue
+        tcp_server_stop = http_stop
         
 
-class HTTP_throttler (tcp_server.TCP_server_throttle):
+class HTTP_public (tcp_server.TCP_server_throttle):
 
         def __repr__ (self):
-                return 'http-throttler id="%x"' % id (self)
+                return 'http-public-server id="%x"' % id (self)
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
         tcp_server_clients_limit = 1
         
-        tcp_server_accept = http_server_accept
-        tcp_server_close = http_server_close
-        http_continue = http_server_continue
-        tcp_server_stop = http_server_stop
+        tcp_server_accept = http_accept
+        tcp_server_close = http_close
+        http_continue = http_continue
+        tcp_server_stop = http_stop
 
 
 def http_hosts (root, host, port):
@@ -470,6 +478,23 @@ def http_hosts (root, host, port):
         else:
                 return (('%s:%d' % (host, port), root), )
 
+
+def cli (argv):
+        root, ip, port, host = ('./', '127.0.0.1', 80, None)
+        if len (argv) > 1:
+                root = argv[1]
+                if len (argv) > 2:
+                        try:
+                                ip, port = argv[2].split (':')
+                        except:
+                                ip = argv[2]
+                        else:
+                                port = int (port)
+                        if len (argv) > 3:
+                                host = argv[3]
+        return root, ip, port, host
+
+
 if __name__ == '__main__':
         import sys
         if '-d' in sys.argv:
@@ -481,24 +506,13 @@ if __name__ == '__main__':
                 ' - Coyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
                 'info'
                 )
-        root, ip, port, host = ('./', '127.0.0.1', 80, None)
-        if len (sys.argv) > 1:
-                root = sys.argv[1]
-                if len (sys.argv) > 2:
-                        try:
-                                ip, port = sys.argv[2].split (':')
-                        except:
-                                ip = sys.argv[2]
-                        else:
-                                port = int (port)
-                        if (sys.argv) > 3:
-                                host = sys.argv[3]
+        root, ip, port, host = cli (sys.argv)
         if ip.startswith ('127.'):
-	        server = HTTP_peer ((ip, port))
+                server = HTTP_local ((ip, port))
         elif ip.startswith ('192.168.') or ip.startswith ('10.') :
-                server = HTTP_server ((ip, port))
+                server = HTTP_private ((ip, port))
         else:
-                server = HTTP_throttler ((ip, port))
+                server = HTTP_public ((ip, port))
         server.http_hosts = dict ([
                 (h, HTTP_cache (p, h)) 
                 for h, p in http_hosts (root, host, port)
@@ -539,9 +553,78 @@ if __name__ == '__main__':
 # behaves like a busy-body cache whose memory consumption depends on the 
 # parameters set for the garbage gollector of the CPython VM.
 #
-# Note finally that each server is expected to have only one handler
-# implementation, which may delegate a request but must do so explicitely.
-# The rational is that this is not a library to develop an extensible 
-# Apache-like server. This module is designed to either develop a special
-# purpose web server or a peer for component instances, where functions
-# are not layered as handlers but integrated in a class definition.
+#
+# Allegra PRESTo!
+#
+# If you need a web application server by yesterday, there's Allgra PRESTo
+# and a web prompt from which to test and learn about Allegra's lower-level
+# HTTP implementation.
+#
+# Eventually, once applied, it should be simple to reuse http_server.py and
+# derive specialized HTTP protocol implementations other than a network
+# file system (and there are many others such as Gnutella, RSS and all 
+# protocols piggy-backed on HTTP).
+#
+# Each virtual host is expected has only one handler implementation for
+# each phase of the HTTP protocol. It can delegate a request but must do 
+# so explicitely. 
+#
+# The rational is that Allegra's HTTP server is truly a library to develop
+# statefull distributed web applications, not an HTTP dispatcher for stateless
+# and consolidated web services. This is not a library to develop an Apache-
+# like server. This module is designed to either develop a special purpose web
+# server or a peer host for component, where functions are not layered as
+# handlers but integrated in Python class methods.
+#
+#
+# Other Applications
+#
+# For Python developper, Allegra's http_server.py is a big improvement over
+# the standard BaseHTTPServer.py as well as Medusa many off-springs, because
+# it comes with a ready-made, powerfull and practical API. 
+#
+# This is a fully-fledged, high-performance HTTP peer with a low CPU
+# footprint, a decent cache, that can limit and throttle network I/O 
+# and is well-logged. If you need a low profile but fast public or
+# local web server, this simple implementation is available on all
+# Python 2.4 supported OS (Window, Linux, MacOSX, etc ...).
+#
+# Functionnaly, it is not much different than a well configured Apache 2.0
+# web server for static files, complete with a limited array of threads
+# to ensure non-blocking I/O and a low CPU and memory consumption. It is
+# as extensible (you have the sources) and although some of its parts may
+# be optimized in a C library, most of it should stay pure Python as its
+# applications are better implemented in Python and should be able to access
+# the library's interfaces safely and without restrictions.
+#
+#
+# Why Python Matters Here
+#
+# Because when it comes to integrate and articulate a statefull, large and 
+# complex computer application, CPython is the single best implementation
+# of a Virtual Machine for something that looks a lot like Lisp but is
+# actually written in C and "born" to bind C libraries.
+#
+# Why write hundreds of thousands lines of C or Java code to integrate a
+# monster that is bound to eventually die an horrible death at the first 
+# single production bug or unhandled error conditions? Especially if you
+# have a single cross-plateform VM optimized in C and published under the
+# GPL for a very practical language like Python.
+#
+# What this module implements in Python is simple instanciation and access of
+# five states: the server state, the root state, the async_chat channel state, 
+# the reactor's state and the MIME body producer state. And it can do so,
+# safely because the CPython VM is a slow but safe bytecode interpreter. Also,
+# any application of that thin Python layer is safe to access those states 
+# too, allowing thight integration of the application with its host.
+#
+# Compared to a J2EE or .NET infrastructure, a "pure" Python web peer
+# makes a lot of senses once myths about those mega-frameworks have been
+# dissipated. Zope is slow because it is both too simple at its core, has
+# over-engineered API and a synchronous code base. Yet Medusa was fast and
+# its asynchronous design still provide high perfomance to Allegra.
+#
+# Hosting web application components in a Python shell is practically both
+# the safest and the most effective way to do it, provided that it can be
+# distributed and implements non-blocking I/O between asynchronous and
+# synchronous system or application interfaces.

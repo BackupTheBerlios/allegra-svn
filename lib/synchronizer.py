@@ -17,7 +17,7 @@
 
 ""
 
-import collections, os, subprocess
+import collections, subprocess
 
 from allegra import loginfo, finalization, thread_loop 
 
@@ -103,28 +103,27 @@ def synchronized (instance):
         instance.finalization = instance.synchronizer.desynchronize
 
 
-# Synchronized methods for file I/O, typical synchronized functions that
-# call thread-safe and GIL-releasing builtin or binded fast C libraries.
+# Methods attributed to a synchronized file type
 
 def sync_open (self, filename, mode):
         try:
                 self.sync_file = open (filename, mode)
         except:
-                self.select_trigger ((self.async_close, ('eo')))
-        if mode[0] == 'r':
-                self.sync_read ()
+                self.select_trigger ((self.async_close, ('eo', )))
+        else:
+                self.select_trigger ((self.async_open, (mode, )))
         
 def sync_write (self, data):
         try:
                 self.sync_file.write (data)
         except:
-                self.select_trigger ((self.async_close, ('ew')))
+                self.select_trigger ((self.async_close, ('ew', )))
         
 def sync_read (self):
         try:
                 data = self.sync_file.read (self.sync_buffer)
         except:
-                self.select_trigger ((self.async_close, ('er')))
+                self.select_trigger ((self.async_close, ('er', )))
         else:
                 if data:
                         self.select_trigger ((self.async_read, (data, )))
@@ -163,7 +162,7 @@ class Synchronized_open (object):
                         self.async_buffers = collections.deque([])
                 synchronize (self)
                 self.synchronized ((self.sync_open, (filename, mode)))
-                        
+
         def __repr__ (self):
                 return 'synchronized-open id="%x"' % id (self)
                         
@@ -173,7 +172,7 @@ class Synchronized_open (object):
                 self.synchronized ((self.sync_write, (data,)))
                 
         def found_terminator (self):
-                self.synchronized ((self.sync_close, ()))
+                self.synchronized ((self.sync_close, ('w', )))
                 
         def more (self):
                 try:
@@ -195,6 +194,10 @@ class Synchronized_open (object):
         sync_close = sync_close
 
         # ... asynchronous continuations
+        
+        def async_open (self, mode):
+                if mode[0] == 'r':
+                        self.synchronized ((self.sync_read, ()))
                 
         def async_read (self, data):
                 self.async_buffers.append (data)
@@ -205,7 +208,7 @@ class Synchronized_open (object):
                 desynchronize (self)
                                 
                                 
-# Synchronized Subprocess methods
+# Methods attributed to a synchronized subprocess type
                                 
 def sync_popen (self, args, kwargs):
         # try to open a subprocess and either write input and/or
@@ -247,45 +250,49 @@ def sync_poll (self):
                 self.select_trigger ((self.async_return, (code, )))
                 return
         
-        # ... continue either by reading stdout and stderr if any
+        # ... maybe reading stdout ...
         if self.subprocess.stdout != None:
                 try:
                         stdout = self.subprocess.stdout.read (
                                 self.sync_buffer
                                 )
                 except:
+                        # ... terminate and return on exception ...
                         self.select_trigger ((
                                 self.async_return, (
                                         'subprocess.stdout.read error', 
                                         )
                                 ))
-                        return
+                else:
+                        # ... to buffer asynchronously ...
+                        self.select_trigger ((self.async_read, (stdout, )))
+                return
+        
+        # ... or poll more >>>
+        self.synchronized ((self.sync_poll, ()))
                 
-        if self.subprocess.stderr != None:
-                try:
-                        stderr = self.subprocess.stderr.read (
-                                self.sync_buffer
-                                )
-                except:
-                        self.select_trigger ((
-                                self.async_return, (
-                                        'subprocess.stderr.read error', 
-                                        )
-                                ))
-                        return
-                
-        self.select_trigger ((self.async_read, (stdout, stderr)))
-                                
 def sync_wait (self):
-        self.select_trigger ((self.async_return, (self.subproces.wait (), )))
+        try:
+                stderr = self.subprocess.stderr.read ()
+        except:
+                self.select_trigger ((
+                        self.async_return, (
+                                'subprocess.stderr.read error', 
+                                )
+                        ))
+        else:
+                self.select_trigger ((
+                        self.async_return, (self.subproces.wait (), )
+                        ))
 
 
-class Synchronized_popen (finalization.Finalization):
+class Synchronized_popen (object):
         
-        # another reactor interface for synchronous system call, here
-        # a popened process. Data is collected to STDIN, STDOUT is 
-        # buffered to produce output and STDERR is collected.
-        
+        # Another reactor interface for synchronous system call, here
+        # a popened process. Data is collected asynchronously to STDIN, 
+        # STDOUT is buffered to produce asynchronous output and STDERR 
+        # is collected in a cStringIO buffer ... synchronously ;-)
+
         synchronizer = None
         synchronizer_size = 4
 
@@ -324,27 +331,38 @@ class Synchronized_popen (finalization.Finalization):
         sync_poll = sync_poll
         sync_wait = sync_wait
         
-        def async_read (self, stdout, stderr):
+        def async_read (self, stdout):
                 self.async_stdout.append (stdout)
-                self.async_stderr.append (stderr)
                 self.synchronized ((self.sync_poll, ()))
                 
         def async_return (self, code):
                 self.async_code = code
                 assert None == loginfo.log ('%r' % code, 'debug')
         
-# TODO: add synchronized file and process reactors
-#
-# something like:
-#
-#        fs ('~').read|write ('/name')
-#
-#        ps ('command').stdout|stderr|stdin ()
-#
+        # The rational is that you want to produce STDOUT not STDERR.
+        #
+        # Errors are "bagged" in one big buffer or any other file type
+        # specified as SYNC_STDERR that is supported by the subprocess
+        # standard module of Python 2.4.
+        #
+        # This class is a very practical way to pipe UNIX processes
+        # with Command Line Interface through asynchronously network
+        # I/O, with the least blocking possible given a maximum number 
+        # of threads.
+        #
+        # It's methods and design is reused by PRESTo components to
+        # provide a CGI-like interface for Allegra's web framework. It
+        # may be applied to all those CPU intensive processes for which
+        # a reliable and optimized pipes allready exists.
+        #
+        # Further processing of the reactor's output or input can be
+        # implemented by chaining the ad-hoc type of collector and/or 
+        # producer instances.
+        
+
 # Notes about this implementation
 #
-# The purpose is to but deliver non-blocking access to three synchronous
-# system API: stat, open and popen.
+# The purpose is to but deliver non-blocking interfaces to synchronous API.
 #
 # The synchronizer is an resizable array of thread loop queues. Synchronized
 # instances are attached to one of these queues. When a synchronized instance
@@ -356,6 +374,9 @@ class Synchronized_popen (finalization.Finalization):
 # This interface is purely asynchronous: methods synchronized should be able
 # to access the select_trigger to manipulate the Synchronizer, or more
 # mundanely to push data to asynchat ...
+#
+#
+# Limits
 #
 # There is no easy way to prevent an instance to stall its thread loop queue
 # and all the other instances methods synchronized to it. The only practical
@@ -371,6 +392,7 @@ class Synchronized_popen (finalization.Finalization):
 # an infinite loop or a stalled-forever wait state. So, this implementation
 # does not even attempt to correct the effects of such bugs on the other
 # synchronized instance methods.
+#
 #
 # Beware!
 #
@@ -392,3 +414,9 @@ class Synchronized_popen (finalization.Finalization):
 #	bsddb.db.DB ().open (...)
 #
 # may be blocking and should be synchronized.
+#
+#
+# Synchronized file and process reactors
+#
+# This modules comes with two usefull asynchronous reactors that can collect
+# and/or produce data to/from a synchronous file or process.

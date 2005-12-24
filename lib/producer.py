@@ -70,7 +70,7 @@ class Composite_producer (object):
         	buffer = ''
         	limit = self.glob
         	while True:
-	        	if type (self.current) == types.StringType:
+	        	if type (self.current) == str:
 	        		buffer += self.current
 	        		try:
 	  				self.current = self.generator.next ()

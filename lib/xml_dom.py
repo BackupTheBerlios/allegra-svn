@@ -337,6 +337,10 @@ if __name__ == '__main__':
         
 # Note about this implementation
 #
+# The xml_dom.py module is a thin layer around Python's expat bindings, 
+# designed to support the developpement of non-blocking, object-oriented
+# XML processors.
+#
 # This module delivers a few marginal improvements from Greg Stein's
 # original work: 1) a consistent name space, without possible conflicts
 # with the many different applications of XML; 2) element type declaration
@@ -369,22 +373,12 @@ if __name__ == '__main__':
 #
 # A Better Optimization Strategy: 
 #
-# xml_dom is a different interface developped in Python, more practical for
-# Python XML processor programming and optimizable in C as a marginal 
-# enhancement of Python expat module (namely the ability to register
-# an element type map, a default type, maybe a prefix map and a processing
-# instruction list). xml_dom is an object-oriented interface for expat
-# designed to support the developpement of non-blocking object-oriented 
-# processors.
-#
 # I'm too lazy to loose focus on the context, and I did not forget my
 # benchmarks of expat: when parsing, the Python interface will cost nothing
 # until event handlers are registered then called-back, and it gets much
 # worse when object are instanciated. cElementTree is *so* close to expat
 # in the effbot's benchmark, but only because it "does" nothing really
 # usefull besides moving XML from a string into a memory tree.
-#
-# Now
 #
 # If you *need* to program your XML processing in Python rather than in 
 # XSLT, then you will probably end up instanciating specialized objects 
@@ -461,7 +455,7 @@ if __name__ == '__main__':
 # and object instanciation.
 #
 # As Python packages and modules, the 4XML suite and even celementtree are
-# out of context. The first one should be (and is but by others) written
+# out of context. The first one should be (and is, but by others) written
 # in C and then wrapped for Python. The second one, although close, does 
 # not provide a new point of articulation not yet made available by expat
 # itself: it is a fast but indiscriminate tree-maker that only has

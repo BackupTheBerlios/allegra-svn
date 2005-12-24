@@ -174,7 +174,7 @@ class TCP_server_limit (TCP_server):
         tcp_server_shutdown = False
 
         def handle_close (self):
-                assert None == self.log ('shutdown', 'debug')
+                assert None == self.log ('handle-close', 'debug')
                 self.tcp_server_shutdown = True
                 if len (self.tcp_server_channels) > 0:
                         for channel in tuple (self.tcp_server_channels):
@@ -216,7 +216,7 @@ class TCP_server_limit (TCP_server):
                 if self.tcp_server_shutdown:
                         self.close ()
                         self.tcp_server_stop ()
-                return None
+                return
                 
         def tcp_server_inactive (self, channel, when):
                 if not channel.closing and channel.connected and (
