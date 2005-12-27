@@ -42,30 +42,6 @@ import types, collections, socket
 from allegra import async_core
 
 
-def refill_buffer (channel):
-        if len (channel.producer_fifo):
-                p = channel.producer_fifo[0]
-                if p is None:
-                        if channel.ac_out_buffer == '':
-                                channel.producer_fifo.popleft ()
-                                channel.handle_close () # this *is* an event
-                        return
-                    
-                elif type (p) is types.StringType:
-                        channel.producer_fifo.popleft ()
-                        channel.ac_out_buffer += p
-                        return
-
-                data = p.more ()
-                if data:
-                        channel.ac_out_buffer += data
-                        return
-                    
-                else:
-                        channel.producer_fifo.popleft ()
-                        return True
-                        
-                        
 # Given 'haystack', see if any prefix of 'needle' is at its end.  This
 # assumes an exact match has already been checked.  Return the number of
 # characters matched.
@@ -75,7 +51,7 @@ def refill_buffer (channel):
 # f_p_a_e ("qwerty\r\n", "\r\n") => <undefined>
 
 def find_prefix_at_end (haystack, needle):
-        l = len(needle) - 1
+        l = len (needle) - 1
         while l and not haystack.endswith (needle[:l]):
                 l -= 1
         return l
@@ -88,90 +64,83 @@ def find_prefix_at_end (haystack, needle):
         # regex:     14035/s
 
 
-def consume_buffer (channel):                        
-        lb = len (channel.ac_in_buffer)
-        terminator = channel.get_terminator ()
-        if terminator is None or terminator == '':
-                # no terminator, collect it all
-                channel.collect_incoming_data (channel.ac_in_buffer)
-                channel.ac_in_buffer = ''
-        elif isinstance (terminator, int):
-                # numeric terminator
-                n = terminator
-                if lb < n:
-                        channel.collect_incoming_data (
-                                channel.ac_in_buffer
-                                )
-                        channel.ac_in_buffer = ''
-                        channel.terminator = self.terminator - lb
+def collect (c):
+        c.collector_stalled = False
+        lb = len (c.ac_in_buffer)
+        while lb:
+                terminator = c.get_terminator ()
+                if terminator is None or terminator == '':
+                        c.collect_incoming_data (c.ac_in_buffer)
+                        c.ac_in_buffer = ''
+                elif isinstance (terminator, int):
+                        n = terminator
+                        if lb < n:
+                                c.collect_incoming_data (c.ac_in_buffer)
+                                c.ac_in_buffer = ''
+                                c.terminator = c.terminator - lb
+                        else:
+                                c.collect_incoming_data (c.ac_in_buffer[:n])
+                                c.ac_in_buffer = c.ac_in_buffer[n:]
+                                c.terminator = 0
+                                if c.found_terminator ():
+                                        c.collector_stalled = True
+                                        break
+
                 else:
-                        channel.collect_incoming_data (
-                                channel.ac_in_buffer[:n]
-                                )
-                        channel.ac_in_buffer = channel.ac_in_buffer[n:]
-                        channel.terminator = 0
-                        channel.found_terminator ()
-                        # if channel.found_terminator ():
-                        #        return False
-                        #
-                        # ? give the channel the ability to break from the
-                        #   buffer consumer's loop, allowing the collector
-                        #   to manage the channel more safely (I mean, by
-                        #   "stoping" it to change its readable state for
-                        #   instance and remove the channel from the event
-                        #   loop as long as the channel collector waits iddle
-                        #   for another asynchronous event) ?
-                        #
-        else:
-                # 3 cases:
-                # 1) end of buffer matches terminator exactly:
-                #    collect data, transition
-                # 2) end of buffer matches some prefix:
-                #    collect data to the prefix
-                # 3) end of buffer does not match any prefix:
-                #    collect data
-                terminator_len = len (terminator)
-                index = channel.ac_in_buffer.find (terminator)
-                if index != -1:
-                        # we found the terminator
-                        if index > 0:
-                                # don't bother reporting the empty string 
-                                # (source of subtle bugs)
-                                channel.collect_incoming_data (
-                                        channel.ac_in_buffer[:index]
-                                        )
-                        channel.ac_in_buffer = \
-                                channel.ac_in_buffer[index+terminator_len:]
-                        # This does the Right Thing if the terminator is
-                        # changed here.
-                        channel.found_terminator ()
-                        # if channel.found_terminator ():
-                        #        return False
-                        #
-                else:
-                        # check for a prefix of the terminator
-                        index = find_prefix_at_end (
-                                channel.ac_in_buffer, terminator
-                                )
-                        if index:
-                                if index != lb:
-                                        # we found a prefix, collect up to
-                                        # the prefix
-                                        channel.collect_incoming_data (
-                                                channel.ac_in_buffer[:-index]
+                        tl = len (terminator)
+                        index = c.ac_in_buffer.find (terminator)
+                        if index != -1:
+                                if index > 0:
+                                        c.collect_incoming_data (
+                                                c.ac_in_buffer[:index]
                                                 )
-                                        channel.ac_in_buffer = \
-                                                channel.ac_in_buffer[-index:]
-                                return False
+                                c.ac_in_buffer = c.ac_in_buffer[index+tl:]
+                                if c.found_terminator ():
+                                        c.collector_stalled = True
+                                        break
                                 
                         else:
-                                # no prefix, collect it all
-                                channel.collect_incoming_data (
-                                        channel.ac_in_buffer
+                                index = find_prefix_at_end (
+                                        c.ac_in_buffer, terminator
                                         )
-                                channel.ac_in_buffer = ''
-        return len (channel.ac_in_buffer) > 0
+                                if index:
+                                        if index != lb:
+                                                c.collect_incoming_data (
+                                                        c.ac_in_buffer[:-index]
+                                                        )
+                                                c.ac_in_buffer = \
+                                                        c.ac_in_buffer[-index:]
+                                        break
+                                        
+                                else:
+                                        c.collect_incoming_data (
+                                                c.ac_in_buffer
+                                                )
+                                        c.ac_in_buffer = ''
+                lb = len (c.ac_in_buffer)
         
+
+def produce (c):
+        while len (c.producer_fifo):
+                p = c.producer_fifo[0]
+                if p is None:
+                        if c.ac_out_buffer == '':
+                                c.producer_fifo.popleft ()
+                                c.handle_close () # this *is* an event
+                        break
+                    
+                elif type (p) is types.StringType:
+                        c.producer_fifo.popleft ()
+                        c.ac_out_buffer += p
+                        break
+
+                data = p.more ()
+                if data:
+                        c.ac_out_buffer += data
+                        break
+                    
+                c.producer_fifo.popleft ()                        
+                        
                         
 class Async_chat (async_core.Async_dispatcher):
 
@@ -185,28 +154,30 @@ class Async_chat (async_core.Async_dispatcher):
 
         def __repr__ (self):
                 return 'async-chat id="%x"' % id (self)
+        
+        collector_stalled = False
                 
+        #def readable (self):
+        #        "predicate for inclusion in the poll loop for input"
+        #        return (len (self.ac_in_buffer) <= self.ac_in_buffer_size)
+
         def readable (self):
-                "predicate for inclusion in the readable for select()"
-                return (len (self.ac_in_buffer) <= self.ac_in_buffer_size)
+                "predicate for inclusion in the poll loop for input"
+                return not (
+                        self.collector_stalled or
+                        len (self.ac_in_buffer) > self.ac_in_buffer_size
+                        )
+
+        #def writable (self):
+        #        "predicate for inclusion in the poll loop for output"
+        #        return not (
+        #                (self.ac_out_buffer == '') and
+        #                not self.producer_fifo and 
+        #                self.connected
+        #                )
 
         def writable (self):
-                "predicate for inclusion in the writable for select()"
-                return not (
-                        (self.ac_out_buffer == '') and
-                        not self.producer_fifo and self.connected
-                        )
-                #
-                # return 
-                # (
-                #        len (self.ac_out_buffer) or 
-                #        len (self.producer_fifo) or 
-                #        (not self.connected)
-                #        ), 
-                #
-                # this is about twice as fast, though not as clear.
-
-        def writable_for_stalled (self):
+                "predicate for inclusion in the poll loop for output"
                 return not (
                         (self.ac_out_buffer == '') and
                         (
@@ -217,34 +188,21 @@ class Async_chat (async_core.Async_dispatcher):
                         )
 
         def handle_read (self):
+                "try to refill the input buffer and consume it"
                 try:
                         data = self.recv (self.ac_in_buffer_size)
                 except socket.error, why:
                         self.handle_error()
                         return
 
-                # Continue to search for self.terminator in self.ac_in_buffer,
-                # while calling self.collect_incoming_data.  The while loop
-                # is necessary because we might read several data+terminator
-                # combos with a single recv(1024).
-                #
-                #assert None == self.log (
-                #        'handle-read read="%d" buffered="%d"' % (
-                #                len (data), len (self.ac_out_buffer)
-                #                ),
-                #        'debug'
-                #        )
                 self.ac_in_buffer += data
-                while self.ac_consume_buffer ():
-                        pass
+                self.async_collect ()
 
         def handle_write (self):
                 "try to refill the output buffer and send it"
                 obs = self.ac_out_buffer_size
                 if (len (self.ac_out_buffer) < obs):
-                        while self.ac_refill_buffer ():
-                                pass
-        
+                        self.async_produce ()
                 if self.ac_out_buffer and self.connected:
                         try:
                                 sent = self.send (
@@ -256,21 +214,10 @@ class Async_chat (async_core.Async_dispatcher):
                                 if sent:
                                         self.ac_out_buffer = \
                                                 self.ac_out_buffer[sent:]
-                                #assert None == self.log (
-                                #        'handle-write'
-                                #        ' sent="%d" buffered="%d"' % (
-                                #                sent, len (self.ac_out_buffer)
-                                #                ),
-                                #        'debug'
-                                #        )
                         
-        # Allow to use simplified or more sophisticated collector and producer
-        # interfaces (like a netstring channel) or implementations (like a C
-        # version of the original ;-).
+        async_collect = collect
 
-        ac_consume_buffer = consume_buffer
-
-        ac_refill_buffer = refill_buffer
+        async_produce = produce
         
         def push (self, p):
                 "push a string or producer on the output queue, initiate send"
@@ -290,12 +237,12 @@ class Async_chat (async_core.Async_dispatcher):
                 else:
                         self.producer_fifo.append (None)
 
-        # The Async_chat Simplified Interface
+        # The Async_chat Interface
 
         terminator = '\n'
 
-        def set_terminator (self, term):
-                self.terminator = term
+        def set_terminator (self, terminator):
+                self.terminator = terminator
 
         def get_terminator (self):
                 return self.terminator
@@ -307,20 +254,45 @@ class Async_chat (async_core.Async_dispatcher):
                 assert None == self.log (
                         self.get_terminator (), 'found-terminator'
                         )
+                return False
 
 # Note about this implementation
 #
 # This is a refactored version of asynchat.py as found in Python 2.4, and
-# modified as to support stallable producers, loginfo, finalization.
-# Incidentaly, this implementation allways use collection.deque for output
-# FIFO queues instead of a class wrapper, and the push () method actually
-# does what it is supposed to do and pushes a string at the end that output
-# queue, not a Simple_producer instance.
+# modified as to support stallable producers and collectors, loginfo and 
+# finalization.
+#
+# Stallable Producer and Collector
+#
+# In order to support non-blocking asynchronous and synchronized peer, 
+# the async_chat module introduces stallable collector and generalize
+# the stallable producer of Medusa's proxy.
+#
+# Besides the fact that stallable reactors are a requirement for peers
+# that do not block, they have other practical benefits. For instance,
+# a channel with an collector_stalled and an empty output_fifo will not
+# be polled for I/O.
+#
+# This implementation use collection.deque for output FIFO queues instead 
+# of a class wrapper, and the push () method actually does what it is 
+# supposed to do and pushes a string at the end that output queue, not a 
+# Simple_producer instance.
+#
+#
+# The channel's method collect_incoming_data is called to collect data 
+# between terminators. Its found_terminator method is called whenever
+# the current terminator is found, and if that method returns True, then
+# no more buffer will be consumed until the channel's collector_stalled
+# is not set to False by a call to async_collect.
+#
+#
+#
+# Blurb
 #
 # Since Allegra is designed to spare developpers the joy of asyncore and
 # asynchat API by providing them ready-made client, servers and peers for
 # the major Internet protocols, there is no need to maintain backward 
-# compatibily with the Standard Library.
+# compatibily with the Standard Library's asynchat.
 #
 # In the Python Standard Library, asynchat is intended to be articulated,
 # to provide a base class from which to derive new implementation of a
@@ -331,9 +303,9 @@ class Async_chat (async_core.Async_dispatcher):
 # sense for optimization, the only thing left to do when so much is built
 # atop of an interface.
 #
-# The end result is a lighter, faster and yet marginally more general
-# implementation that suites a wide range of asynchronous servers, clients 
-# and peers developped on top of it.
+# The end result is a lighter and yet marginally more general implementation 
+# that suites a wide range of asynchronous servers, clients and peers 
+# developed on top of it.
 #
 # Flat is better than nested, according to Python's zen. Practically it is
 # indeed, because flat data structures are faster to instanciate and manage
