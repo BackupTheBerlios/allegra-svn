@@ -25,10 +25,10 @@ from allegra import \
         http_server, presto
 
 
-def presto_decode (urlencoded_form_data, result, encoding='UTF-8'):
+def presto_decode (urlencoded, result, encoding='UTF-8'):
         "index URL encoded form data into a dictionnary"
-        urlencoded_form_data = urlencoded_form_data.replace ('+', ' ')
-        for param in urlencoded_form_data.split ('&'):
+        urlencoded = urlencoded.replace ('+', ' ')
+        for param in urlencoded.split ('&'):
                 if param.find ('=') > -1:
                         name, value = param.split ('=', 1)
                         result[unicode (
@@ -55,25 +55,79 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                         self.http_host = host
                 else:
                         self.http_host = '%s:%d' % (host, port)
-                synchronizer.synchronized (self)
                 presto.PRESTo_root.__init__ (self, path)
+                synchronizer.synchronized (self)
                 
         def __repr__ (self):
-                return 'presto-http-cache host="%s"' % self.http_host
+                return 'presto-http-cache path="%s"' % self.presto_path
                 
         def http_continue (self, reactor):
                 reactor.presto_path = urllib.unquote (reactor.http_uri[2])
                 if self.presto_dom (reactor):
-                        self.http_continue_presto (reactor)
+                        self.presto_continue_http (reactor)
                         return False
                 
-                self.synchronized ((self.sync_stat, (reactor, )))
+                self.synchronized ((self.sync_stat, (
+                        reactor, self.presto_path + reactor.presto_path
+                        )))
                 return True
 
-        def http_continue_presto (self, reactor):
-                # grok the REST vector, add PRESTo host and path
-                # but only once, not twice when the body is
-                # collected and the HTTP continued a second time.
+        def http_finalize (self, reactor):
+                if reactor.mime_collector_body != None:
+                        reactor.presto_rest = presto.presto_rest (
+                                reactor, self
+                                )
+                if (
+                        reactor.presto_rest != None and
+                        reactor.http_response == 200 and
+                        reactor.mime_producer_body == None and 
+                        reactor.http_request[0] in ('GET', 'POST')
+                        ):
+                        # OK but no response body producer, supply one PRESTo!
+                        if __debug__:
+                                reactor.mime_producer_body = \
+                                        presto.presto_producer (
+                                                reactor, 'UTF-8',
+                                                reactor.http_request_time
+                                                )
+                        else:
+                                reactor.mime_producer_body = \
+                                        presto.presto_producer (
+                                                reactor, 'UTF-8'
+                                                )
+                        reactor.mime_producer_headers [
+                                'Content-Type'
+                                ] = 'text/xml; charset=UTF-8'
+                http_server.http_log (self, reactor)
+
+        def sync_stat (self, reactor, filename):
+                try:
+                        result = os.stat (filename)
+                except:
+                        result = None
+                self.select_trigger ((
+                        self.async_stat, (reactor, filename, result)
+                        ))
+        
+        def async_stat (self, reactor, filename, result):
+                if result == None or not stat.S_ISREG (result[0]):
+                        reactor.presto_rest = None
+                        reactor.http_response = 404
+                        reactor.http_channel.http_continue (reactor)
+                        return
+
+                self.presto_cache (reactor, filename)
+                
+        def presto_continue (self, reactor):
+                self.presto_continue_http (reactor)
+                reactor.http_channel.http_continue (reactor)
+                # channel = reactor.http_channel
+                # if channel.collector_stalled:
+                #         channel.async_collect ()
+
+        def presto_continue_http (self, reactor):
+                # grok the REST vector, add PRESTo host and path and
+                # set the default HTTP response code to 200 Ok ...
                 #
                 if reactor.http_uri[3] != None:
                         reactor.presto_vector = presto_decode (
@@ -89,67 +143,9 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                 reactor.presto_vector[u'presto-path'] = unicode (
                         reactor.http_uri[2] or '', 'UTF-8'
                         )
-                # do the REST of the request ...
+                reactor.http_response = 200 # Ok
+                # ... do the REST of the request ...
                 reactor.presto_rest = presto.presto_rest (reactor, self)
-
-        def http_finalize (self, reactor):
-                if reactor.presto_rest == None:
-                        http_server.http_log (self, reactor)
-                        return
-                
-                if reactor.mime_collector_body:
-                        reactor.presto_rest = presto.presto_rest (
-                                reactor, self
-                                )
-                if (
-                        reactor.mime_producer_body == None and 
-                        reactor.http_request[0] in ('GET', 'POST')
-                        ):
-                        # if there is no body, supply one PRESTo!
-                        if __debug__:
-                                reactor.mime_producer_body = \
-                                        presto.presto_producer (
-                                                reactor, 'UTF-8',
-                                                reactor.http_request_time
-                                                )
-                        else:
-                                reactor.mime_producer_body = \
-                                        presto.presto_producer (
-                                                reactor, 'UTF-8'
-                                                )
-                        reactor.mime_producer_headers [
-                                'Content-Type'
-                                ] = 'text/xml; charset=UTF-8'
-                if reactor.http_response == None:
-                        reactor.http_response = 200 # Ok by default
-                http_server.http_log (self, reactor)
-
-        def sync_stat (self, reactor):
-                filename = self.presto_path + reactor.presto_path
-                try:
-                        result = os.stat (filename)
-                except:
-                        result = None
-                self.select_trigger ((
-                        self.async_stat, (reactor, filename, result)
-                        ))
-        
-        def async_stat (self, reactor, filename, result):
-                if result == None or not stat.S_ISREG (result[0]):
-                        if self.presto_folder (reactor):
-                                self.presto_continue (reactor)
-                                return
-                        
-                        reactor.presto_rest = None
-                        reactor.http_response = 404
-                        reactor.http_channel.http_continue (reactor)
-                        return
-
-                self.presto_cache (reactor, filename)
-                
-        def presto_continue (self, reactor):
-                self.http_continue_presto (reactor)
-                reactor.http_channel.http_continue (reactor)
 
 
 class PRESTo_form_collector (object):
@@ -202,13 +198,41 @@ def presto_form (self, reactor):
         # ... handle the REST request GETed or POSTed ...
         #
 
-class PRESTo_http_cache (presto.PRESTo_async):
+class PRESTo_http_cache (presto.PRESTo_async, http_server.HTTP_cache):
         
+        xml_name = u'http://presto/ cache'
+        
+        def __init__ (self): pass
+        
+        def xml_valid (self, dom):
+                # cycle, effectively cache this instance
+                self.xml_dom = dom
+                # instanciate a new HTTP static file cache
+                http_server.HTTP_cache.__init__ (
+                        self, self.xml_attributes.setdefault (
+                                u'root', u'.'
+                                ).encode ('UTF-8')
+                        )
+
+                # if a path was specified, move the cached weakref to it
+                path = self.xml_attributes.get (u'path')
+                if path != None:
+                        cached = dom.presto_root.presto_cached
+                        path = path.encode ('UTF-8')
+                        cached[path] = cached[dom.presto_path]
+                        del cached[dom.presto_path]
+                        dom.presto_path = path
+                        
+        def http_urlpath (self, reactor):
+                return reactor.presto_path[len (self.xml_dom.presto_path):]
+
         def presto (self, reactor):
-                pass # PRESTo management interface
+                if reactor.presto_path != self.xml_dom.presto_path:
+                        if self.http_continue (reactor):
+                                reactor.http_response = None
+
+        presto_methods = {}
         
-        def presto_folder (self, reactor):
-                pass # HTTP/1.1 synchronized filesystem cache
 
 
 if __name__ == '__main__':
@@ -230,9 +254,30 @@ if __name__ == '__main__':
         else:
                 server = http_server.HTTP_public ((ip, port))
         server.http_hosts = dict ([
-                (h, PRESTo_http_root (p, h)) 
+                (h, PRESTo_http_root (p)) 
                 for h, p in http_server.http_hosts (root, host, port)
                 ])
         server.async_catch = async_loop.async_catch
         async_loop.async_catch = server.tcp_server_catch
         async_loop.loop ()
+        
+        
+# Note about this implementation
+#
+# Allegra's PRESTo/HTTP peer dispatches REST request to Python instances
+# loaded from XML files. It also supports a URL encoded form data POST and 
+# provides a web file cache component:
+#
+#        <presto:cache root="./path"/>
+#
+# to serve stylesheets and other static resources.
+#
+# Practically, http_presto.py delivers the minimal set of functions required
+# by a web application peer: dispatch HTTP requests to an instance method; 
+# support GET and POST of HTML form; serve static files like stylesheets,
+# JavaScript libraries and documentation.
+#
+# For database, metabase and distributed applications support, see the
+# presto_bsddb.py and presto_pns.py modules which provide additional 
+# features and complete the stack of interfaces required to develop
+# distributed web applications.

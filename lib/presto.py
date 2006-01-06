@@ -19,6 +19,8 @@
 
 import types, glob, os, imp, weakref, time
 
+from xml.parsers import expat
+
 if os.name == 'nt':
         allegra_time = time.clock
 else:
@@ -47,13 +49,30 @@ class PRESTo_reactor (reactor.Buffer_reactor):
                 self.buffer ('') # ... buffer_react ()
 
 
+def true ():
+        return True
+
+def false ():
+        return False
+
+class Stalled_producer (object):
+        
+        def more (self):
+                return ''
+        
+        producer_stalled = true
+        
+        def __call__ (self):
+                self.producer_stalled = false
+
+
 def presto_rollback (self, reactor):
-        react = PRESTo_reactor ()
+        react = Stalled_producer ()
         reactor.presto_dom.presto_rollback ((react, ()))
         return react
                         
 def presto_commit (self, reactor):
-        react = PRESTo_reactor ()
+        react = Stalled_producer ()
         if reactor.presto_dom.presto_commit ((react, ())):
                 return react
                         
@@ -132,9 +151,6 @@ class PRESTo_sync (PRESTo_async, finalization.Finalization):
 
         
 def presto_synchronize (method):
-        #def presto_synchronized (self, reactor, m=method):
-        #        self.presto_synchronized (reactor, m)
-        #return presto_synchronized
         def synchronized (self, reactor):
                 xml_reactor = PRESTo_reactor_sync (self.select_trigger)
                 xml_reactor.presto_vector = reactor.presto_vector.copy ()
@@ -143,8 +159,9 @@ def presto_synchronize (method):
                 
         return synchronized
         #
-        # a lambda factory to wrap PRESTo methods with an appropriate
-        # synchronizer, the PRESTo_sync.presto_synchronized method.
+        # a method factory that "wraps" the asynchronous PRESTo reactor 
+        # handled with a synchronized buffer reactor before passing it
+        # to the "decorated" method.
 
 
 # A Synchronized XML document loader, reading and writing a file to a 
@@ -205,21 +222,38 @@ class PRESTo_dom (
         def async_read (self, data):
                 try:
                         self.xml_expat.Parse (data, 0)
-                except:
-                        self.synchronized ((self.sync_close, ()))
+                except expat.ExpatError, error:
+                        self.xml_error = error
+                        self.xml_parse_error ()
+                        self.synchronized ((self.sync_close, ('re', )))
                 else:
                         self.synchronized ((self.sync_read, ()))
                 
         def async_close (self, mode):
                 if mode[0] == 'r':
-                        try:
-                                self.xml_expat.Parse ('', 1)
-                        except:
-                                pass
+                        if mode[-1] == 'e':
+                                try:
+                                        self.xml_expat.Parse ('', 1)
+                                except expat.ExpatError, error:
+                                        self.xml_error = error
+                                        self.xml_parse_error ()
                         self.xml_expat = self.xml_parsed = None
+                        if self.xml_root == None:
+                                self.xml_root = presto.PRESTo_async ()
+                        if self.xml_root.xml_attributes == None:
+                                self.xml_root.xml_attributes = {}
                 for call, args in self.presto_defered:
                         call (*args)
                 self.presto_defered = None
+                #
+                # defered continuations are queued nicely and called
+                # in sequence, asynchronously. this means that concurrent
+                # access to a persistent component instance is done without
+                # errors: ten requests to a "loading" instance will be
+                # handled asynchronously once the instance is loaded but
+                # only the first request will force the cache to access the
+                # original resource, parse the XML document and instanciate
+                # the component DOM.
 
         # The PRESTo commit and rollback interfaces
         
@@ -263,10 +297,20 @@ class PRESTo_root (loginfo.Loginfo):
         def __init__ (self, path):
                 self.presto_path = path
                 self.presto_types = {}
-                self.presto_modules = {}
+                self.presto_type = PRESTo_async
                 self.presto_cached = {}
+                self.presto_modules = {}
                 for filename in self.presto_modules_dir ():
                         self.presto_module_load (filename)
+                for filename in glob.glob (self.presto_path + '/*.xml'):
+                        dom = PRESTo_dom (
+                                filename, self.presto_types, self.presto_type
+                                )
+                        path = '/' + os.path.basename (filename)
+                        self.presto_cached[path] = weakref.ref (dom)
+                        dom.presto_path = path
+                        dom.presto_root = self
+                        dom.presto_rollback ((none, ()))
                 
         def __repr__ (self):
                 return 'presto-root path="%s"' % self.presto_path
@@ -298,9 +342,9 @@ class PRESTo_root (loginfo.Loginfo):
                                 )
                         if (
                                 self.presto_modules.has_key (filename) and 
-                                hasattr (presto_module, 'presto_reload')
+                                hasattr (presto_module, 'presto_onload')
                                 ):
-                                presto_module.presto_reload ()
+                                presto_module.presto_onload (self)
                 except:
                         self.loginfo_traceback ()
                         return
@@ -335,25 +379,51 @@ class PRESTo_root (loginfo.Loginfo):
                         del self.presto_types[item.xml_name]
                 del self.presto_modules[filename]
         
+        # In order to limit the possible damage of broken/malicious
+        # URLs, a strict depth limit of 2 is set by default, just enough
+        # to support a "/model/control/view" syntax ...
+        #
+        PRESTo_FOLDER_DEPTH = 2
+        
         def presto_dom (self, reactor):
-                # Check for an reference for that path in the root's cache
-                # and if there is one, try to dereference the DOM instance,
-                # and return True if the method succeeded to attach such
-                # instance to the reactor.
+                # Check for a reference in the root's cache for that path or 
+                # for a folder that contains it and if there is one, try to 
+                # dereference the DOM instance, and return True if the method 
+                # succeeded to attribute such instance to the reactor.
                 #
-                reactor.presto_dom = self.presto_cached.get (
-                        reactor.presto_path, none
-                        ) ()
-                return reactor.presto_dom != None
+                assert reactor.presto_path.startswith ('/')
+                dom = self.presto_cached.get (reactor.presto_path, none) ()
+                if dom != None:
+                        reactor.presto_dom = dom
+                        return True
+                
+                if self.PRESTo_FOLDER_DEPTH > 0:
+                        depth = 0
+                        path = reactor.presto_path.rsplit ('/', 1)[0]
+                        while True:
+                                dom = self.presto_cached.get (path, none) ()
+                                if dom:
+                                        reactor.presto_dom = dom
+                                        return True
+                                
+                                depth += 1
+                                if path and depth < self.PRESTo_FOLDER_DEPTH:
+                                        path = path.rsplit ('/', 1)[0]
+                                else:
+                                        break
+                                
+                return False
         
         def presto_cache (self, reactor, filename):
-                # instanciate a DOM, roll it back, defering continuation
-                # and cache its weak reference.
+                # instanciate a DOM, cache its weak reference, roll it back
+                # and defer the PRESTo continuation ...
                 #
                 reactor.presto_dom = dom = PRESTo_dom (
-                        filename, self.presto_types, PRESTo_async,
+                        filename, self.presto_types, self.presto_type
                         )
                 self.presto_cached[reactor.presto_path] = weakref.ref (dom)
+                dom.presto_path = reactor.presto_path
+                dom.presto_root = self
                 dom.presto_rollback ((
                         self.presto_continue, (reactor, )
                         ))
@@ -364,58 +434,7 @@ class PRESTo_root (loginfo.Loginfo):
 
         def presto_continue (self, reactor):
                 assert None == self.log ('%r' % reactor, 'presto')
-
-        # In order to limit the possible damage of broken/malicious
-        # URLs, a strict depth limit of 2 is set by default. Raise
-        # to a 4 for support of a "/model/controller/view" syntax.
-        #
-        PRESTo_FOLDER_DEPTH = 2
                 
-        def presto_folder (self, reactor, separator='/'):
-                # Implements a cache folder lookup, starting from the right
-                # of the path and walking up the root's cache to find a
-                # containing "folder" DOM instance.
-                #
-                depth = 0
-                base, name = reactor.presto_path.rsplit (separator, 1)
-                while base and depth < self.PRESTo_FOLDER_DEPTH:
-                        depth += 1
-                        dom = self.presto_cached.get (base, none) ()
-                        if dom != None and hasattr (
-                                dom.xml_root, 'presto_folder'
-                                ):
-                                root = presto_dom.xml_root.presto_folder (
-                                        base, path
-                                        )
-                                if root != None:
-                                        self.presto_cache (
-                                                reactor,
-                                                separator.join ((
-                                                        base, name
-                                                        )),
-                                                '/'.join ((
-                                                        presto_dom.presto_path,
-                                                        name
-                                                        )),
-                                                root
-                                                )
-                                if reactor.presto_dom != None:
-                                        return True
-                                
-                        base, name = base.rsplit (separator, 1)
-                        # path = separator.join ((path, name))
-                return False
-                #
-                # As its many levels of indentation show, this may be a
-                # "busy-loop" that consume CPU time when confronted with
-                # unmatched long path (with many separators, I mean).
-                #
-                # However, the worst-case scenario is one of a deliberate
-                # attack or absurd use of a PRESTo server for deeply-nested
-                # static web site. For the intended use case (a web peer),
-                # this folder interface provides a mean for any instances
-                # to "catch" requests for the URLs they "contain".
-
 
 class PRESTo_benchmark (object):
         
@@ -728,6 +747,93 @@ def presto_xml (
 
 # Note about this implementation
 #
+# PRESTo towers at the top of Allegra's semantic web stack, providing
+# one obvious way to develop distributed web applications. It integrates
+# Allegra's asynchronous core, synchronization and XML model into one
+# network application component interface (and implementation).
+#
+# This module packs together a simple REST interface for XML component
+# instances rolled-back and committed synchronously to the file system.
+# It provides PRESTo's HTTP server with the simplest implementation of the
+# XML component meme found in many web development framework (see 
+# presto_http.py).
+#
+# Remarkably, its interfaces also support persistence provided by
+# synchronized BSDDB databases and distributed PNS metabases (see 
+# presto_bsddb.py and presto_pns.py).
+#
+# Also, PRESTo comes with a practical middle-ground between simplistic 
+# REST implementations and SOAP's over-engineered specifications. Enough
+# to develop web user interface with stateless XML transformation only.
+#
+# Finally, PRESTo is not restricted to HTTP and can be applied to other
+# MIME or message queue protocols (like SMTP, QMQP, etc ...). PRESTo will
+# not be completed until a reference implementation for another protocol
+# than HTTP has been tested with an application (preferably QMQP).
+#
+#
+# Examples
+#
+# For instance, the XML document
+#
+#         <async xmlns="http://presto/"/>
+#
+# saved as
+#
+#        ./instance.xml
+#
+# can be rolled-back and commited synchronously by a PRESTo_cache as an
+# instance of the class PRESTo_async, provided that the following module 
+# was loaded by this cache:
+#
+#        from allegra import presto
+#        presto_components = (prest.PRESTo_async, )
+#
+# Dispatched this cache, the HTTP request:
+#
+#        GET http://127.0.0.1/instance.xml HTTP/1.1
+#        Host: 127.0.0.1
+#        ...
+#
+# yields an HTTP response with a simple XML body:
+#
+#        HTTP/1.1 200 Ok
+#        ...
+#
+#        <?xml version="1.0" encoding="ASCII"?>
+#        <PRESTo xmlns="http://presto/"
+#                host="127.0.0.1" path="/instance.xml"
+#                >
+#                <presto/>
+#                <async/>
+#        </PRESTo>
+#
+# and provides just enough states to conduct an transaction over a stateless
+# protocol like HTTP: the REST, method and the instance states. Those three
+# states are practically enough to develop asynchronous web interfaces for
+# statefull instances, using stateless XML transformations only (be it XSLT
+# CSS or JavaScript).
+#
+#
+# Allegra PRESTo is unRESTricted
+#
+# You may as well handle HTTP yourself, set the HTTP response's MIME body 
+# to a simple XML producer like:
+#
+#         def presto (self, reactor):
+#                reactor.mime_producer_body = producer.Simple_producer (
+#                        '<pizza-order>...</pizza-order>'
+#                        )
+#
+# if you prefer to provide only the REST state to your client. Developpers
+# of AJAX applications can also provide simple RPC producers and bypass
+# serialization of all three PRESTo states (using XML/RPC, JSON, etc ...).
+#
+# Also, PRESTo can deliver "degraded" stateless interfaces for safe web 
+# clients (without JavaScript I mean) and flicker-free AJAX interfaces, by 
+# synchronizing all or parts of the server and client DOM.
+#
+#
 # A Few States Only
 #
 # There are at least four and at most seven types of PRESTo states for each
@@ -748,7 +854,6 @@ def presto_xml (
 # To those 4/5 states must be added the protocol states. Usually three for 
 # HTTP/1.1: channel, request/response reactor and chunked producer wrapper, 
 # maybe more depending on the kind of HTTP command and headers.
-#
 #
 # I don't count the select_trigger, synchronizer, thread or queue states
 # implied by synchronization since they are all cached or limited, using
@@ -855,15 +960,14 @@ def presto_xml (
 # for all its database applications and depends on a PNS metabase peer to
 # develop distributed applications.
 #
-# Maybe as unorthodox, PRESTo comes with a very simple component model for
+# Maybe as unorthodox, PRESTo comes with a simple XML component model for
 # REST call to instance's method and the default persistence is to the
 # file system, not some SQL server.
 #
 # By default, PRESTo produces XML documents that bundle the REST request's
 # state, its response as well as the result state of the method's instance
 # invoked. Also, by default, PRESTo serialize the invoked methods result
-# in the most practical way for a web browser, as a simple XML representation
-# of a Python instance or instance tree.
+# in the most practical way for a stateless web client interface.
 #
 #
 # Simpler to Scale Up

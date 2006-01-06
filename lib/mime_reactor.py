@@ -100,26 +100,28 @@ class MIME_collector (object):
 				self.mime_collector_buffer
 				)
 			self.mime_collector_buffer = ''
-			self.mime_collector_body = \
-				self.mime_collector_continue ()
+			return self.mime_collector_continue ()
+                        
 		elif self.mime_collector_body.found_terminator ():
 			# if the MIME body final terminator is reached,
 			# finalize it and reset the state of the collector
 			self.mime_collector_buffer = ''
-			self.mime_collector_finalize ()
+			return self.mime_collector_finalize ()
 
 	def mime_collector_continue (self):
-		return reactor.Buffer_reactor ()
+		self.mime_collector_body = reactor.Buffer_reactor ()
+                return False
 
 	def mime_collector_finalize (self):
 		self.mime_collector_lines = \
 			self.mime_collector_headers = \
 			self.mime_collector_body = None
-	
+	        return False
+
 
 class MULTIPART_collector (object):
 	
-	"A recursive MIME/MULTIPART collector wrapper"
+	"A recursive MIME/MULTIPART collector"
 
 	collector_is_simple = False
 
@@ -139,10 +141,14 @@ class MULTIPART_collector (object):
 		
         def multipart_collect (self, data):
 		self.multipart_buffer += data
+                
+        collect_incoming_data = multipart_collect
 
 	def multipart_found_next (self):
 		if self.multipart_buffer == '--':
-			self.set_terminator = self.mime_collector = None
+			self.set_terminator = self.mime_collector = \
+                                self.collect_incoming_data = \
+                                self.found_terminator = None
 			return True # end of the mulipart
 		
 		else:
@@ -155,25 +161,7 @@ class MULTIPART_collector (object):
 		headers = mime_headers.map (
 			mime_headers.split (self.multipart_buffer)
 			)
-		#name = mime_headers.get_parameter (
-		#	headers.setdefault (
-		#		'content-disposition',
-		#		'not available; name="%d"' % len (
-		#			self.multipart_parts
-		#			)
-		#		), 'name'
-		#	)
-		content_type, parameters = mime_headers.value_and_parameters (
-			headers.get ('content-type', 'text/plain')
-			)
-		if content_type == 'mime/multipart':
-			collector = MULTIPART_collector (self)
-		else:
-			collector = MIME_collector (
-				headers, 
-				self.set_terminator,
-				self.mime_collector.mime_collector_continue
-				)
+                collector = self.multipart_collector ()
 		if not collector.collector_is_simple:
 			collector = Simple_collector (collector)
 		self.multipart_parts.append (collector)
@@ -186,6 +174,29 @@ class MULTIPART_collector (object):
 		self.set_terminator (2)
 		self.found_terminator = self.multipart_found_next
 		return False
+                
+        found_terminator = multipart_found_boundary 
+        
+        def multipart_collector (self):
+                #name = mime_headers.get_parameter (
+                #        headers.setdefault (
+                #                'content-disposition',
+                #                'not available; name="%d"' % len (
+                #                        self.multipart_parts
+                #                        )
+                #                ), 'name'
+                #        )
+                content_type, parameters = mime_headers.value_and_parameters (
+                        headers.get ('content-type', 'text/plain')
+                        )
+                if content_type == 'mime/multipart':
+                        collector = MULTIPART_collector (self)
+                else:
+                        collector = MIME_collector (
+                                headers, 
+                                self.set_terminator,
+                                self.mime_collector.mime_collector_continue
+                                )
 
 
 class MIME_reactor (

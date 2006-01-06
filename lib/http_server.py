@@ -35,7 +35,7 @@ class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         
         mime_collector_body = None
         
-        http_handler = None
+        http_handler = http_response = None
         
         def __repr__ (self):
                 return 'http-server-reactor id="%x"' % id (self)
@@ -61,17 +61,6 @@ class HTTP_server_channel (
         def __repr__ (self):
                 return 'http-server-channel id="%x"' % id (self)                
                 
-        # adds support for stalled producers to an async_chat channel.
-
-        writable = async_chat.Async_chat.writable_for_stalled
-
-        # Support for stalled producers is a requirement for programming
-        # asynchronous peer. It is also a practical solution for simple 
-        # asynchronous pipelining of threaded requests. For instance it
-        # may be used to thread an HTTP/1.1 requests and push a stalled
-        # producer back to the browser that will "produce" as the request
-        # progresses, as it thunks data to produce via the select_trigger.
-
         collect_incoming_data = \
                 mime_reactor.MIME_collector.collect_incoming_data
         found_terminator = \
@@ -87,7 +76,7 @@ class HTTP_server_channel (
                         ):
 			self.mime_collector_lines.pop (0)
                 if not self.mime_collector_lines:
-                        return
+                        return False
                         #
                         # From Medusa's http_server.py Original Comment:
                         #
@@ -117,7 +106,7 @@ class HTTP_server_channel (
 			reactor.http_request = self.mime_collector_lines[0]
                         reactor.http_response = 400
                         self.mime_collector_finalize (reactor)
-                        return
+                        return False
                         #
                         # 400 - invalid
 
@@ -153,19 +142,25 @@ class HTTP_server_channel (
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
                 if self.http_server.http_continue (reactor):
-                        return
+                        return reactor.http_request[0] in ('POST', 'PUT')
                         #
                         # it is up to the reactor's handler to properly
                         # finalize the HTTP response, here one of the the
                         # server's virtual hosts instance.
+                        #
+                        # return False and stall the collector we expect a
+                        # MIME body collector to be provided ...
                 
-                self.http_continue (reactor)
+                return self.http_continue (reactor)
                 
         def http_continue (self, reactor):
+                if reactor.http_response == None:
+                        # do not continue yet if a response is not set
+                        return False
+                
                 if reactor.http_request[0] in ('GET', 'HEAD', 'DELETE'):
-                        # finalize responses without a MIME body now!
-                        self.mime_collector_finalize (reactor)
-                        return
+                        # finalize requests without a MIME body now!
+                        return self.mime_collector_finalize (reactor)
 
                 # finalize POST and PUT when their body is collected, or
                 # close the connection for reason of unimplemented 
@@ -176,15 +171,14 @@ class HTTP_server_channel (
                                 'Connection'
                                 ] = 'close'
                         reactor.http_response = 501
-                        self.mime_collector_finalize (reactor)
-                        return
+                        return self.mime_collector_finalize (reactor)
                         #
                         # 501 Not Implemented
                         
                 # wraps the POST or PUT body collector with the appropriate 
                 # decoding collectors, and continue ...
                 #
-                self.http_collector_continue (
+                return self.http_collector_continue (
                         reactor.mime_collector_body
                         )
                         
@@ -248,6 +242,7 @@ class HTTP_server_channel (
                         self.close_when_done ()
                 # ... finally, log the response's first line.
                 reactor.log (reactor.mime_producer_lines[0][:-2], 'response')
+                return False
 
         HTTP_SERVER_RESPONSE = (
                 '<html><head><title>Error</title></head>'
@@ -294,6 +289,13 @@ class HTTP_server_channel (
                 505: "HTTP Version not supported"
                 }
             
+        # Support for stalled producers is a requirement for programming
+        # asynchronous peer. It is also a practical solution for simple 
+        # asynchronous pipelining of threaded requests. For instance it
+        # may be used to thread an HTTP/1.1 requests and push a stalled
+        # producer back to the browser that will "produce" as the request
+        # progresses, as it thunks data to produce via the select_trigger.
+
 
 # A Static Cache Root
 
@@ -311,31 +313,27 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
         synchronizer = None
         synchronizer_size = 2
                 
-        def __init__ (self, path, host):
+        def __init__ (self, path): #, host):
                 self.http_path = path
-                self.http_host = host
-                self.http_cache = {}
+                # self.http_host = host
+                self.http_cached = {}
                 synchronizer.synchronized (self)
                 assert None == self.log (
                         'loaded path="%s"' % path, 'debug'
                         )
                 
         def __repr__ (self):
-                return 'http-cache host="%s"' % self.http_host
-                
+                return 'http-cache path="%s"' % self.http_path
+        
         def http_continue (self, reactor):
-                if reactor.http_request[0].upper () != 'GET':
-                        reactor.http_response = 405
+                if reactor.http_request[0] != 'GET':
+                        reactor.http_response = 405 # Method Not Allowed 
                         return False
-                        #
-                        # 405 Method Not Allowed (this *is* a cache)
                         #
                         # TODO: add support for HEAD
                         
-                filename = self.http_path + urllib.unquote (
-                        reactor.http_uri[2]
-                        )
-                teed = self.http_cache.get (filename, none) ()
+                filename = self.http_path + self.http_urlpath (reactor)
+                teed = self.http_cached.get (filename, none) ()
                 if teed == None:
                         self.synchronized ((
                                 self.sync_stat, (reactor, filename)
@@ -346,6 +344,9 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                 reactor.mime_producer_body = producer.Tee_producer (teed)
                 reactor.http_response = 200
                 return False
+        
+        def http_urlpath (self, reactor):
+                return urllib.unquote (reactor.http_uri[2])
         
         http_finalize = http_log
         
@@ -380,9 +381,10 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                 reactor.mime_producer_headers.update (teed.mime_headers)
                 reactor.mime_producer_body = producer.Tee_producer (teed)
                 reactor.http_response = 200
-                self.http_cache[filename] = weakref.ref (teed)
+                self.http_cached[filename] = weakref.ref (teed)
                 reactor.http_channel.http_continue (reactor)
                 
+
 
 # The HTTP Server method and variants
         
@@ -395,7 +397,7 @@ def http_continue (server, reactor):
                 reactor.mime_collector_headers.get ('host')
                 )
         if handler == None:
-                reactor.http_response = 404
+                reactor.http_response = 404 # Not Found
                 return False
 
         reactor.http_handler = handler
@@ -480,7 +482,7 @@ def http_hosts (root, host, port):
 
 
 def cli (argv):
-        root, ip, port, host = ('./', '127.0.0.1', 80, None)
+        root, ip, port, host = ('.', '127.0.0.1', 80, None)
         if len (argv) > 1:
                 root = argv[1]
                 if len (argv) > 2:
@@ -514,7 +516,7 @@ if __name__ == '__main__':
         else:
                 server = HTTP_public ((ip, port))
         server.http_hosts = dict ([
-                (h, HTTP_cache (p, h)) 
+                (h, HTTP_cache (p)) 
                 for h, p in http_hosts (root, host, port)
                 ])
         server.async_catch = async_loop.async_catch
@@ -542,7 +544,7 @@ if __name__ == '__main__':
 # The http_server.py module implements a simple filesystem web service
 # that publishes static files from a folder for a named host and address:
 #
-#        http_server.py [./] [127.0.0.1[:80]] [127.0.0.1]
+#        http_server.py [.] [127.0.0.1[:80]] [127.0.0.1]
 #
 # by default the current directory is served at
 #
@@ -581,7 +583,13 @@ if __name__ == '__main__':
 #
 # For Python developper, Allegra's http_server.py is a big improvement over
 # the standard BaseHTTPServer.py as well as Medusa many off-springs, because
-# it comes with a ready-made, powerfull and practical API. 
+# it comes with a ready-made, powerfull and practical API.
+#
+# It supports non-blocking implementations of all commands of HTTP/1.0 and 
+# HTTP/1.1, and may be used to develop many kind of web servers: asynchronous
+# network proxies, synchronized services (like a CGI) or a mix of synchronous
+# and non-blocking APIs (see presto_http.py implementation of urlencoded REST
+# form data POSTed by a web browser).
 #
 # This is a fully-fledged, high-performance HTTP peer with a low CPU
 # footprint, a decent cache, that can limit and throttle network I/O 

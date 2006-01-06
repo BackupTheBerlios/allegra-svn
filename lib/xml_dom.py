@@ -19,10 +19,7 @@
 
 import weakref
 
-try:
-        import pyexpat
-except ImportError:
-        from xml.parsers import pyexpat
+from xml.parsers import expat
         
         
 class XML_element (object):
@@ -74,7 +71,7 @@ class XML_dom (object):
         xml_type = XML_element
         xml_types = {}
         xml_unicoding = 1
-        xml_expat = xml_parsed = None
+        xml_expat = xml_parsed = xml_error = None
 
         def __init__ (self, xml_prefixes=None, xml_pi=None):
                 self.xml_prefixes = xml_prefixes or {}
@@ -108,8 +105,9 @@ class XML_dom (object):
         def xml_parse_string (self, input, all=1):
                 try:
                         self.xml_expat.Parse (input, all)
-                except pyexpat.ExpatError, error:
-                        self.xml_parse_error (error)
+                except expat.ExpatError, error:
+                        self.xml_error = error
+                        self.xml_parse_error ()
                         all = 1
                 if all:
                         # finished clean up and return the root, let the 
@@ -126,8 +124,7 @@ class XML_dom (object):
                 # returns the xml_root element, or None when an error occured
                 # or True to continue ...
 
-        def xml_parse_error (self, error):
-                self.xml_error = error
+        def xml_parse_error (self):
                 while self.xml_parsed != None:
                         self.xml_expat_END (self.xml_parsed.xml_name)
                 #
@@ -135,7 +132,7 @@ class XML_dom (object):
 
         def xml_parser_reset (self):
                 self.xml_root = self.xml_error = self.xml_parsed = None
-                self.xml_expat = pyexpat.ParserCreate (None, ' ')
+                self.xml_expat = expat.ParserCreate (None, ' ')
                 self.xml_expat.returns_unicode = self.xml_unicoding
                 self.xml_expat.buffer_text = 1
                 self.xml_expat.ProcessingInstructionHandler = self.xml_expat_PI
