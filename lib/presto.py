@@ -49,30 +49,13 @@ class PRESTo_reactor (reactor.Buffer_reactor):
                 self.buffer ('') # ... buffer_react ()
 
 
-def true ():
-        return True
-
-def false ():
-        return False
-
-class Stalled_producer (object):
-        
-        def more (self):
-                return ''
-        
-        producer_stalled = true
-        
-        def __call__ (self):
-                self.producer_stalled = false
-
-
 def presto_rollback (self, reactor):
-        react = Stalled_producer ()
+        react = producer.Stalled_producer ()
         reactor.presto_dom.presto_rollback ((react, ()))
         return react
                         
 def presto_commit (self, reactor):
-        react = Stalled_producer ()
+        react = producer.Stalled_producer ()
         if reactor.presto_dom.presto_commit ((react, ())):
                 return react
                         
