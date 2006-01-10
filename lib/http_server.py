@@ -132,11 +132,6 @@ class HTTP_server_channel (
                 reactor.mime_producer_headers = {} # TODO: complete?
 		if self.http_version != version[-3:]:
 			self.http_version = version[-3:]
-                # reset the channel's and MIME collector's state
-                self.set_terminator ('\r\n\r\n')
-                self.mime_collector_headers = \
-                        self.mime_collector_lines = \
-                        self.mime_collector_body = None
                 # push the (stalled) reactor in the channel's output fifo
                 self.producer_fifo.append (reactor)
                 # pass to the server's handlers, expect one of them to
@@ -158,9 +153,10 @@ class HTTP_server_channel (
                         # do not continue yet if a response is not set
                         return False
                 
+                self.http_reactor = reactor
                 if reactor.http_request[0] in ('GET', 'HEAD', 'DELETE'):
                         # finalize requests without a MIME body now!
-                        return self.mime_collector_finalize (reactor)
+                        return self.mime_collector_finalize ()
 
                 # finalize POST and PUT when their body is collected, or
                 # close the connection for reason of unimplemented 
@@ -171,7 +167,7 @@ class HTTP_server_channel (
                                 'Connection'
                                 ] = 'close'
                         reactor.http_response = 501
-                        return self.mime_collector_finalize (reactor)
+                        return self.mime_collector_finalize ()
                         #
                         # 501 Not Implemented
                         
@@ -184,7 +180,14 @@ class HTTP_server_channel (
                         
         http_collector_continue = http_reactor.http_collector_continue
 
-        def mime_collector_finalize (self, reactor):
+        def mime_collector_finalize (self):
+                # reset the channel's and MIME collector's state
+                self.set_terminator ('\r\n\r\n')
+                self.mime_collector_headers = \
+                        self.mime_collector_lines = \
+                        self.mime_collector_body = None
+                # finalize the current HTTP request
+                reactor = self.http_reactor # del self.http_reactor ?
                 reactor.http_handler.http_finalize (reactor)
                 # Complete the HTTP response producer
                 if reactor.http_request[0] in (
@@ -242,6 +245,7 @@ class HTTP_server_channel (
                         self.close_when_done ()
                 # ... finally, log the response's first line.
                 reactor.log (reactor.mime_producer_lines[0][:-2], 'response')
+                self.http_reactor = None
                 return False
 
         HTTP_SERVER_RESPONSE = (

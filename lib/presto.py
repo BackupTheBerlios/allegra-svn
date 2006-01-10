@@ -49,16 +49,47 @@ class PRESTo_reactor (reactor.Buffer_reactor):
                 self.buffer ('') # ... buffer_react ()
 
 
-def presto_rollback (self, reactor):
-        react = producer.Stalled_producer ()
-        reactor.presto_dom.presto_rollback ((react, ()))
-        return react
+def presto_interfaces (element, reactor):
+        """Practical Component Interfaces
+        
+        Masquerade the REST vector with the declared PRESTo interfaces,
+        if any, then use the XML element's attributes as default values 
+        in the vector.
+        
+        In effect, this is "The Obvious Way" to do "The Right Thing" when
+        articulating a REST request according to constraints programmed
+        but with the option of specifying default at runtime.
+        
+        This extra level of processing is however not required from simpler
+        methods with do only one thing and may not need the kind of 
+        protection required from public web applications.
+        """
+        if not hasattr (element, 'presto_interfaces'):
+                if element.xml_attributes:
+                        reactor.presto_vector.update (element.xml_attributes)
+                return reactor.presto_vector
+        
+        if not element.presto_interfaces:
+                return 
+        
+        interfaces = set (
+                reactor.presto_vector.keys ()
+                ).intersection (element.presto_interfaces)
+        if element.xml_attributes:
+                attributes = element.presto_interfaces.union (
+                        set (element.xml_attributes.keys ())
+                        )
+                return dict ([
+                        (k, element.xml_attributes.get (k, u''))
+                        for k in attributes.difference (interfaces)
+                        ]+[
+                        (k, reactor.presto_vector[k])
+                        for k in interfaces
+                        ])
                         
-def presto_commit (self, reactor):
-        react = producer.Stalled_producer ()
-        if reactor.presto_dom.presto_commit ((react, ())):
-                return react
-                        
+        return dict ([(k, reactor.presto_vector[k]) for k in interfaces])
+
+
 class PRESTo_async (
         loginfo.Loginfo, finalization.Finalization, xml_dom.XML_element
         ):
@@ -73,17 +104,14 @@ class PRESTo_async (
 
         xml_name = u'http://presto/ async'
 
-        presto_interfaces = set ((u'presto-host', u'presto-path'))
+        presto_interfaces = set ()
         
         def presto (self, reactor):
                 assert None == self.log (
                         '%r' % reactor.presto_vector, 'presto'
                         )
 
-        presto_methods = {
-                u'rollback': presto_rollback,
-                u'commit': presto_commit
-                }
+        presto_methods = {}
         
 
 # Synchronized Component
@@ -99,7 +127,7 @@ class PRESTo_reactor_sync (reactor.Buffer_reactor):
                 self.select_trigger ((self.buffer, (data,)))
 
 
-class PRESTo_sync (PRESTo_async, finalization.Finalization):
+class PRESTo_sync (PRESTo_async):
 
         xml_name = u'http://presto/ sync'
         
@@ -471,12 +499,94 @@ def presto_producer (
 
 
 # the core PRESTo interface/implementation itself, just REST
+
+def presto_rest2 (element, reactor, logger):
+        reactor.presto_vector[u'presto-path'] = unicode (
+                reactor.presto_dom.presto_path, 'UTF-8'
+                )
+        method = element.presto_methods.get (
+                reactor.presto_vector.get (u'PRESTo')
+                )
+        if method != None:
+                # 2a. try to invoke the method specified by the PRESTo
+                #     interface and declared by the instance's presto_methods
+                #
+                try:
+                        result = method (element, reactor)
+                except:
+                        # log traceback via the handler, do not require
+                        # a logging facility from the instance accessed
+                        # but instead log the exception to the accessor.
+                        #
+                        return (
+                                '<presto:excp'
+                                ' xmlns:presto="http://presto/"'
+                                ' >%s</presto:excp>' % presto_xml (
+                                        logger.loginfo_traceback (), set ()
+                                        )
+                                )
+
+        else:
+                # 2b. try to invoke the "default" instance method 'presto'
+                #
+                try:
+                        result = element.presto (reactor)
+                except Exception, error:
+                        # log traceback via the handler
+                        return (
+                                '<presto:excp'
+                                ' xmlns:presto="http://presto/"'
+                                ' >%s</presto:excp>' % presto_xml (
+                                        logger.loginfo_traceback (), set ()
+                                        )
+                                )
+                                
+        # return <presto/> for None (the "default" continuation)
+        if result == None:
+                return '<presto:presto xmlns:presto="http://presto/" />'
                 
-def presto_rest (reactor, handler):
+        if (
+                type (result) in types.StringTypes or 
+                hasattr (result, 'more') or 
+                hasattr (result, 'xml_name')
+                ):
+                # UNICODE, byte string, producer or XML element, ...
+                return result
+                
+        # others types and interfaces.
+        return presto_xml (result, set ())
+
+
+# Simple REST routing to an XML element in the component's tree.
+
+def presto_route (component, reactor):
+        "route the REST request according to the component's routing table"
+        element = component.presto_routes.get (
+                reactor.presto_path[:len (component.xml_dom.presto_path)]
+                )
+        if element != None:
+                return presto.presto_rest2 (element, reactor, component)
+
+
+def presto_urlpath (element, dom):
+        "update the component's routing table for delegated REST requests"
+        path = element.xml_attributes.get (
+                u'presto-route', xml_unicode.xml_tag (element.xml_name)
+                )
+        dom.xml_root.presto_routes[path.encode (
+                'UTF-8', 'ignore'
+                )] = element
+
+        # note that elements and components do not worry about cleaning up
+        # this routing table: such elements and components are not meant to
+        # be updated in part but in whole.
+
+        
+                
+def presto_rest (element, reactor, logger):
         # 0. test for a PRESTo_element
         #
-        xml_root = reactor.presto_dom.xml_root
-        if not hasattr (xml_root, 'presto_interfaces'):
+        if not hasattr (element, 'presto_interfaces'):
                 # 1a. Simply produce the XML ... possibly aggregating 
                 # asynchronous and synchronous data flows
                 #
@@ -484,7 +594,7 @@ def presto_rest (reactor, handler):
                 
         # 1b. mask the REST vector or XML attributes with the PRESTo
         #     interfaces, providing one copy of what could become the
-        #     the state of the xml_root instance interface.
+        #     the state of the element instance interface.
         #
         #     also, make a set of this "masked" state interfaces and
         #     attach both to the reactor ...
@@ -499,13 +609,13 @@ def presto_rest (reactor, handler):
         #
         reactor.presto_interfaces = set (
                 reactor.presto_vector.keys ()
-                ).intersection (xml_root.presto_interfaces)
-        if xml_root.xml_attributes:
-                xml_interfaces = xml_root.presto_interfaces.union (
-                        set (xml_root.xml_attributes.keys ())
+                ).intersection (element.presto_interfaces)
+        if element.xml_attributes:
+                xml_interfaces = element.presto_interfaces.union (
+                        set (element.xml_attributes.keys ())
                         )
                 reactor.presto_vector = dict ([
-                        (k, xml_root.xml_attributes.get (k, u''))
+                        (k, element.xml_attributes.get (k, u''))
                         for k in xml_interfaces.difference (
                                 reactor.presto_interfaces
                                 )
@@ -521,19 +631,15 @@ def presto_rest (reactor, handler):
         #
         # 2. Invoke the method named, the default "presto" or none
         #
-        if (
-                ('PRESTo' in reactor.presto_interfaces) and
-                xml_root.presto_methods.has_key (
-                        reactor.presto_vector['PRESTo']
-                        )
-                ):
+        method = element.presto_methods.get (
+                reactor.presto_vector.get (u'PRESTo')
+                )
+        if method != None:
                 # 2a. try to invoke the method specified by the PRESTo
                 #     interface and declared by the instance's presto_methods
                 #
                 try:
-                        result = xml_root.presto_methods[
-                                reactor.presto_vector['PRESTo']
-                                ] (xml_root, reactor)
+                        result = method (element, reactor)
                 except:
                         # log traceback via the handler, do not require
                         # a logging facility from the instance accessed
@@ -543,7 +649,7 @@ def presto_rest (reactor, handler):
                                 '<presto:excp'
                                 ' xmlns:presto="http://presto/"'
                                 ' >%s</presto:excp>' % presto_xml (
-                                        handler.loginfo_traceback (), set ()
+                                        logger.loginfo_traceback (), set ()
                                         )
                                 )
 
@@ -551,14 +657,14 @@ def presto_rest (reactor, handler):
                 # 2b. try to invoke the "default" instance method 'presto'
                 #
                 try:
-                        result = xml_root.presto (reactor)
+                        result = element.presto (reactor)
                 except Exception, error:
                         # log traceback via the handler
                         return (
                                 '<presto:excp'
                                 ' xmlns:presto="http://presto/"'
                                 ' >%s</presto:excp>' % presto_xml (
-                                        handler.loginfo_traceback (), set ()
+                                        logger.loginfo_traceback (), set ()
                                         )
                                 )
                                 
@@ -608,7 +714,7 @@ PRESTo_others = (
         types.BuiltinMethodType,
         types.NotImplementedType,
         types.BuiltinFunctionType,
-        types.DictProxyType, # what's this?
+        types.DictProxyType,
         types.MethodType,
         types.GeneratorType,
         types.EllipsisType,
@@ -621,7 +727,7 @@ PRESTo_others = (
         types.ComplexType,
         types.LambdaType,
         types.FunctionType,
-        types.XRangeType, # and this?
+        types.XRangeType,
         )
 
 def presto_xml (
@@ -797,6 +903,38 @@ def presto_xml (
 # statefull instances, using stateless XML transformations only (be it XSLT
 # CSS or JavaScript).
 #
+# Here is another example, the infamous HelloWorld for PRESTo:
+#
+#        1. Python Module
+#
+#        from allegra import presto
+#        class HelloWorld (presto.PRESTo_async):
+#                xml_name = u'HelloWorld'
+#                def presto (self, reactor):
+#                        return u'Hello World'
+#
+#        2. XML file
+#
+#        <HelloWorld/>
+#
+#        3. HTTP request and REST response:
+#
+#        GET http://127.0.0.1/HelloWorld.xml HTTP/1.1
+#        Host: 127.0.0.1
+#        ...
+#
+#        HTTP/1.1 200 Ok
+#        ...
+#
+#        <?xml version="1.0" encoding="ASCII"?>
+#        <PRESTo xmlns="http://presto/"
+#                host="127.0.0.1" path="/HelloWorld.xml"
+#                >
+#                Hello World
+#                <async/>
+#        </PRESTo>
+#
+#        with CRLF added in the XML response for better readability.
 #
 # Allegra PRESTo is unRESTricted
 #
@@ -808,7 +946,7 @@ def presto_xml (
 #                        '<pizza-order>...</pizza-order>'
 #                        )
 #
-# if you prefer to provide only the REST state to your client. Developpers
+# if you prefer to provide your flavor of REST to your client. Developpers
 # of AJAX applications can also provide simple RPC producers and bypass
 # serialization of all three PRESTo states (using XML/RPC, JSON, etc ...).
 #

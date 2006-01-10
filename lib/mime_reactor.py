@@ -112,7 +112,7 @@ class MIME_collector (object):
 		self.mime_collector_body = reactor.Buffer_reactor ()
                 return False
 
-	def mime_collector_finalize (self):
+	def mime_collector_finalize (self, reactor):
 		self.mime_collector_lines = \
 			self.mime_collector_headers = \
 			self.mime_collector_body = None
