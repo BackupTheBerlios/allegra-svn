@@ -147,10 +147,10 @@ class HTTP_server_channel (
                 return self.http_continue (reactor)
                 
         def http_continue (self, reactor):
-                #if reactor.http_response == None:
-                #        # do not continue yet if a response is not set
-                #        return False
-                #
+                if reactor.http_response == None:
+                        # do not continue yet if a response is not set
+                        return False
+                
                 self.http_reactor = reactor
                 if reactor.http_request[0] in ('GET', 'HEAD', 'DELETE'):
                         # finalize requests without a MIME body now!

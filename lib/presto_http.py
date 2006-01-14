@@ -212,8 +212,7 @@ def post_method (component, reactor):
                         ):
                         reactor.mime_collector_body = \
                                 collector.Limited_collector (1<<16)
-                        # set a limited collector of  maximum 64KB in length
-                        # as the request's MIME body collector, ...
+                        reactor.http_response = 200
                 else:
                         reactor.http_response = 405 # Method Not Allowed
                 return
@@ -263,6 +262,7 @@ def form_method (component, reactor):
                 ):
                 reactor.mime_collector_body = \
                         collector.Limited_collector (0)
+                reactor.http_response = 200
                 return
         
         elif reactor.http_request[0] == 'GET':
