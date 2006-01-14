@@ -66,14 +66,14 @@ def options (headers, name):
         return options.split (',')
         
 
-def preferences (headers, name):
+def preferences (headers, name, default=None):
         options = headers.get (name)
         if options == None:
-                return (None, )
+                return (default, )
                 
         preferences = []
         for option in options.split (','):
-                q in option.split (';')
+                q = option.split (';')
                 if len (q) == 2 and q[1].startswith ('q='):
                         preferences.append ((float (q[1][2:]), q[0]))
                 else:

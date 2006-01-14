@@ -105,7 +105,7 @@ class MIME_collector (object):
 		elif self.mime_collector_body.found_terminator ():
 			# if the MIME body final terminator is reached,
 			# finalize it and reset the state of the collector
-			self.mime_collector_buffer = ''
+			self.mime_collector_buffer = '' # ?
 			return self.mime_collector_finalize ()
 
 	def mime_collector_continue (self):
@@ -113,9 +113,10 @@ class MIME_collector (object):
                 return False
 
 	def mime_collector_finalize (self, reactor):
-		self.mime_collector_lines = \
-			self.mime_collector_headers = \
-			self.mime_collector_body = None
+                # reset MIME collector's state
+                self.mime_collector_headers = \
+                        self.mime_collector_lines = \
+                        self.mime_collector_body = None
 	        return False
 
 

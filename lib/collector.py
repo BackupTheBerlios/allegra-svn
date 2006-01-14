@@ -20,6 +20,22 @@
 from allegra import async_chat, loginfo
 
 
+class Limited_collector (object):
+        
+        collector_is_simple = True
+        
+        def __init__ (self, buffer):
+                self.data = ''
+                self.buffer = buffer
+
+        def collect_incoming_data (self, data):
+                if not (0 < self.buffer < len (data)):
+                        self.data += data
+
+        def found_terminator (self):
+                return True
+                
+
 class Loginfo_collector (object):
 	
 	# collect data to loginfo
@@ -72,7 +88,7 @@ class Simple_collector (object):
 
 	def collect_incoming_data (self, data):
                 self.ac_in_buffer = self.ac_in_buffer + data
-                while async_chat.consume_buffer (self.collector):
+                while async_chat.collect (self.collector):
                         pass
 			
 	def found_terminator (self):

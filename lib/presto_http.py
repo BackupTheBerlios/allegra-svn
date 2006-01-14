@@ -21,35 +21,17 @@ import os, stat, glob, urllib
 
 from allegra import \
         netstring, loginfo, async_loop, \
-        finalization, synchronizer, producer, \
-        http_server, presto
-
-
-def presto_decode (urlencoded, result, encoding='UTF-8'):
-        "index URL encoded form data into a dictionnary"
-        urlencoded = urlencoded.replace ('+', ' ')
-        for param in urlencoded.split ('&'):
-                if param.find ('=') > -1:
-                        name, value = param.split ('=', 1)
-                        result[unicode (
-                                urllib.unquote (name), encoding, 'replace'
-                                )] = unicode (
-                                        urllib.unquote (value), encoding,
-                                        'replace'
-                                        )
-                elif param:
-                        result[unicode (
-                                urllib.unquote (param), encoding, 'replace'
-                                )] = u''
-        return result
-
+        finalization, synchronizer, collector, producer, \
+        mime_headers, http_server, presto
 
 
 class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
+        
+        "An implementation of PRESTo interfaces for HTTP/1.1 servers"
 
         synchronizer = None
         synchronizer_size = 2
-                
+        
         def __init__ (self, path, host=None, port=80):
                 if port == 80:
                         self.http_host = host
@@ -74,30 +56,7 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
 
         def http_finalize (self, reactor):
                 if reactor.mime_collector_body != None:
-                        reactor.presto_rest = presto.presto_rest (
-                                reactor.presto_dom.xml_root, reactor, self
-                                )
-                if (
-                        reactor.presto_rest != None and
-                        reactor.http_response == 200 and
-                        reactor.mime_producer_body == None and 
-                        reactor.http_request[0] in ('GET', 'POST')
-                        ):
-                        # OK but no response body producer, supply one PRESTo!
-                        if __debug__:
-                                reactor.mime_producer_body = \
-                                        presto.presto_producer (
-                                                reactor, 'UTF-8',
-                                                reactor.http_request_time
-                                                )
-                        else:
-                                reactor.mime_producer_body = \
-                                        presto.presto_producer (
-                                                reactor, 'UTF-8'
-                                                )
-                        reactor.mime_producer_headers [
-                                'Content-Type'
-                                ] = 'text/xml; charset=UTF-8'
+                        self.presto_continue_http (reactor)
                 http_server.http_log (self, reactor)
 
         def sync_stat (self, reactor, filename):
@@ -120,90 +79,234 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                 
         def presto_continue (self, reactor):
                 self.presto_continue_http (reactor)
-                reactor.http_channel.http_continue (reactor)
                 channel = reactor.http_channel
+                channel.http_continue (reactor)
                 if channel.collector_stalled:
                         channel.async_collect ()
+                        #
+                        # Resume collection of the async_chat buffer
+                        # stalled while loading the synchronized XML
+                        # instance in the cache.
 
         def presto_continue_http (self, reactor):
-                # grok the REST vector, set the HTTP response to Ok ...
-                #
-                if reactor.http_uri[3] != None:
-                        reactor.presto_vector = presto_decode (
-                                reactor.http_uri[3][1:], {}
-                                )
-                else:
-                        reactor.presto_vector = {}
-                reactor.http_response = 200 # Ok
-                #
-                # ... do the REST of the request ...
-                reactor.presto_rest = presto.presto_rest (
-                        reactor.presto_dom.xml_root, reactor, self
-                        )
-                # TODO: move this to the producer part?
-                reactor.presto_vector[u'presto-host'] = unicode (
-                        reactor.mime_collector_headers.get (
-                                'host', ''
-                                ), 'UTF-8'
-                        )
-                reactor.presto_vector[u'presto-path'] = unicode (
-                        reactor.http_uri[2] or '', 'UTF-8'
-                        )
+                dom = reactor.presto_dom
+                reactor.presto_vector = {
+                        u'presto-path': unicode (dom.presto_path, 'UTF-8')
+                        }
+                try:
+                        dom.xml_root.presto (reactor)
+                except:
+                        self.loginfo_traceback ()
+                        reactor.http_response = 500 # Server Error
 
 
-class PRESTo_form_collector (object):
-        
-        # a simple collector for URL encoded form data submitted by POST
-        
-        collector_is_simple = True
-        
-        def __init__ (self, reactor, buffer):
-                self.data = ''
-                self.reactor = reactor
-                self.buffer = buffer
+def presto_decode (urlencoded, result, encoding='UTF-8'):
+        "index URL encoded form data into a dictionnary"
+        for param in urlencoded.split ('&'):
+                if param.find ('=') > -1:
+                        name, value = param.split ('=', 1)
+                        result[unicode (
+                                urllib.unquote (name), encoding, 'replace'
+                                )] = unicode (
+                                        urllib.unquote (value), encoding,
+                                        'replace'
+                                        )
+                elif param:
+                        result[unicode (
+                                urllib.unquote (param), encoding, 'replace'
+                                )] = True
+        return result
 
-        def collect_incoming_data (self, data):
-                if not (0 < self.buffer < len (data)):
-                        self.data += data
 
-        def found_terminator (self):
-                # update the reactor's presto vector, REST again and
-                # let PRESTo continue to push the HTTP response now.
-                #
-                self.reactor.http_channel.log (self.data, 'POST')
-                presto_decode (self.data, self.reactor.presto_vector)
-                return True
+def presto_vector (urlencoded, interfaces, vector, encoding='UTF-8'):
+        for param in urlencoded.split ('&'):
+                if param.find ('=') > -1:
+                        encoded, value = param.split ('=', 1)
+                        name = unicode (urllib.unquote (
+                                encoded
+                                ), encoding, 'replace')
+                        if name in interfaces:
+                                vector[name] = unicode (urllib.unquote (
+                                        value
+                                        ), encoding, 'replace')
+                elif param:
+                        name = unicode (urllib.unquote (
+                                param
+                                ), encoding, 'replace')
+                        if name in interfaces:
+                                vector[name] = True
+
+
+# Functions that completes the HTTP response
+
+def rest_response (reactor, result, response):
+        encoding = mime_headers.preferences (
+                reactor.mime_collector_headers, 'accept-charset', 'ascii'
+                )[-1]
+        reactor.mime_producer_body = presto.presto_producer (
+                reactor.presto_dom,
+                reactor.presto_vector,
+                result, 
+                encoding
+                )
+        reactor.mime_producer_headers [
+                'Content-Type'
+                ] = 'text/xml; charset=%s' % encoding
+        reactor.http_response = response
+
+
+def rest_benchmark (reactor, result, response):
+        encoding = mime_headers.preferences (
+                reactor.mime_collector_headers, 'accept-charset', 'ascii'
+                )[-1]
+        reactor.mime_producer_body = presto.presto_benchmark (
+                reactor.presto_dom,
+                reactor.presto_vector,
+                result,
+                encoding, 
+                presto.PRESTo_benchmark (reactor.http_request_time)
+                )
+        reactor.mime_producer_headers [
+                'Content-Type'
+                ] = 'text/xml; charset=%s' % encoding
+        reactor.http_response = response
+        # TODO: handle different character encoding than ASCII
                 
+if __debug__:
+        rest = rest_benchmark
+else:
+        rest = rest_response        
 
-def presto_form (reactor, buffer=1<<16):
-        if (
-                reactor.http_request[0] == 'POST' and 
-                reactor.mime_collector_body == None
-                ):
-                reactor.mime_collector_body = PRESTo_form_collector (
-                        reactor, buffer
+
+def get_method (component, reactor):
+        if reactor.http_request[0] != 'GET':
+                reactor.http_response = 405 # Method Not Allowed
+                return
+
+        if component.xml_attributes:
+                reactor.presto_vector.update (component.xml_attributes)
+        if reactor.http_uri[3] and component.presto_interfaces:
+                presto_vector (
+                        reactor.http_uri[3][1:].replace ('+', ' '),
+                        component.presto_interfaces,
+                        reactor.presto_vector
                         )
-                return True
-                #
-                # handle POST: set a URL encoded form data collector of 
-                # maximum 64KB in length as the request's MIME body
-                # collector. when collected, it will decode itself and
-                # call PRESTo's REST function to call back this method
+        method = component.presto_methods.get (
+                reactor.presto_vector.get (u'PRESTo')
+                )
+        if method == None:
+                rest (reactor, '<presto:presto/>', 200)
+        else:
+                rest (reactor, presto.presto_rest (
+                        method, component, reactor
+                        ), 200)
+        
 
-        return False
-        #
-        # handle GET and the POSTed form data
-        #
-        #
-        # Synopsis in a PRESTo method:
-        #
-        # if presto_form (self, reactor):
-        #         return # collect URL encoded form data POSTed
-        #
-        # ... handle the REST request GETed or POSTed ...
-        #
+def post_method (component, reactor):
+        if reactor.mime_collector_body == None:
+                if (
+                        reactor.http_request[0] == 'POST' and
+                        reactor.mime_collector_headers [
+                                'content-type'
+                                ] == 'application/x-www-form-urlencoded'
+                        ):
+                        reactor.mime_collector_body = \
+                                collector.Limited_collector (1<<16)
+                        # set a limited collector of  maximum 64KB in length
+                        # as the request's MIME body collector, ...
+                else:
+                        reactor.http_response = 405 # Method Not Allowed
+                return
+                
+        if component.xml_attributes:
+                reactor.presto_vector.update (component.xml_attributes)
+        if reactor.mime_collector_body.data and component.presto_interfaces:
+                presto_vector (
+                        reactor.mime_collector_body.data.replace ('+', ' '),
+                        component.presto_interfaces,
+                        reactor.presto_vector
+                        )
+        method = component.presto_methods.get (
+                reactor.presto_vector.get (u'PRESTo')
+                )
+        if method == None:
+                rest (reactor, '<presto:presto/>', 200)
+        else:
+                rest (reactor, presto.presto_rest (
+                        method, component, reactor
+                        ), 200)
+        
+
+def form_method (component, reactor):
+        "GET or POST handler for REST request"
+        if reactor.mime_collector_body != None:
+                if component.xml_attributes:
+                        reactor.presto_vector.update (
+                                component.xml_attributes
+                                )
+                if (
+                        reactor.mime_collector_body.data and 
+                        component.presto_interfaces
+                        ):
+                        presto_vector (
+                                reactor.mime_collector_body.data.replace (
+                                        '+', ' '
+                                        ),
+                                component.presto_interfaces,
+                                reactor.presto_vector
+                                )
+        elif (
+                reactor.http_request[0] == 'POST' and
+                reactor.mime_collector_headers ['content-type'].startswith (
+                        'application/x-www-form-urlencoded'
+                        )
+                ):
+                reactor.mime_collector_body = \
+                        collector.Limited_collector (0)
+                return
+        
+        elif reactor.http_request[0] == 'GET':
+                if component.xml_attributes:
+                        reactor.presto_vector.update (
+                                component.xml_attributes
+                                )
+                if reactor.http_uri[3] and component.presto_interfaces:
+                        presto_vector (
+                                reactor.http_uri[3][1:].replace ('+', ' '),
+                                component.presto_interfaces,
+                                reactor.presto_vector
+                                )
+        else:
+                reactor.http_response = 405 # Method Not Allowed
+                return
+        
+        method = component.presto_methods.get (
+                reactor.presto_vector.get (u'PRESTo')
+                )
+        if method == None:
+                rest (reactor, '<presto:presto/>', 200)
+        else:
+                rest (reactor, presto.presto_rest (
+                        method, component, reactor
+                        ), 200)
 
 
+def post_multipart (component, reactor):
+        if reactor.mime_collector_body == None:
+                if (
+                        reactor.http_request[0] == 'POST' and
+                        reactor.mime_collector_headers [
+                                'content-type'
+                                ].startswith ('multipart/form-data')
+                        ):
+                        reactor.mime_collector_body = \
+                                mime_collector.MULTIPART ()
+                else:
+                        reactor.http_response = 405 # Method Not Allowed
+        else:
+                pass
+                
+                
 if __name__ == '__main__':
         import sys
         if '-d' in sys.argv:
@@ -250,3 +353,38 @@ if __name__ == '__main__':
 # presto_bsddb.py and presto_pns.py modules which provide additional 
 # features and complete the stack of interfaces required to develop
 # distributed web applications.
+#
+#
+# No default REST response
+#
+# The rational is that the PRESTo handler leaves the choice and
+# responsability of the MIME body collector to the instance's
+# method called. So that components can themselves pick up from
+# a variety of protocols like SOAP or XML/RPC, without making
+# PRESTo's HTTP handler more complex.
+#
+# The benefit for applications developpers is the ability to
+# control effectively how input is collected and process data as 
+# it is collected. Validating, transcoding and parsing data can be 
+# integrated differently and optimaly for each method, and each of
+# these high-profile processes may them be optimized individually
+# if they are not allready by Python's builtins.
+#
+# Beyond support for all kind of RPC scheme developped on top of 
+# HTTP it effectively matters that a POST, PRESTo's way to handle
+# collected MIME bodies, also provides Web media developpers with
+# a practical interface.
+#
+# Lets take the example of a Multipart MIME file upload. Its body
+# aggregates encoded form data for the POST request as well as one
+# or more parts. Now suppose that one or all of those parts must be
+# processed asap, for instance to check an MPEG video header and
+# validate the attached XML description and set a low limit to the
+# parts size *before* waisting 300MB of bandwith and half and hour
+# of everybody's time!
+#
+# Practically, by default a PRESTo HTTP peer drops any POST request
+# and close the session when this interface is accessed but not
+# implemented. Allegra provides a simple collector for URL encoded
+# REST request, it is up to developpers to provide their own for
+# their own application of HTTP's POST command.#

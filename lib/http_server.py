@@ -67,9 +67,6 @@ class HTTP_server_channel (
                 mime_reactor.MIME_collector.found_terminator
 
 	def mime_collector_continue (self):
-                #
-                # 1. Grok The Request
-                #
 		while (
                         self.mime_collector_lines and not 
                         self.mime_collector_lines[0]
@@ -89,7 +86,9 @@ class HTTP_server_channel (
                 # HTTP request and response.
                 #
 		reactor = HTTP_server_reactor ()
-                reactor.log (self.mime_collector_lines[0], 'request')
+                assert None == reactor.log (
+                        self.mime_collector_lines[0], 'request'
+                        )
                 reactor.http_channel = self
                 reactor.http_request_time = allegra_time ()
                 try:
@@ -112,7 +111,6 @@ class HTTP_server_channel (
 
                 method = method.upper ()
                 reactor.http_request = (method, uri, version)
-                reactor.http_response = None
                 # Split the URI parts if any ...
                 m = HTTP_URI_RE.match (uri)
                 if m:
@@ -149,10 +147,10 @@ class HTTP_server_channel (
                 return self.http_continue (reactor)
                 
         def http_continue (self, reactor):
-                if reactor.http_response == None:
-                        # do not continue yet if a response is not set
-                        return False
-                
+                #if reactor.http_response == None:
+                #        # do not continue yet if a response is not set
+                #        return False
+                #
                 self.http_reactor = reactor
                 if reactor.http_request[0] in ('GET', 'HEAD', 'DELETE'):
                         # finalize requests without a MIME body now!
@@ -181,18 +179,18 @@ class HTTP_server_channel (
         http_collector_continue = http_reactor.http_collector_continue
 
         def mime_collector_finalize (self):
-                # reset the channel's and MIME collector's state
+                # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
                 self.mime_collector_headers = \
                         self.mime_collector_lines = \
                         self.mime_collector_body = None
                 # finalize the current HTTP request
-                reactor = self.http_reactor # del self.http_reactor ?
+                reactor = self.http_reactor
                 reactor.http_handler.http_finalize (reactor)
                 # Complete the HTTP response producer
-                if reactor.http_request[0] in (
-                        'GET', 'POST'
-                        ) and  reactor.mime_producer_body == None:
+                if reactor.mime_producer_body == None and (
+                        reactor.http_request[0] in ('GET', 'POST')
+                        ):
                         # supply a response entity if one is required for the
                         # request's method and that none has been assigned
                         # by a previous handler
@@ -244,8 +242,9 @@ class HTTP_server_channel (
                         ) != 'keep-alive':
                         self.close_when_done ()
                 # ... finally, log the response's first line.
-                reactor.log (reactor.mime_producer_lines[0][:-2], 'response')
-                self.http_reactor = None
+                assert None == reactor.log (
+                        reactor.mime_producer_lines[0][:-2], 'response'
+                        )
                 return False
 
         HTTP_SERVER_RESPONSE = (
@@ -301,14 +300,27 @@ class HTTP_server_channel (
         # progresses, as it thunks data to produce via the select_trigger.
 
 
-# A Static Cache Root
+# A Static Cache Root with Simple Logging
 
-def http_log (self, reactor):
+def http_log_line (self, reactor):
+        loginfo.log (' '.join ((
+                '%s:%d' % reactor.http_channel.addr,
+                '(%s %s %s)' % reactor.http_request,
+                '%d' % reactor.http_response
+                )))
+
+def http_log_netstrings (self, reactor):
         loginfo.log (netstring.netstrings ((
                 reactor.http_channel.addr,
                 reactor.http_request,
                 reactor.http_response
                 )))
+
+if __debug__:
+        http_log = http_log_line
+else:
+        http_log = http_log_netstrings
+        
 
 def none (): pass
             
@@ -527,6 +539,7 @@ if __name__ == '__main__':
         async_loop.async_catch = server.tcp_server_catch
         async_loop.loop ()
         
+        
 # Note about this implementation
 #
 # This HTTP/1.1 server supports non-blocking handlers, like the one
@@ -536,17 +549,17 @@ if __name__ == '__main__':
 # alike. It is integrated with Allegra TCP server models (local and
 # unlimited, private and managed, public and throttled) and provides
 # a practical interface and implementation to derive other services
-# than static filesystems, like BSDDB databases and PNS metabases.
+# than a static file server, like BSDDB databases and PNS metabases.
 #
 # Most remarkably, this interface is the basis for PRESTo, Allegra's 
-# web peer, which serves REST methods of component instances loaded
-# from any of the above three type of information storage system.
+# web application peer, which serves REST methods of component instances
+# loaded from any of the above three type of information storage system.
 #
 #
 # A Static Web Cache
 #
-# The http_server.py module implements a simple filesystem web service
-# that publishes static files from a folder for a named host and address:
+# The http_server.py module implements a simple static file web service
+# that publishes and caches files for a named host and address:
 #
 #        http_server.py [.] [127.0.0.1[:80]] [127.0.0.1]
 #
