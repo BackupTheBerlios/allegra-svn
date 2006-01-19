@@ -413,8 +413,8 @@ def is_ip (host):
                 
 class TCP_client_DNS (tcp_client.TCP_client):
 
-        def __init__ (self, dns_client=None):
-                self.dns_client = dns_client or DNS_client (dns_servers ())
+        def __init__ (self, dns=None):
+                self.dns_client = dns or DNS_client (dns_servers ())
                 tcp_client.TCP_client.__init__ (self)
         
         def tcp_client (self, addr, timeout=3):
