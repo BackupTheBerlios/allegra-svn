@@ -140,9 +140,13 @@ def presto_vector (urlencoded, interfaces, vector, encoding='UTF-8'):
 # Functions that completes the HTTP response
 
 def rest_response (reactor, result, response):
-        encoding = mime_headers.preferences (
+        charsets = mime_headers.preferences (
                 reactor.mime_collector_headers, 'accept-charset', 'ascii'
-                )[-1]
+                )
+        if 'utf-8' in charsets:
+                encoding = 'UTF-8'
+        else:
+                encoding = charsets[-1].upper ()
         reactor.mime_producer_body = presto.presto_producer (
                 reactor.presto_dom,
                 reactor.presto_vector,
@@ -156,9 +160,13 @@ def rest_response (reactor, result, response):
 
 
 def rest_benchmark (reactor, result, response):
-        encoding = mime_headers.preferences (
+        charsets = mime_headers.preferences (
                 reactor.mime_collector_headers, 'accept-charset', 'ascii'
-                )[-1]
+                )
+        if 'utf-8' in charsets:
+                encoding = 'UTF-8'
+        else:
+                encoding = charsets[-1].upper ()
         reactor.mime_producer_body = presto.presto_benchmark (
                 reactor.presto_dom,
                 reactor.presto_vector,
@@ -170,7 +178,6 @@ def rest_benchmark (reactor, result, response):
                 'Content-Type'
                 ] = 'text/xml; charset=%s' % encoding
         reactor.http_response = response
-        # TODO: handle different character encoding than ASCII
                 
 if __debug__:
         rest = rest_benchmark
@@ -300,7 +307,7 @@ def post_multipart (component, reactor):
                                 ].startswith ('multipart/form-data')
                         ):
                         reactor.mime_collector_body = \
-                                mime_collector.MULTIPART ()
+                                mime_reactor.MULTIPART ()
                 else:
                         reactor.http_response = 405 # Method Not Allowed
         else:
@@ -336,14 +343,6 @@ if __name__ == '__main__':
         
 # Note about this implementation
 #
-# Allegra's PRESTo/HTTP peer dispatches REST request to Python instances
-# loaded from XML files. It also supports a URL encoded form data POST and 
-# provides a web file cache component:
-#
-#        <presto:cache root="./path"/>
-#
-# to serve stylesheets and other static resources.
-#
 # Practically, http_presto.py delivers the minimal set of functions required
 # by a web application peer: dispatch HTTP requests to an instance method; 
 # support GET and POST of HTML form; serve static files like stylesheets,
@@ -354,37 +353,32 @@ if __name__ == '__main__':
 # features and complete the stack of interfaces required to develop
 # distributed web applications.
 #
+# Synopsis
 #
-# No default REST response
+#        python presto_http.py ./presto 127.0.0.1 127.0.0.1
 #
-# The rational is that the PRESTo handler leaves the choice and
-# responsability of the MIME body collector to the instance's
-# method called. So that components can themselves pick up from
-# a variety of protocols like SOAP or XML/RPC, without making
-# PRESTo's HTTP handler more complex.
+#        ./presto/python/presto-com.py
+#        
 #
-# The benefit for applications developpers is the ability to
-# control effectively how input is collected and process data as 
-# it is collected. Validating, transcoding and parsing data can be 
-# integrated differently and optimaly for each method, and each of
-# these high-profile processes may them be optimized individually
-# if they are not allready by Python's builtins.
+#        ./presto/xml/presto-com.xml
+#        <route xmlns="http://presto/">
+#            <prompt/>
+#        </route>
 #
-# Beyond support for all kind of RPC scheme developped on top of 
-# HTTP it effectively matters that a POST, PRESTo's way to handle
-# collected MIME bodies, also provides Web media developpers with
-# a practical interface.
-#
-# Lets take the example of a Multipart MIME file upload. Its body
-# aggregates encoded form data for the POST request as well as one
-# or more parts. Now suppose that one or all of those parts must be
-# processed asap, for instance to check an MPEG video header and
-# validate the attached XML description and set a low limit to the
-# parts size *before* waisting 300MB of bandwith and half and hour
-# of everybody's time!
-#
-# Practically, by default a PRESTo HTTP peer drops any POST request
-# and close the session when this interface is accessed but not
-# implemented. Allegra provides a simple collector for URL encoded
-# REST request, it is up to developpers to provide their own for
-# their own application of HTTP's POST command.#
+#        GET /presto-com.xml/prompt?PRESTo=async&prompt=xdir() HTTP/1.1
+#        Host: 127.0.0.1
+#        Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+#        ...
+#        
+#        HTTP/1.1 200 Ok
+#        ...
+#        <?xml version="1.0" encoding="UTF-8"?>
+#        <PRESTo xmlns="http://presto/" 
+#            PRESTo="async" 
+#            presto-path="/presto-com.xml/prompt"
+#            prompt="xdir()"
+#            >
+#            <route>
+#                <prompt/>
+#            </route>
+#        <PRESTo>

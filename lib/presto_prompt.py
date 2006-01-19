@@ -240,62 +240,6 @@ def presto_debug_sync (Debug):
 # does not prevent a prompt user to deliberately cache the environnement
 # with the instance debugged, simply by entering:
 #       
-#        dom = reactor.presto_dom
+#        self.xml_dom = reactor.presto_dom
 #
 # and create a circular link between the DOM instance and its root element.
-#
-#
-# No Access Control? Use secret URI!
-#
-# PRESTo allows the simplest implementation of access control. It is trivial
-# and safe for instance to disable this module alltogether, or restrict its
-# access to authorized personnel only. Without unloading the module itself.
-# Just by deleting the root.xml document from the filesystem or renaming it
-# to a secret - one-time and/or cryptic - URI.
-#
-# With PRESTo there is only one resource to control, the filesystem. Security
-# is provided to the application by enforcing a safe process of application
-# resource description. Compartimenting resources into distinct "webs" of
-# URI and rooting each of them with a possibly secret name (for instance
-# the result of a login hash, the content of a cookie, etc ...).
-#
-# Application Resource Access Control (ARAC, what an ugly acronym!) is a
-# matter better handled by the application. The trouble with transport
-# layer authentication is that they yield only transient identification
-# and that their functions are difficult to proxy.
-#
-# ARAC is allways implemented more-or-less independantly from HTTP or HTTPS
-# authentification protocols, using a mix of cookies, names and passwords
-# to do the job. Therefore there are absolutely no reasons to provide a
-# PRESTo interface for HTTP basic authentication.
-#
-#
-# Simple Component Interfaces
-#
-# This implementation is a test of the PRESTo interfaces as a simple "right"
-# Pythonic way to declare and mixin component interfaces for synchronous
-# and asynchronous implementations. It works just fine ;-)
-#
-# Every methods is a function like:
-#
-#        presto (self, reactor)
-#
-# which may or not be bounded.
-#
-# This makes it simple to "synchronize" method, dynamically update a class
-# or instance interfaces, and bind a set of common functions to an instance
-# or class, providing some metaphore for aspect programming (to set
-# dynamically the persistence functions, like in bsddb_presto.BSDDB_folder).
-#
-# Here is a sample module for <my-presto/> class in the XML name space
-# "http://namespace/", with a debug prompt available in a debug runtime
-# environnement (an non-OOptimized CPython VM):
-#
-#        from allegra import presto 
-#        class MyPRESTo (presto.PRESTo_async):
-#                xml_name = 'http://namespace/ my-presto'
-#        if __debug__:
-#                from allegra import presto_prompt
-#                presto_prompt.presto_debug_async (MyPRESTo)
-#
-#
