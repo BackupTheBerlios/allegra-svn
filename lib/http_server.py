@@ -186,7 +186,8 @@ class HTTP_server_channel (
                         self.mime_collector_body = None
                 # finalize the current HTTP request
                 reactor = self.http_reactor
-                reactor.http_handler.http_finalize (reactor)
+                if reactor.http_handler != None:
+                        reactor.http_handler.http_finalize (reactor)
                 # Complete the HTTP response producer
                 if reactor.mime_producer_body == None and (
                         reactor.http_request[0] in ('GET', 'POST')
