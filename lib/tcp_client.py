@@ -27,7 +27,7 @@ SYNOPSYS
 
 """
 
-import sys, socket, time
+import sys, socket, time, collections
 
 from allegra import \
 	loginfo, async_loop, async_limits, async_net, async_chat
@@ -106,10 +106,17 @@ class TCP_client (loginfo.Loginfo):
 			channel.tcp_client_key = addr
 	
 	def tcp_client_channel (self, addr):
+                now = time.time ()
 		channel = self.TCP_CLIENT_CHANNEL ()
-		async_limits.async_limit_in (channel)
-		async_limits.async_limit_out (channel)
-		channel.handle_close = self.tcp_client_close
+                channel.tcp_client_key = addr
+		async_limits.async_limit_recv (channel, now)
+		async_limits.async_limit_send (channel, now)
+                def handle_close ():
+                        channel.close ()
+                        del channel.recv, channel.send, channel.handle_close
+                        del self.tcp_client_channels[channel.tcp_client_key]
+                        
+		channel.handle_close = handle_close
 		self.tcp_client_channels[addr] = channel
 		if len (self.tcp_client_channels) == 1:
 	                assert None == self.log ('defer-start', 'debug')
@@ -142,11 +149,6 @@ class TCP_client (loginfo.Loginfo):
 			assert None == channel.log ('inactive', 'debug')
 			channel.handle_close ()
 
-	def tcp_client_close (self, channel):
-		channel.close ()
-		del channel.recv, channe.send, channel.handle_close
-		del self.tcp_client_channels[channel.tcp_client_key]
-		
 	def tcp_client_shutdown (self, channel):
 		for channel in self.tcp_client_channels.values ():
 			channel.close_when_done ()		
@@ -214,10 +216,11 @@ class Pipeline (object):
 
 	def pipeline_wake_up (self):
 		# pipelining protocols, like HTTP/1.1 or ESMPT
+                requests = self.pipeline_requests
 		if self.pipeline_requests:
 			while self.pipeline_requests:
 				reactor = self.pipeline_requests.popleft ()
-				self.producer_fifo.append (reactor)
+                                self.pipeline_push (reactor)
 				self.pipeline_responses.append (reactor)
 		self.pipeline_sleeping = True
 
@@ -225,8 +228,13 @@ class Pipeline (object):
 		# synchronous protocols, like HTTP/1.0 or SMTP
 		if self.pipeline_requests:
 			reactor = self.pipeline_requests.popleft ()
-			self.producer_fifo.append (reactor)
+                        self.pipeline_push (reactor)
 			self.pipeline_responses.append (reactor)
 			self.pipeline_sleeping = False
 		else:
 			self.pipeline_sleeping = True
+                        
+        def pipeline_push (self, reactor):
+                assert None == loginfo.log (
+                        '%r' % reactor, 'pipeline_push'
+                        )
