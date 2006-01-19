@@ -37,7 +37,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-import types, collections, socket
+import collections, socket
 
 from allegra import async_core
 
@@ -123,21 +123,21 @@ def collect (c):
 def produce (c):
         while len (c.producer_fifo):
                 p = c.producer_fifo[0]
-                if p is None:
+                if p == None:
                         if c.ac_out_buffer == '':
                                 c.producer_fifo.popleft ()
                                 c.handle_close () # this *is* an event
-                        break
+                        return
                     
-                elif type (p) is types.StringType:
+                elif type (p) == str:
                         c.producer_fifo.popleft ()
                         c.ac_out_buffer += p
-                        break
+                        return
 
                 data = p.more ()
                 if data:
                         c.ac_out_buffer += data
-                        break
+                        return
                     
                 c.producer_fifo.popleft ()                        
                         
@@ -180,10 +180,10 @@ class Async_chat (async_core.Async_dispatcher):
                 "predicate for inclusion in the poll loop for output"
                 return not (
                         (self.ac_out_buffer == '') and
-                        (
-                                len (self.producer_fifo) == 0 or
+                        (len (self.producer_fifo) == 0 or (
+                                type (self.producer_fifo[0]) != str and
                                 self.producer_fifo[0].producer_stalled ()
-                                ) and
+                                )) and
                         self.connected
                         )
 
@@ -221,7 +221,7 @@ class Async_chat (async_core.Async_dispatcher):
         
         def push (self, p):
                 "push a string or producer on the output queue, initiate send"
-                assert type (p) == types.StringType or hasattr (p, 'more')
+                assert type (p) == str or hasattr (p, 'more')
                 self.producer_fifo.append (p)
                 self.handle_write ()
 
