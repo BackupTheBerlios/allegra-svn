@@ -78,7 +78,7 @@ class HTTP_client_pipeline (
 		
 	# Pipeline
 
-        pipeline_keep_alive = True
+        pipeline_keep_alive = False
 			
 	def pipeline_error (self):
 		# TODO: handle pipeline error
@@ -126,10 +126,14 @@ class HTTP_client_pipeline (
                         self.http_client_continue (reactor)
                         reactor = self.pipeline_requests.popleft ()
 		# push the last one
-                #if not self.pipeline_keep_alive:
-                #        # close when done and not kept alive
-                #        reactor.mime_producer_headers['connection'] = 'close'
-                reactor.mime_producer_headers['connection'] = 'keep-alive'
+                if self.pipeline_keep_alive:
+                        reactor.mime_producer_headers[
+                                'connection'
+                                ] = 'keep-alive'
+                else:
+                        # close when done and not kept alive
+                        reactor.mime_producer_headers['connection'] = 'close'
+                # reactor.mime_producer_headers['connection'] = 'keep-alive'
 		self.http_client_continue (reactor)
                 # 
 		# self.handle_write ()
@@ -159,12 +163,14 @@ class HTTP_client_pipeline (
 			self.http_collector_error ()
 			return True
 
-		if self.http_version != http_version[-3:]:
-			if http_version == '1.1':
-				self.pipeline_wake_up = \
-					self.pipeline_wake_up_11
-                        else:
-			        self.http_version = '1.0'
+                version = http_version[-3:]
+                if (
+                        version == '1.1' and 
+                        self.pipeline_wake_up != self.pipeline_wake_up_11
+                        ):
+			self.pipeline_wake_up = self.pipeline_wake_up_11
+                elif self.http_version != '1.0':
+		        self.http_version = '1.0'
 		reactor.mime_collector_headers = \
 			self.mime_collector_headers = \
 			mime_headers.map (self.mime_collector_lines)
@@ -187,12 +193,12 @@ class HTTP_client_pipeline (
                         self.mime_collector_body = None
                 # pop the reactor finalized 
                 self.pipeline_responses.popleft ()
+                self.http_responses += 1
                 # wake up the pipeline if there are request pipelined
-                if not self.pipeline_responses:
-                        if self.pipeline_requests:
-                                self.pipeline_wake_up ()
-                        else:
-                                self.pipeline_sleeping = True
+                if self.pipeline_requests:
+                        self.pipeline_wake_up ()
+                elif not self.pipeline_responses:
+                        self.pipeline_sleeping = True
                 return False
 
 	# HTTP/1.1 client reactor
@@ -202,6 +208,8 @@ class HTTP_client_pipeline (
 	http_collector_continue = http_reactor.http_collector_continue
 
 	http_collector_error = async_chat.Async_chat.handle_close
+        
+        http_requests = http_responses = 0
 
         def http_client_continue (self, reactor):
                 # push one string and maybe a producer in the output fifo ...
@@ -239,6 +247,7 @@ class HTTP_client_pipeline (
                                 )
                 # append the reactor to the queue of responses expected ...
                 self.pipeline_responses.append (reactor)
+                self.http_requests += 1
                 #
                 # ready to send.
 
@@ -296,30 +305,45 @@ if __name__ == '__main__':
         		addr.append ('80')
  	except:
  		sys.exit (1)
- 	
+        #
+        def test (collect):
+                if method == 'GET':
+                        GET (pipeline, '/' + path) (collect ())
+                elif method == 'POST':
+                        POST (
+                                pipeline, '/' + path, 
+                                producer.Simple_producer (sys.argv[4])
+                                ) (collect ())
+        #
+        C = 1
         if method == 'POST' and len (sys.argv) > 5:
-                N = int (sys.argv[5])
+                R = int (sys.argv[5])
+                if  len (sys.argv) > 6:
+                        C = int (sys.argv[6])
         elif method == 'GET' and len (sys.argv) > 4:
-                N = int (sys.argv[4])
+                R = int (sys.argv[4])
+                if  len (sys.argv) > 5:
+                        C = int (sys.argv[5])
         else:
-                N = 1
+                R = 1
+        #
  	# get a TCP pipeline connected to the address extracted from the
  	# URL and push an HTTP reactor with the given command and URL path,
  	# close when done ...
  	#
-        pipeline = HTTP_client () (addr[0], int(addr[1]), version)
-        for j in range (N):
-                if method == 'GET':
-                        GET (pipeline, '/' + path) (
-                                collector.Loginfo_collector ()
+        if C > 1:
+                for i in range (C):
+                        pipeline = HTTP_client () (
+                                addr[0], int(addr[1]), version
                                 )
-                elif method == 'POST':
-                        POST (
-                                pipeline, '/' + path, 
-                                producer.Simple_producer (
-                                        sys.argv[4]
-                                        )
-                                ) (collector.Loginfo_collector ())
+                        for j in range (R):
+                                test (collector.Null_collector)
+        else:
+                pipeline = HTTP_client () (
+                        addr[0], int(addr[1]), version
+                        )
+                for j in range (R):
+                        test (collector.Loginfo_collector)
         async_loop.loop ()
 	#
 	# Note:
