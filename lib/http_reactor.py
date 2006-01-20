@@ -111,7 +111,7 @@ class Chunk_collector (object):
                                         mime_headers_map (self.chunk_trailers)
                                         )
                         self.chunk_collector.found_terminator ()
-                        self.set_terminator ('\r\n\r\n')
+                        self.set_terminator ('\r\n\r\n') # ? check it out ?
                         del self.set_terminator
                         return True # final!
 

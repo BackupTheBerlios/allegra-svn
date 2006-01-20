@@ -237,11 +237,14 @@ class HTTP_server_channel (
                         self.http_version, reactor.http_response,
                         self.HTTP_SERVER_RESPONSES[reactor.http_response]
                         ))
-                self.handle_write ()
                 if reactor.mime_collector_headers.get (
                         'connection'
                         ) != 'keep-alive':
-                        self.close_when_done ()
+                        # close when done if not kept alive
+                        self.producer_fifo.append (None)
+                #
+                # do not iniate send, wait for a write event instead ...
+                #
                 # ... finally, log the response's first line.
                 assert None == reactor.log (
                         reactor.mime_producer_lines[0][:-2], 'response'

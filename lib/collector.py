@@ -49,7 +49,7 @@ class Loginfo_collector (object):
 		loginfo.log (data, self.info)
 		
 	def found_terminator (self):
-		return True # final!
+		return False # final!
 		
 
 class Null_collector (object):
