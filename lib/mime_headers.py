@@ -115,3 +115,24 @@ def get_parameter (line, name):
 
 
 # TODO: obvious candidate for C implementation
+#
+# Obviously, these pure Python implementations are consuming a 
+# significant amount of CPU and should either be replaced
+# with a fast C function parsing the MIME headers (for API 
+# and model simplicity convenience) or a fast C function
+# scanning the MIME header lines for a parameter, a preference, 
+# etc ...
+#
+# Optimizing this module in C rather than going for scanning
+# functions has one major benefit: generality and scalability 
+# but at the expense of a CPU and RAM resources. Execution time
+# can be greatly reduced by C optimization and given the transient
+# nature of MIME headers in an application, memory is expendable ;-)
+#
+# Practically, if your application looks at the MIME headers in
+# detail, it will do so repeatedly, accessing many times the same
+# property, making complex decisions on a set of preferences and 
+# parameters. If it does little inspection of the headers, a few
+# ad-hoc scanning functions will perform better, but will be very
+# specific to their application ... and so do not belong to this
+# libray ;-)
