@@ -413,9 +413,9 @@ def is_ip (host):
                 
 class TCP_client_DNS (tcp_client.TCP_client):
 
-        def __init__ (self, dns=None):
+        def __init__ (self, timeout=60, precision=10, dns=None):
                 self.dns_client = dns or DNS_client (dns_servers ())
-                tcp_client.TCP_client.__init__ (self)
+                tcp_client.TCP_client.__init__ (self, timeout, precision)
         
         def tcp_client (self, addr, timeout=3):
                 try:
