@@ -112,10 +112,7 @@ class TCP_client (loginfo.Loginfo):
 		async_limits.async_limit_recv (channel, now)
 		async_limits.async_limit_send (channel, now)
                 def handle_close ():
-                        channel.close ()
-                        del channel.recv, channel.send, channel.handle_close
-                        del self.tcp_client_channels[channel.tcp_client_key]
-                        
+                        self.tcp_client_close (channel)
 		channel.handle_close = handle_close
 		self.tcp_client_channels[addr] = channel
 		if len (self.tcp_client_channels) == 1:
@@ -151,7 +148,18 @@ class TCP_client (loginfo.Loginfo):
 
 	def tcp_client_shutdown (self, channel):
 		for channel in self.tcp_client_channels.values ():
-			channel.close_when_done ()		
+			channel.close_when_done ()	
+                        
+        def tcp_client_close (self, channel):
+                assert None == channel.log (
+                        'in="%d" out="%d"' % (
+                                channel.async_bytes_in, 
+                                channel.async_bytes_out
+                                ),  'debug'
+                        )
+                channel.close ()
+                del channel.recv, channel.send, channel.handle_close
+                del self.tcp_client_channels[channel.tcp_client_key]
 		
 	def tcp_client_stop (self):
 		assert None == self.log ('stop', 'debug')
