@@ -70,7 +70,6 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
         
         def async_stat (self, reactor, filename, result):
                 if result == None or not stat.S_ISREG (result[0]):
-                        reactor.presto_rest = None
                         reactor.http_response = 404
                         reactor.http_channel.http_continue (reactor)
                         return

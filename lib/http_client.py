@@ -95,7 +95,7 @@ class HTTP_client_pipeline (
 	def pipeline_wake_up (self):
 		assert None == self.log ('wake-up-http-1.0', 'debug')
 		# HTTP/1.0, push one at a time, maybe keep-alive or close
-		# when done.
+		# when done ...
 		#
 		reactor = self.pipeline_requests.popleft ()
 		if (
@@ -133,7 +133,6 @@ class HTTP_client_pipeline (
                 else:
                         # close when done and not kept alive
                         reactor.mime_producer_headers['connection'] = 'close'
-                # reactor.mime_producer_headers['connection'] = 'keep-alive'
 		self.http_client_continue (reactor)
                 # 
 		# self.handle_write ()
@@ -141,6 +140,7 @@ class HTTP_client_pipeline (
 	# MIME collector
 
 	def mime_collector_continue (self):
+                assert None == self.log ('mime_collector_continue', 'debug')
                 while (
                         self.mime_collector_lines and not 
                         self.mime_collector_lines[0]
@@ -186,6 +186,7 @@ class HTTP_client_pipeline (
                 return False
 		
 	def mime_collector_finalize (self):
+                assert None == self.log ('mime_collector_continue', 'debug')
                 # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
                 self.mime_collector_headers = \
@@ -197,7 +198,7 @@ class HTTP_client_pipeline (
                 # wake up the pipeline if there are request pipelined
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
-                elif not self.pipeline_responses:
+                if not self.pipeline_responses:
                         self.pipeline_sleeping = True
                 return False
 
@@ -250,7 +251,7 @@ class HTTP_client_pipeline (
                 self.http_requests += 1
                 #
                 # ready to send.
-
+                
 
 class HTTP_client (dns_client.TCP_client_DNS):
 
@@ -268,6 +269,18 @@ class HTTP_client (dns_client.TCP_client_DNS):
                 channel.http_version = version
                 return channel
 
+        def tcp_client_close (self, channel):
+                assert None == channel.log (
+                        'requests="%d" responses="%d" '
+                        'pending="%d" failed="%d"' % (
+                                channel.http_requests, 
+                                channel.http_responses,
+                                len (channel.pipeline_requests),
+                                len (channel.pipeline_responses)
+                                ), 'debug'
+                        )
+                dns_client.TCP_client_DNS.tcp_client_close (self, channel)
+        
 
 def GET (pipeline, url, headers=None):
         if headers == None:
@@ -305,46 +318,41 @@ if __name__ == '__main__':
         		addr.append ('80')
  	except:
  		sys.exit (1)
-        #
-        def test (collect):
-                if method == 'GET':
-                        GET (pipeline, '/' + path) (collect ())
-                elif method == 'POST':
-                        POST (
-                                pipeline, '/' + path, 
-                                producer.Simple_producer (sys.argv[4])
-                                ) (collect ())
-        #
-        C = 1
-        if method == 'POST' and len (sys.argv) > 5:
-                R = int (sys.argv[5])
-                if  len (sys.argv) > 6:
-                        C = int (sys.argv[6])
+        R = C = 1
+        urlpath = '/' + path
+        if method == 'POST':
+                body = sys.argv[4]
+                if len (sys.argv) > 5:
+                        R = int (sys.argv[5])
+                        if  len (sys.argv) > 6:
+                                C = int (sys.argv[6])
         elif method == 'GET' and len (sys.argv) > 4:
                 R = int (sys.argv[4])
                 if  len (sys.argv) > 5:
                         C = int (sys.argv[5])
-        else:
-                R = 1
         #
  	# get a TCP pipeline connected to the address extracted from the
  	# URL and push an HTTP reactor with the given command and URL path,
  	# close when done ...
  	#
         if C > 1:
-                for i in range (C):
-                        pipeline = HTTP_client () (
-                                addr[0], int(addr[1]), version
-                                )
-                        for j in range (R):
-                                test (collector.Null_collector)
+                collect = collector.Null_collector ()
         else:
-                pipeline = HTTP_client () (
+                collect = collector.Loginfo_collector ()
+        for i in range (C):
+                pipeline = HTTP_client (timeout=6, precision=1) (
                         addr[0], int(addr[1]), version
                         )
                 for j in range (R):
-                        test (collector.Loginfo_collector)
-        async_loop.loop ()
+                        if method == 'GET':
+                                GET (pipeline, urlpath) (collect)
+                        elif method == 'POST':
+                                POST (
+                                        pipeline, urlpath, 
+                                        producer.Simple_producer (body)
+                                        ) (collect)
+                del pipeline
+        async_loop.dispatch ()
 	#
 	# Note:
 	#

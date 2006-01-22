@@ -99,12 +99,14 @@ class HTTP_server_channel (
 		except:
                         # or drop as invalid. the MIME collector is finalized
                         # and the connection will be closed.
+			reactor.http_request = self.mime_collector_lines[0]
+                        reactor.mime_collector_headers = {}
                         reactor.mime_producer_headers = {
                                 'Connection': 'close'
                                 }
-			reactor.http_request = self.mime_collector_lines[0]
                         reactor.http_response = 400
-                        self.mime_collector_finalize (reactor)
+                        self.http_reactor = reactor
+                        self.mime_collector_finalize ()
                         return False
                         #
                         # 400 - invalid

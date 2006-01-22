@@ -136,7 +136,7 @@ def http_collector_continue (reactor, collected):
         if reactor.mime_collector_headers.get (
                 'transfer-encoding', ''
                 ).lower () == 'chunked':
-                # HTTP/1.1 only
+                # HTTP/1.1 mostly
                 if not collected.collector_is_simple:
                         collected = collector.Simple_collector (collected)
                 reactor.mime_collector_body = Chunk_collector (
