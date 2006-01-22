@@ -15,17 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"""DESCRIPTION
-
-One base class to derive TCP client implementation and a few functions 
-that add practical limits to guard a peer against zombie sessions (inactive 
-longer than the limit) and effectively rationate I/O bandwith.
-
-SYNOPSYS
-
-...
-
-"""
+""
 
 import sys, socket, time, collections
 
