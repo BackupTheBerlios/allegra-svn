@@ -46,8 +46,15 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
         def http_continue (self, reactor):
                 reactor.presto_path = urllib.unquote (reactor.http_uri[2])
                 if self.presto_dom (reactor):
-                        self.presto_continue_http (reactor)
-                        return False
+                        defered = reactor.presto_dom.presto_defered 
+                        if defered == None:
+                                self.presto_continue_http (reactor)
+                                return False
+                        
+                        defered.append ((
+                                self.presto_continue, (reactor, )
+                                ))
+                        return True
                 
                 self.synchronized ((self.sync_stat, (
                         reactor, self.presto_path + reactor.presto_path
