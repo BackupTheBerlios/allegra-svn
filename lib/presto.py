@@ -213,9 +213,10 @@ class PRESTo_dom (
                                 self.xml_root = presto.PRESTo_async ()
                         if self.xml_root.xml_attributes == None:
                                 self.xml_root.xml_attributes = {}
-                for call, args in self.presto_defered:
-                        call (*args)
+                defered = self.presto_defered
                 self.presto_defered = None
+                for call, args in defered:
+                        call (*args)
                 #
                 # defered continuations are queued nicely and called
                 # in sequence, asynchronously. this means that concurrent
