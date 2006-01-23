@@ -231,17 +231,21 @@ class PRESTo_dom (
         
         def presto_rollback (self, defered):
                 if self.presto_defered:
-                        if type (self.presto_defered) == list:
+                        try:
                                 self.presto_defered.append (defered)
-                                return True
+                        except:
+                                return False
+                                #
+                                # you can't roll it back while it's
+                                # committing, anyway it would be useless
+                                # to do so ...
                         
-                        return False
-                
-                self.presto_defered = [defered]
-                self.xml_root = None
-                self.synchronized ((
-                        self.sync_open, (self.presto_name, 'r')
-                        ))
+                else:
+                        self.presto_defered = [defered]
+                        self.xml_root = None
+                        self.synchronized ((
+                                self.sync_open, (self.presto_name, 'r')
+                                ))
                 return True
         
         def presto_commit (self, defered):
