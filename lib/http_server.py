@@ -442,7 +442,7 @@ class HTTP_local (tcp_server.TCP_server):
                 return 'http-local-server id="%x"' % id (self)
 
         TCP_SERVER_CHANNEL = HTTP_server_channel
-        tcp_server_clients_limit = 64
+        tcp_server_clients_limit = 256
         
         tcp_server_accept = http_accept
         tcp_server_close = http_close
