@@ -233,6 +233,27 @@ def xml_valid (encoded, prefixes=None):
         return ()
                 
 
+class XML_static (object):
+        
+        xml_name = xml_parent = xml_attributes = \
+                xml_first = xml_children = xml_follow = None
+
+        def xml_valid (self, dom):
+                if self.xml_parent == None:
+                        return
+                
+                prefixes = dom.xml_prefixes
+                parent = self.xml_parent ()
+                if type (parent) == XML_static:
+                        parent.xml_children[-1] = ''.join (
+                                xml_prefixed (root, prefixes, '')
+                                )
+                else:
+                        parent.xml_children[-1] = ''.join (xml_prefixed (
+                                root, prefixes, xml_ns (prefixes)
+                                ))
+
+
 if __name__ == '__main__':
         import os, sys, time
         sys.stderr.write (

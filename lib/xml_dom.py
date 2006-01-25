@@ -21,7 +21,7 @@ import weakref
 
 from xml.parsers import expat
         
-        
+
 class XML_element (object):
         
         "The simplest Python implementation of the XML interfaces"
@@ -297,18 +297,38 @@ def xml_orphan (e):
                 xml_remove (parent, e)
         
 
-def xml_benchmark (clock, string, xml_types, xml_type, unicoding):
-        t = clock ()
-        dom = XML_dom ()
-        dom.xml_type = xml_type
-        dom.xml_types = xml_types
-        dom.xml_unicoding = unicoding
-        dom.xml_parser_reset ()
-        root = dom.xml_parse_string (string)
-        return (root, dom, clock () - t)
+class XML_delete (object):
+        
+        # drop the element from the XML tree 
+
+        xml_name = xml_parent = xml_attributes = \
+                xml_first = xml_children = xml_follow = None
+                
+        def xml_valid (self, dom): xml_delete (self)
+
+
+class XML_orphan (object):
+        
+        # remove the element from the tree and move its orphans to its
+        # parent children, effectively making the element shallow.
+
+        xml_name = xml_parent = xml_attributes = \
+                xml_first = xml_children = xml_follow = None
+                
+        def xml_valid (self, dom): xml_orphan (self)
 
 
 if __name__ == '__main__':
+        def xml_benchmark (clock, string, xml_types, xml_type, unicoding):
+                t = clock ()
+                dom = XML_dom ()
+                dom.xml_type = xml_type
+                dom.xml_types = xml_types
+                dom.xml_unicoding = unicoding
+                dom.xml_parser_reset ()
+                root = dom.xml_parse_string (string)
+                return (root, dom, clock () - t)
+        
         import sys, os, time
         sys.stderr.write (
                 'Allegra XML/DOM'
