@@ -105,6 +105,18 @@ def netlines (encoded, format='%s\n', indent='  '):
 	return format % encoded
 
 
+def netoutline (encoded, indent=''):
+        "Recursively format nested netstrings as an outline with length"
+        n = tuple (decode (encoded))
+        if len (n) > 0:
+                return '%s%d:\n%s%s,\n' % (
+                        indent, len (encoded), ''.join ([netoutline (
+                                e, indent + '  '
+                                ) for e in n]), indent)
+        
+        return '%s%d:%s,\n' % (indent, len (encoded), encoded)
+
+
 def netpipe (more, BUFFER_MAX=0):
 	"""A practical netstrings pipe generator
 	
