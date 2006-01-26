@@ -318,31 +318,20 @@ if __name__ == '__main__':
                 encoding = sys.argv[1]
         else:
                 encoding = 'ASCII'
+        def more ():
+                return sys.stdin.read (4096)
         t_parse = allegra_time ()
-        dom = xml_dom.XML_dom ()
-        dom.xml_parser_reset ()
-        root = dom.xml_parse_file (sys.stdin)
+        dom = xml_dom.parse_more (more)
         t_parsed = allegra_time () - t_parse
-        if root == None:
-                sys.sdterr.write (dom.xml_error + '\n')
-                t_serialized = 0
-        else:
+        sys.stderr.write ('loaded in %f sec\n\n' % t_parsed)
+        if dom.xml_root != None:
                 t_serialize = allegra_time () 
-                data = '<?xml version="1.0" encoding="%s"?>' % encoding
-                if dom.xml_pi:
-                        data += xml_pi (dom.xml_pi, encoding)
-                sys.stdout.write (data)
-                for data in xml_prefixed (
-                        root, dom.xml_prefixes, 
-                        xml_ns (dom.xml_prefixes, encoding), encoding
-                        ):
-                        sys.stdout.write (data)
+                data = xml_document (dom.xml_root, dom, encoding)
                 t_serialized = allegra_time () - t_serialize
-        sys.stderr.write (
-                'instanciated in %f sec, '
-                'serialized in %f sec'
-                '\n' % (t_parsed, t_serialized)
-                )
+                sys.stdout.write (data)
+                sys.stderr.write ('\n\nserialized in %f sec\n' % t_serialized)
+        if dom.xml_error:
+                sys.stderr.write ('%s\n' % dom.xml_error)
                 
                 
 # Note about this implementation

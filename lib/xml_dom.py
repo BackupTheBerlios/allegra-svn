@@ -138,8 +138,6 @@ def parse_more (more, DOM=XML_dom, unicoding=1):
                 dom = DOM ({u'http://www.w3.org/XML/1998/namespace': u'xml'})
         else:
                 dom = DOM ({'http://www.w3.org/XML/1998/namespace': 'xml'})
-        dom.xml_type = type
-        dom.xml_types = types
         dom.xml_unicoding = unicoding
         dom.xml_parser_reset ()
         try:
