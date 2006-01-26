@@ -158,7 +158,7 @@ class HTTP_client_pipeline (
 					).split (' ', 1)
 		except:
                         assert None == self.log (
-                                '400 Invalid response line', 'debug'
+                                'invalid response line', 'debug'
                                 )
 			self.http_collector_error ()
 			return True
@@ -301,7 +301,7 @@ def POST (pipeline, url, body, headers=None):
 
 
 if __name__ == '__main__':
-        import sys
+        import sys, time
         from allegra import async_loop
         loginfo.log (
                 'Allegra HTTP/1.1 Client'
@@ -339,8 +339,10 @@ if __name__ == '__main__':
                 collect = collector.Null_collector ()
         else:
                 collect = collector.Loginfo_collector ()
+        t_instanciated = time.clock ()
+        dns = dns_client.DNS_client (dns_client.dns_servers ())
         for i in range (C):
-                pipeline = HTTP_client (timeout=6, precision=1) (
+                pipeline = HTTP_client (6, 1, dns) (
                         addr[0], int(addr[1]), version
                         )
                 for j in range (R):
@@ -352,7 +354,20 @@ if __name__ == '__main__':
                                         producer.Simple_producer (body)
                                         ) (collect)
                 del pipeline
-        async_loop.dispatch ()
+        t_instanciated = time.clock () - t_instanciated
+        t_completed = time.clock ()
+        async_loop.loop ()
+        t_completed = time.clock () - t_completed
+        loginfo.log (
+                'Completed in %f seconds, '
+                'at the average rate of %f seconds per requests, '
+                'or %f requests per seconds. '
+                'Note that it took %f seconds to instanciate '
+                'the %d client channels and %d requests.' % (
+                        t_completed, t_completed/(C*R), (C*R)/t_completed, 
+                        t_instanciated, C, R
+                        ), 'info'
+                )
 	#
 	# Note:
 	#
