@@ -107,3 +107,30 @@ __author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
 # than one other module and/or application.
 #        
 #        
+# Trading performance for scalability first
+#
+# As you will notice quickly, Allegra is still unoptimized. Several high
+# profile functions are implemented in pure Python and contain CPU intensive
+# loops. Yet, as a whole, Allegra provide a stable implementation which
+# allready scales up to high-performances and high-reliability.
+#
+# The CPython optimization strategy has proved itself so profitable that its
+# VM and standard C library bindings are available for a Nokia cell phone
+# and IBM mini and mainframe systems. No other VM for a modern computer
+# language has a wider or better cross-plateform API. And its mostly free
+# with a gentle learning curve, a fast growing developper community and
+# commercial support of better quality and lesser expenses than Microsoft's
+# or Sun's Virtual Machines.
+# 
+# Allegra is designed along the lines of CPython's Zen, it is made to 
+# integrate safely the C libraries of high profile functions for its
+# applications.
+#
+# Leaving the complex and dynamic part of an application logic in Python
+# delivers all the safety and reliability of CPython's industrial strength 
+# interpreter. With the ability to implement quickly a better algorithm for 
+# a complex process an application can be programmed to scale well first, 
+# then be optimized latter, when its interfaces are stable. The end result
+# is probably a lot better artefact than what could be programmed in the
+# same amount of time in C or Java. It's first stable version may be two
+# or three times slower than the following, it will scale up immediately.
