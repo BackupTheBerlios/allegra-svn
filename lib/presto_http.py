@@ -321,7 +321,8 @@ def post_multipart (component, reactor):
                 
                 
 if __name__ == '__main__':
-        import sys
+        import sys, time
+        t = time.clock ()
         if '-d' in sys.argv:
                 sys.argv.remove ('-d')
                 loginfo.Loginfo_stdio.log = \
@@ -344,6 +345,9 @@ if __name__ == '__main__':
                 ])
         server.async_catch = async_loop.async_catch
         async_loop.async_catch = server.tcp_server_catch
+        assert None == loginfo.log (
+                'startup seconds="%f"' % (time.clock () - t), 'PRESTo/HTTP'
+                )
         async_loop.loop ()
         
         
