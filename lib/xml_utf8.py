@@ -44,6 +44,9 @@ def xml_cdata (data):
 def xml_ns (prefixes):
         s = ''
         for uri, prefix in prefixes.items ():
+                if uri == u'http://www.w3.org/XML/1998/namespace':
+                        continue
+                
                 if prefix:
                         s += ' xmlns:%s="%s"' % ( prefix, xml_attr (uri))
                 else:
@@ -221,14 +224,11 @@ def xml_document (
 
 
 def xml_valid (encoded, prefixes=None):
-        dom = xml_dom.XML_dom ()
-        dom.xml_unicoding = 0
-        dom.xml_parser_reset ()
-        root = dom.xml_parse_string (encoded)
-        if root:
+        dom = xml_dom.parse_string (encoded, unicoding=0)
+        if dom.xml_root:
                 if prefixes:
                         dom.xml_prefixes.update (prefixes)
-                return xml_prefixed (root, dom.xml_prefixes)
+                return xml_prefixed (dom.xml_root, dom.xml_prefixes)
         
         return ()
                 

@@ -50,9 +50,7 @@ class XML_dom (object):
         xml_expat = xml_parsed = xml_error = None
 
         def __init__ (self, xml_prefixes=None, xml_pi=None):
-                self.xml_prefixes = xml_prefixes or {
-                        'http://www.w3.org/XML/1998/namespace': 'xml'
-                        }
+                self.xml_prefixes = xml_prefixes or {}
                 self.xml_pi = xml_pi or {}
 
         def xml_parser_reset (self):
@@ -120,20 +118,26 @@ class XML_dom (object):
 # DOM factories
 
 def parse_string (data, DOM=XML_dom, unicoding=1):
-        dom = DOM ()
+        if unicoding:
+                dom = DOM ({u'http://www.w3.org/XML/1998/namespace': u'xml'})
+        else:
+                dom = DOM ({'http://www.w3.org/XML/1998/namespace': 'xml'})
         dom.xml_unicoding = unicoding
         dom.xml_parser_reset ()
         try:
                 dom.xml_expat.Parse (data, 1)
         except expat.ExpatError, error:
                 dom.xml_error = error
-                while self.xml_parsed != None:
-                        self.xml_expat_END (self.xml_parsed.xml_name)
+                while dom.xml_parsed != None:
+                        dom.xml_expat_END (dom.xml_parsed.xml_name)
         return dom
 
 
 def parse_more (more, DOM=XML_dom, unicoding=1):
-        dom = DOM ()
+        if unicoding:
+                dom = DOM ({u'http://www.w3.org/XML/1998/namespace': u'xml'})
+        else:
+                dom = DOM ({'http://www.w3.org/XML/1998/namespace': 'xml'})
         dom.xml_type = type
         dom.xml_types = types
         dom.xml_unicoding = unicoding
@@ -145,8 +149,8 @@ def parse_more (more, DOM=XML_dom, unicoding=1):
                 dom.xml_expat.Parse ('', 1)
         except expat.ExpatError, error:
                 dom.xml_error = error
-                while self.xml_parsed != None:
-                        self.xml_expat_END (self.xml_parsed.xml_name)
+                while dom.xml_parsed != None:
+                        dom.xml_expat_END (dom.xml_parsed.xml_name)
         return dom
 
 

@@ -46,6 +46,9 @@ def xml_cdata (data, encoding='ASCII'):
 def xml_ns (prefixes, encoding='ASCII'):
         s = ''
         for uri, prefix in prefixes.items ():
+                if uri == u'http://www.w3.org/XML/1998/namespace':
+                        continue
+                
                 if prefix:
                         s += ' xmlns:%s="%s"' % (
                                 prefix.encode (encoding, 'xmlcharrefreplace'),
@@ -240,17 +243,12 @@ def xml_pi (processing_instructions, encoding='ASCII', delimiter=''):
                 ])
 
 
-def xml_string (root, dom, encoding='ASCII', delimiter=''):
-        head = '<?xml version="1.0" encoding="%s"?>\n' % encoding
-        if dom.xml_pi:
-                head += xml_pi (dom.xml_pi, encoding)
-        if not dom.xml_prefixes:
-                return head + delimiter.join (xml_unprefixed (root, encoding))
+def xml_string (root, prefixes, encoding='ASCII', delimiter=''):
+        if not prefixes:
+                return delimiter.join (xml_unprefixed (root, encoding))
                 
-        return head + delimiter.join (xml_prefixed (
-                root, dom.xml_prefixes, xml_ns (
-                        dom.xml_prefixes, encoding
-                        ), encoding
+        return delimiter.join (xml_prefixed (
+                root, prefixes, xml_ns (prefixes, encoding), encoding
                 ))
 
 
@@ -262,19 +260,19 @@ def xml_document (
                 head = delimiter.join ((
                         head % encoding, xml_pi (dom.xml_pi, encoding)
                         ))
+        else:
+                head = head % encoding
         return delimiter.join ((
                 head, xml_string (root, dom.xml_prefixes, encoding, delimiter)
                 ))
 
 
 def xml_valid (encoded, prefixes=None, encoding='ASCII'):
-        dom = xml_dom.XML_dom ()
-        dom.xml_parser_reset ()
-        root = dom.xml_parse_string (encoded)
-        if root:
+        dom = xml_dom.parse_string (encoded)
+        if dom.xml_root:
                 if prefixes:
                         dom.xml_prefixes.update (prefixes)
-                return xml_prefixed (root, dom.xml_prefixes, xml_ns (
+                return xml_prefixed (dom.xml_root, dom.xml_prefixes, xml_ns (
                         dom.xml_prefixes, encoding
                         ), encoding)
         
