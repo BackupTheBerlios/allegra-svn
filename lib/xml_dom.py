@@ -119,12 +119,12 @@ class XML_dom (object):
 
 # DOM factories
 
-def parse_string (data, type=XML_element, types={}, unicoding=1):
-        dom = XML_dom (type, types)
+def parse_string (data, DOM=XML_dom, unicoding=1):
+        dom = DOM ()
         dom.xml_unicoding = unicoding
         dom.xml_parser_reset ()
         try:
-                dom.xml_expat.Parse (input, 1)
+                dom.xml_expat.Parse (data, 1)
         except expat.ExpatError, error:
                 dom.xml_error = error
                 while self.xml_parsed != None:
@@ -132,8 +132,10 @@ def parse_string (data, type=XML_element, types={}, unicoding=1):
         return dom
 
 
-def parse_more (more, type=XML_element, types={}, unicoding=1):
-        dom = XML_dom (type, types)
+def parse_more (more, DOM=XML_dom, unicoding=1):
+        dom = DOM ()
+        dom.xml_type = type
+        dom.xml_types = types
         dom.xml_unicoding = unicoding
         dom.xml_parser_reset ()
         try:
@@ -306,15 +308,10 @@ class XML_sparse (object):
 
 
 if __name__ == '__main__':
-        def xml_benchmark (clock, string, xml_types, xml_type, unicoding):
+        def benchmark (clock, string, DOM, unicoding):
                 t = clock ()
-                dom = XML_dom ()
-                dom.xml_type = xml_type
-                dom.xml_types = xml_types
-                dom.xml_unicoding = unicoding
-                dom.xml_parser_reset ()
-                root = dom.xml_parse_string (string)
-                return (root, dom, clock () - t)
+                dom = parse_string (string, DOM, unicoding)
+                return (dom, clock () - t)
         
         import sys, os, time
         sys.stderr.write (
@@ -331,11 +328,9 @@ if __name__ == '__main__':
                 if sys.argv[1] == 'UTF-8':
                         unicoding = 0
         s = sys.stdin.read ()
-        root, dom, seconds =  xml_benchmark (
-                clock, s, {}, XML_sparse, unicoding
-                )
-        if root == None:
-                sys.sdterr.write (dom.xml_error + '\n')
+        dom, seconds =  benchmark (clock, s, XML_dom, unicoding)
+        if dom.xml_error != None:
+                sys.stderr.write (dom.xml_error + '\n')
         sys.stderr.write ('parsed in %f sec\n' % seconds)
         
         
