@@ -91,7 +91,9 @@ class PRESTo_sync (PRESTo_async):
 
         xml_name = u'http://presto/ sync'
         
-        __init__ = synchronizer.synchronized
+        def __init__ (self, name, attributes):
+                synchronizer.synchronized (self)
+                xml_dom.XML_dom.__init__ (self, name, attributes)
         
         # Note also that there are two logging interfaces for a synchronized
         # PRESTo instance, asynchronous and synchronous:
@@ -210,7 +212,7 @@ class PRESTo_dom (
                                         self.xml_parse_error ()
                         self.xml_expat = self.xml_parsed = None
                         if self.xml_root == None:
-                                self.xml_root = presto.PRESTo_async ()
+                                self.xml_root = PRESTo_async ()
                         if self.xml_root.xml_attributes == None:
                                 self.xml_root.xml_attributes = {}
                 defered = self.presto_defered
@@ -470,9 +472,9 @@ def presto_benchmark (
         # a call to presto_rest.
         #
         prefixes = dom.xml_prefixes
-        e = xml_dom.XML_element ()
-        e.xml_name = u'http://presto/ PRESTo'
-        e.xml_attributes = attributes
+        e = xml_dom.XML_element (
+                u'http://presto/ PRESTo', attributes
+                )
         e.xml_children = (result, dom.xml_root, benchmark)
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if dom.xml_pi:

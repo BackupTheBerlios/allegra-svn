@@ -24,45 +24,21 @@ from xml.parsers import expat
 
 class XML_element (object):
         
-        "The simplest Python implementation of the XML interfaces"
+        "A single ELEMENT type"
 
-        xml_name = u'namespace tag'
-        
-        xml_valid = xml_parent = xml_attributes = \
+        xml_valid = xml_parent = xml_name = xml_attributes = \
                 xml_first = xml_children = xml_follow = None
         
+        def __init__ (self, name, attributes):
+                if name != self.xml_name:
+                        self.xml_name = name
+                if attributes:
+                        self.xml_attributes = attributes
+                
 
-class XML_sparse (object):
-
-        xml_name = xml_parent = xml_attributes = \
-                xml_first = xml_children = xml_follow = None
-        
-        def xml_valid (self, dom):
-                parent = dom.xml_parsed
-                if parent == None:
-                        return # do not fold a root element!
-                        
-                parent.xml_children.pop ()
-                if self.xml_first:
-                        if parent.xml_children:
-                                prev = parent.xml_children[-1]
-                                if prev.xml_follow:
-                                        prev.xml_follow += self.xml_first
-                                else:
-                                        prev.xml_follow = self.xml_first
-                        elif parent.xml_first:
-                                parent.xml_first += self.xml_first
-                        else:
-                                parent.xml_first = self.xml_first
-                if self.xml_children:
-                        parent.xml_children.extend (
-                                self.xml_children
-                                )
-                        parent = self.xml_parent
-                        for child in self.xml_children:
-                                child.xml_parent = parent
-        
 class XML_dom (object):
+        
+        "The DOM interface to the standard expat event-driven parser"
         
         # This class is a prototype for a C type that provides an optimized
         # interface for asynchronous object-oriented XML parser. Practically
@@ -74,61 +50,10 @@ class XML_dom (object):
         xml_expat = xml_parsed = xml_error = None
 
         def __init__ (self, xml_prefixes=None, xml_pi=None):
-                self.xml_prefixes = xml_prefixes or {}
+                self.xml_prefixes = xml_prefixes or {
+                        'http://www.w3.org/XML/1998/namespace': 'xml'
+                        }
                 self.xml_pi = xml_pi or {}
-
-        def xml_parse (self, input):
-                self.xml_parser_reset ()
-                t = type (input)
-                if t == str:
-                        return self.xml_parse_string (input)
-
-                return self.xml_parse_more (input)
-
-        def xml_parse_file (self, file, BLOCKSIZE=4096):
-                def more ():
-                        return file.read (BLOCKSIZE)
-                        
-                return self.xml_parse_more (more)
-
-        def xml_parse_more (self, more):
-                while True:
-                        data = more ()
-                        if data == '':
-                                break
-                                
-                        if not self.xml_parse_string (data, 0):
-                                return None
-                                
-                return self.xml_parse_string ('', 1)
-
-        def xml_parse_string (self, input, all=1):
-                try:
-                        self.xml_expat.Parse (input, all)
-                except expat.ExpatError, error:
-                        self.xml_error = error
-                        self.xml_parse_error ()
-                        all = 1
-                if all:
-                        # finished clean up and return the root, let the 
-                        # accessor decides what he wants to do with the
-                        # elements tree.
-                        #
-                        e = self.xml_root
-                        self.xml_root = None
-                        self.xml_expat = self.xml_parsed = None
-                        return e
-                        
-                return True
-                #
-                # returns the xml_root element, or None when an error occured
-                # or True to continue ...
-
-        def xml_parse_error (self):
-                while self.xml_parsed != None:
-                        self.xml_expat_END (self.xml_parsed.xml_name)
-                #
-                # validate the XML Document Object Model as much as possible
 
         def xml_parser_reset (self):
                 self.xml_root = self.xml_error = self.xml_parsed = None
@@ -149,13 +74,9 @@ class XML_dom (object):
                         self.xml_prefixes[uri] = prefix
 
         def xml_expat_START (self, name, attributes):
-                e = self.xml_types.get (name, self.xml_type) ()
-                if name != e.xml_name:
-                        e.xml_name = name
-                if attributes:
-                        if e.xml_attributes:
-                                attributes.update (e.xml_attributes)
-                        e.xml_attributes = attributes
+                e = self.xml_types.get (name, self.xml_type) (
+                        name, attributes
+                        )
                 e.xml_parent = parent = self.xml_parsed
                 if parent == None:
                         self.xml_root = e
@@ -195,6 +116,36 @@ class XML_dom (object):
         # nesting for a document parsed, or reproduce those nested declaration
         # when serializing the element tree.
 
+
+# DOM factories
+
+def parse_string (data, type=XML_element, types={}, unicoding=1):
+        dom = XML_dom (type, types)
+        dom.xml_unicoding = unicoding
+        dom.xml_parser_reset ()
+        try:
+                dom.xml_expat.Parse (input, 1)
+        except expat.ExpatError, error:
+                dom.xml_error = error
+                while self.xml_parsed != None:
+                        self.xml_expat_END (self.xml_parsed.xml_name)
+        return dom
+
+
+def parse_more (more, type=XML_element, types={}, unicoding=1):
+        dom = XML_dom (type, types)
+        dom.xml_unicoding = unicoding
+        dom.xml_parser_reset ()
+        try:
+                data = more ()
+                while data:
+                        dom.xml_expat.Parse (data, 0)
+                dom.xml_expat.Parse ('', 1)
+        except expat.ExpatError, error:
+                dom.xml_error = error
+                while self.xml_parsed != None:
+                        self.xml_expat_END (self.xml_parsed.xml_name)
+        return dom
 
 
 # use directly xml_* properties to set element attributes and text
@@ -304,7 +255,9 @@ class XML_delete (object):
         xml_name = xml_parent = xml_attributes = \
                 xml_first = xml_children = xml_follow = None
                 
-        def xml_valid (self, dom): xml_delete (self)
+        def xml_valid (self, dom): 
+                if self.xml_parent != None:
+                        xml_delete (self)
 
 
 class XML_orphan (object):
@@ -315,7 +268,41 @@ class XML_orphan (object):
         xml_name = xml_parent = xml_attributes = \
                 xml_first = xml_children = xml_follow = None
                 
-        def xml_valid (self, dom): xml_orphan (self)
+        def xml_valid (self, dom): 
+                if self.xml_parent != None:
+                        xml_orphan (self)
+
+
+class XML_sparse (object):
+
+        xml_name = xml_parent = xml_attributes = \
+                xml_first = xml_children = xml_follow = None
+        
+        def xml_valid (self, dom):
+                parent = dom.xml_parsed
+                if parent == None:
+                        return # do not fold a root element!
+                        
+                parent.xml_children.pop ()
+                if self.xml_first:
+                        if parent.xml_children:
+                                prev = parent.xml_children[-1]
+                                if prev.xml_follow:
+                                        prev.xml_follow += self.xml_first
+                                else:
+                                        prev.xml_follow = self.xml_first
+                        elif parent.xml_first:
+                                parent.xml_first += self.xml_first
+                        else:
+                                parent.xml_first = self.xml_first
+                if self.xml_children:
+                        parent.xml_children.extend (
+                                self.xml_children
+                                )
+                        parent = self.xml_parent
+                        for child in self.xml_children:
+                                child.xml_parent = parent
+        
 
 
 if __name__ == '__main__':
