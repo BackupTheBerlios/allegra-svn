@@ -36,9 +36,27 @@ class XML_element (object):
                 xml_first = xml_children = xml_follow = None
         
 
+class XML_delete (object):
+        
+        "An element that drops itself from the XML tree"
+
+        def __init__ (self, name, attributes):
+                pass
+
+        xml_name = xml_parent = xml_attributes = \
+                xml_first = xml_children = xml_follow = None
+                
+        def xml_valid (self, dom): 
+                parent = dom.xml_parsed
+                if parent == None:
+                        return # do not drop a root element!
+                        
+                parent.xml_children.pop ()
+
+
 class XML_sparse (object):
         
-        "A sparse markup element that drops itself from the tree"
+        "A sparse element that folds itself from the tree, preserves CDATA"
 
         def __init__ (self, name, attributes):
                 pass
@@ -75,10 +93,6 @@ class XML_sparse (object):
 class XML_dom (object):
         
         "The DOM interface to the standard expat event-driven parser"
-        
-        # This class is a prototype for a C type that provides an optimized
-        # interface for asynchronous object-oriented XML parser. Practically
-        # it implements a sparse tree builder and a single event parser.
 
         xml_type = XML_element
         xml_types = {}
@@ -142,13 +156,15 @@ class XML_dom (object):
                 try:
                         self.xml_parsed.xml_children[-1].xml_follow = cdata
                         #
-                        # there are children, this must be following cdata
+                        # there are children, this must be following cdata.
                 except:
                         self.xml_parsed.xml_first += cdata
                         #
                         # either this is the first cdata, or some sparse 
-                        # elements must have been removed from the tree
+                        # or deleted elements must have been removed from
+                        # the tree.
 
+        
         # The XML_dom instance hosts a "sparse" expat parser and holds the 
         # document's prefixes and processing instructions separately from 
         # the element tree itself.
@@ -160,8 +176,6 @@ class XML_dom (object):
         # nesting for a document parsed, or reproduce those nested declaration
         # when serializing the element tree.
 
-
-# DOM factories
 
 def parse_string (data, DOM=XML_dom, unicoding=1):
         if unicoding:
@@ -198,6 +212,8 @@ def parse_more (more, DOM=XML_dom, unicoding=1):
         return dom
 
 
+# A few DOM manipulations
+#
 # use directly xml_* properties to set element attributes and text
 # nodes, and don't bother to do in Python what can be done best in
 # XPATH or XSLT. here are two simple and usefull walkers, if you
@@ -297,37 +313,6 @@ def xml_orphan (e):
         else:
                 xml_remove (parent, e)
         
-
-class XML_delete (object):
-        
-        # drop the element from the XML tree 
-
-        def __init__ (self, name, attributes):
-                pass
-
-        xml_name = xml_parent = xml_attributes = \
-                xml_first = xml_children = xml_follow = None
-                
-        def xml_valid (self, dom): 
-                if self.xml_parent != None:
-                        xml_delete (self)
-
-
-class XML_orphan (object):
-        
-        # remove the element from the tree and move its orphans to its
-        # parent children, effectively making the element shallow.
-
-        def __init__ (self, name, attributes):
-                pass
-
-        xml_name = xml_parent = xml_attributes = \
-                xml_first = xml_children = xml_follow = None
-                
-        def xml_valid (self, dom): 
-                if self.xml_parent != None:
-                        xml_orphan (self)
-
 
 if __name__ == '__main__':
         def benchmark (clock, string, DOM, unicoding):
