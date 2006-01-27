@@ -212,7 +212,9 @@ class PRESTo_dom (
                                         self.xml_parse_error ()
                         self.xml_expat = self.xml_parsed = None
                         if self.xml_root == None:
-                                self.xml_root = PRESTo_async ()
+                                self.xml_root = PRESTo_async (
+                                        u'http://presto/ async', None
+                                        )
                         if self.xml_root.xml_attributes == None:
                                 self.xml_root.xml_attributes = {}
                 defered = self.presto_defered
@@ -424,9 +426,7 @@ def presto_producer (
         # a call to presto_rest.
         #
         prefixes = dom.xml_prefixes
-        e = xml_dom.XML_element ()
-        e.xml_name = u'http://presto/ PRESTo'
-        e.xml_attributes = attributes
+        e = xml_dom.XML_element (u'http://presto/ PRESTo', attributes)
         e.xml_children = (result, dom.xml_root)
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if dom.xml_pi:
