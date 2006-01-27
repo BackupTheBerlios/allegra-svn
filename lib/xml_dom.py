@@ -164,6 +164,10 @@ class XML_dom (object):
                         # or deleted elements must have been removed from
                         # the tree.
 
+        def xml_expat_ERROR (self, error):
+                dom.xml_error = error
+                while dom.xml_parsed != None:
+                        dom.xml_expat_END (dom.xml_parsed.xml_name)
         
         # The XML_dom instance hosts a "sparse" expat parser and holds the 
         # document's prefixes and processing instructions separately from 
@@ -187,9 +191,7 @@ def parse_string (data, DOM=XML_dom, unicoding=1):
         try:
                 dom.xml_expat.Parse (data, 1)
         except expat.ExpatError, error:
-                dom.xml_error = error
-                while dom.xml_parsed != None:
-                        dom.xml_expat_END (dom.xml_parsed.xml_name)
+                dom.xml_expat_ERROR (error)
         return dom
 
 
@@ -206,9 +208,7 @@ def parse_more (more, DOM=XML_dom, unicoding=1):
                         dom.xml_expat.Parse (data, 0)
                 dom.xml_expat.Parse ('', 1)
         except expat.ExpatError, error:
-                dom.xml_error = error
-                while dom.xml_parsed != None:
-                        dom.xml_expat_END (dom.xml_parsed.xml_name)
+                dom.xml_expat_ERROR (error)
         return dom
 
 
