@@ -33,7 +33,7 @@ class HTTP_client_reactor (
         def __init__ (
                 self, pipeline, url, headers, command, body
                 ):
-                self.http_client_pipeline = pipeline
+                self.http_pipeline = pipeline
                 self.http_urlpath = url
                 self.http_command = command
                 self.mime_producer_headers = headers
@@ -41,8 +41,8 @@ class HTTP_client_reactor (
 
         def __call__ (self, collect):
                 self.mime_collector_body = collect
-                self.http_client_pipeline.pipeline (self)
-                del self.http_client_pipeline
+                self.http_pipeline (self)
+                self.http_pipeline = None
                 return self
                         
 
@@ -64,6 +64,8 @@ class HTTP_client_pipeline (
                 
         def __repr__ (self):
                 return 'http-client-pipeline id="%x"' % id (self)
+
+        __call__ = tcp_client.Pipeline.pipeline
 
 	# Asynchat
         
@@ -93,7 +95,6 @@ class HTTP_client_pipeline (
 			tcp_pipeline.Pipeline.pipeline_error (self)
 			
 	def pipeline_wake_up (self):
-		assert None == self.log ('wake-up-http-1.0', 'debug')
 		# HTTP/1.0, push one at a time, maybe keep-alive or close
 		# when done ...
 		#
@@ -113,7 +114,6 @@ class HTTP_client_pipeline (
                 # do not iniate send, wait for the write event instead
 
 	def pipeline_wake_up_11 (self):
-		assert None == self.log ('wake-up-http-1.1', 'debug')
 		# HTTP/1.1 pipeline, send all at once and maybe close when
 		# done if not keep-aliver.
 		#
@@ -140,7 +140,6 @@ class HTTP_client_pipeline (
 	# MIME collector
 
 	def mime_collector_continue (self):
-                assert None == self.log ('mime_collector_continue', 'debug')
                 while (
                         self.mime_collector_lines and not 
                         self.mime_collector_lines[0]
@@ -186,7 +185,6 @@ class HTTP_client_pipeline (
                 return False
 		
 	def mime_collector_finalize (self):
-                assert None == self.log ('mime_collector_continue', 'debug')
                 # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
                 self.mime_collector_headers = \
@@ -335,12 +333,12 @@ if __name__ == '__main__':
  	# URL and push an HTTP reactor with the given command and URL path,
  	# close when done ...
  	#
-        if C > 1:
+        if C*R > 1:
                 collect = collector.Null_collector ()
         else:
                 collect = collector.Loginfo_collector ()
-        t_instanciated = time.clock ()
         dns = dns_client.DNS_client (dns_client.dns_servers ())
+        t_instanciated = time.clock ()
         for i in range (C):
                 pipeline = HTTP_client (6, 1, dns) (
                         addr[0], int(addr[1]), version
@@ -358,6 +356,7 @@ if __name__ == '__main__':
         t_completed = time.clock ()
         async_loop.loop ()
         t_completed = time.clock () - t_completed
+        async_loop.dispatch ()
         loginfo.log (
                 'Completed in %f seconds, '
                 'at the average rate of %f seconds per requests, '
