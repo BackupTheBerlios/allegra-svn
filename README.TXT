@@ -23,17 +23,17 @@ RUN
 
 start a PNS metabase peer first:
 
-	python allegra_pns.py
+	python ./lib/pns_peer.py
 
-you are now ready to run Allegra's semantic web peer:
+then Allegra's semantic web peer:
 
-	python allegra_presto.py
+	python ./lib/presto_http.py ./app
 	
 accessible from your browser at:
 
 	http://127.0.0.1/
 	
-or if the port 80 is allready assigned to the one of your choice:
+or if the port 80 is allready assigned, to one of your choice:
 
-	python allegra_presto.py 8080
+	python ./lib/presto_http.py ./app 127.0.0.1:8888
 	
