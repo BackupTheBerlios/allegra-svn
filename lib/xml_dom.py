@@ -24,17 +24,53 @@ from xml.parsers import expat
 
 class XML_element (object):
         
-        "A single ELEMENT type"
+        "The simplest ELEMENT type possible"
 
-        xml_valid = xml_parent = xml_name = xml_attributes = \
-                xml_first = xml_children = xml_follow = None
-        
         def __init__ (self, name, attributes):
                 if name != self.xml_name:
                         self.xml_name = name
                 if attributes:
                         self.xml_attributes = attributes
                 
+        xml_valid = xml_parent = xml_name = xml_attributes = \
+                xml_first = xml_children = xml_follow = None
+        
+
+class XML_sparse (object):
+        
+        "A sparse markup element that drops itself from the tree"
+
+        def __init__ (self, name, attributes):
+                pass
+
+        xml_name = xml_parent = xml_attributes = \
+                xml_first = xml_children = xml_follow = None
+        
+        def xml_valid (self, dom):
+                parent = dom.xml_parsed
+                if parent == None:
+                        return # do not fold a root element!
+                        
+                parent.xml_children.pop ()
+                if self.xml_first:
+                        if parent.xml_children:
+                                prev = parent.xml_children[-1]
+                                if prev.xml_follow:
+                                        prev.xml_follow += self.xml_first
+                                else:
+                                        prev.xml_follow = self.xml_first
+                        elif parent.xml_first:
+                                parent.xml_first += self.xml_first
+                        else:
+                                parent.xml_first = self.xml_first
+                if self.xml_children:
+                        parent.xml_children.extend (
+                                self.xml_children
+                                )
+                        parent = self.xml_parent
+                        for child in self.xml_children:
+                                child.xml_parent = parent
+        
 
 class XML_dom (object):
         
@@ -54,6 +90,10 @@ class XML_dom (object):
                 self.xml_pi = xml_pi or {}
 
         def xml_parser_reset (self):
+                if self.xml_unicoding:
+                        self.xml_first = u''
+                else:
+                        self.xml_first = ''
                 self.xml_root = self.xml_error = self.xml_parsed = None
                 self.xml_expat = expat.ParserCreate (None, ' ')
                 self.xml_expat.returns_unicode = self.xml_unicoding
@@ -76,6 +116,7 @@ class XML_dom (object):
                         name, attributes
                         )
                 e.xml_parent = parent = self.xml_parsed
+                e.xml_first = self.xml_first
                 if parent == None:
                         self.xml_root = e
                 elif parent.xml_children:
@@ -100,8 +141,13 @@ class XML_dom (object):
         def xml_expat_CDATA (self, cdata):
                 try:
                         self.xml_parsed.xml_children[-1].xml_follow = cdata
+                        #
+                        # there are children, this must be following cdata
                 except:
-                        self.xml_parsed.xml_first = cdata
+                        self.xml_parsed.xml_first += cdata
+                        #
+                        # either this is the first cdata, or some sparse 
+                        # elements must have been removed from the tree
 
         # The XML_dom instance hosts a "sparse" expat parser and holds the 
         # document's prefixes and processing instructions separately from 
@@ -256,6 +302,9 @@ class XML_delete (object):
         
         # drop the element from the XML tree 
 
+        def __init__ (self, name, attributes):
+                pass
+
         xml_name = xml_parent = xml_attributes = \
                 xml_first = xml_children = xml_follow = None
                 
@@ -269,44 +318,15 @@ class XML_orphan (object):
         # remove the element from the tree and move its orphans to its
         # parent children, effectively making the element shallow.
 
+        def __init__ (self, name, attributes):
+                pass
+
         xml_name = xml_parent = xml_attributes = \
                 xml_first = xml_children = xml_follow = None
                 
         def xml_valid (self, dom): 
                 if self.xml_parent != None:
                         xml_orphan (self)
-
-
-class XML_sparse (object):
-
-        xml_name = xml_parent = xml_attributes = \
-                xml_first = xml_children = xml_follow = None
-        
-        def xml_valid (self, dom):
-                parent = dom.xml_parsed
-                if parent == None:
-                        return # do not fold a root element!
-                        
-                parent.xml_children.pop ()
-                if self.xml_first:
-                        if parent.xml_children:
-                                prev = parent.xml_children[-1]
-                                if prev.xml_follow:
-                                        prev.xml_follow += self.xml_first
-                                else:
-                                        prev.xml_follow = self.xml_first
-                        elif parent.xml_first:
-                                parent.xml_first += self.xml_first
-                        else:
-                                parent.xml_first = self.xml_first
-                if self.xml_children:
-                        parent.xml_children.extend (
-                                self.xml_children
-                                )
-                        parent = self.xml_parent
-                        for child in self.xml_children:
-                                child.xml_parent = parent
-        
 
 
 if __name__ == '__main__':
@@ -349,16 +369,14 @@ if __name__ == '__main__':
 # that enables a new kind of XML processor design; 
 #
 #
-# Two New Simple Interfaces
-#
-# Here is the synopsis of xml_dom's interfaces
+# SYNOPSIS
 #
 # >>> from allegra import xml_dom
-# >>> class XML_tag (xml_dom.XML_element): pass
-# >>> dom = xml_dom.XML_dom ({u'tag': XML_tag})
-# >>> root = dom.xml_parse (
+# >>> xml_dom.XML_dom.xml_types = {u'schmarkup': xml_dom.XML_sparse}
+# >>> dom = xml_dom.parse_string (
 # ...    '<tag name="value">first '
-# ...    '<schmarkup>...</schmarkup> follow</tag>'
+# ...    '<schmarkup>...</schmarkup> '
+# ...    'follow</tag>'
 # ...    )
 # >>> root.xml_name
 # u'tag'
@@ -371,95 +389,3 @@ if __name__ == '__main__':
 # >>> root.xml_children
 # []
 #
-#
-# A Better Optimization Strategy: 
-#
-# I'm too lazy to loose focus on the context, and I did not forget my
-# benchmarks of expat: when parsing, the Python interface will cost nothing
-# until event handlers are registered then called-back, and it gets much
-# worse when object are instanciated. cElementTree is *so* close to expat
-# in the effbot's benchmark, but only because it "does" nothing really
-# usefull besides moving XML from a string into a memory tree.
-#
-# If you *need* to program your XML processing in Python rather than in 
-# XSLT, then you will probably end up instanciating specialized objects 
-# for many tags, paying the full price on top of the time allready spent
-# to create the cElement instance (however lite).
-#
-# It may sound vain to make such big claim before having even started the
-# optimization process, but I have had some experience with Python, expat
-# and various high profile XML libraries. As far as Python is concerned,
-# qp_xml.py still was my favorite base for developping XML processors. 
-#
-# Looking deeper into celementtree C source, considering the need for an
-# iterparse interface overwhelmed its performance cost and yet its inability
-# to provide a better parser interface than expat, I'm quite satisfied to
-# have stayed quietly close to qp_xml.py original design and true to my
-# first intuition.
-#
-# object-oriented XML parsers are cool ... and they can be fast too.
-#
-# Here is the "hack to-do":
-#
-# 1. instanciate new objects from the C parser loop for element names
-#    indexed, using the mapped XML element class
-#
-# 2. or use a default type, by default an ad-hoc C type
-#
-# 3. when no default type is provided, simply drop non-matching markup
-#    and buffer the CDATA marked up.
-#
-# This is an interface optimized for the simple folling case:
-#
-#        root = XML_dom ({u'tag': XML_class}).xml_parse ('<?xml ...')
-#
-# "hide" anything other markup than <tag/>, only call 
-#
-#        XML_class.xml_valid (self, dom)
-#
-# for each valid element and drop the schmarkup you don't care about.
-# Yet another application is to specify a class with no __new__, __init__
-# or xml_valid method and with __slots__ only for the xml_* namespace:
-#
-#         root = XML_dom (
-#                {u'tag': XML_class}, XML_element
-#                ).xml_parse ('<?xml ...')
-#
-# for which the C parser can be optimized.
-#  
-# The result would be a fast "sparse" parser, a fast "sparse" tree-maker,
-# with the most practical interface available to develop extensible, object
-# oriented and yet buffering XML processor like the PNS/XML articulator.
-# 
-# Combined with a C implementation of xml_unicode and xml_utf8 (they are
-# quite stable now), an eventual xml_c modules will deliver performances
-# not worse than celementtree when applied. Globbing a megabyte long and
-# deep XML documents in memory will allways be faster with celementtree,
-# but a simpler Allegra XML parser will "iter" through that same megabyte
-# and process at a marginally greater speed if some of its markup can be
-# dropped.
-#
-#
-# Lesson
-#
-# Practically, the lesson of all the wandering around XML in Python (from
-# qp_xml.py, pyexpat, a full SIG, then bloatware, then back to qp_xml.py
-# via ElementTree and finally back to square zero with the so much needed 
-# iterparse interface), is that people don't benchmark the basics and forget
-# easely their context.
-#
-# Python is made to integrate, prototype and test C libraries. It is a very
-# powerfull application language because those three functions are the bread
-# and butter of software developpers. But CPython is not a fast language.
-#
-# Notably, it is terribly slow at two articulations: interpreter call-back
-# and object instanciation.
-#
-# As Python packages and modules, the 4XML suite and even celementtree are
-# out of context. The first one should be (and is, but by others) written
-# in C and then wrapped for Python. The second one, although close, does 
-# not provide a new point of articulation not yet made available by expat
-# itself: it is a fast but indiscriminate tree-maker that only has
-# an after-though iteration interface to develop parsers, it is a specialized
-# version of expat.
-
