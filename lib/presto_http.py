@@ -30,8 +30,14 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
         "An implementation of PRESTo interfaces for HTTP/1.1 servers"
 
         synchronizer = None
-        synchronizer_size = 2
-        
+        synchronizer_size = 2 
+        #
+        # First os.stat should be fast enough not to require more than two
+        # threads for all roots. Second, it won't hurt having a bottleneck
+        # on cache misses and the filesystem look they entail. Preventing
+        # potential DoS exploit of that bottleneck is a general precaution
+        # against spammers.
+                
         def __init__ (self, path, host=None, port=80):
                 if port == 80:
                         self.http_host = host

@@ -187,6 +187,9 @@ def presto_prompt_sync (self, reactor):
         reactor ('</presto:%s>' % method)
         reactor ('')
 
+presto_prompt_synchronized = presto.presto_synchronize (
+        presto_prompt_sync
+        )
 
 def presto_debug_async (Debug):
         Debug.presto_prompt_env = None
@@ -206,9 +209,7 @@ def presto_debug_sync (Debug):
         #
         presto_debug_async (Debug)
         # Debug.presto_prompt_sync = presto_prompt_sync
-        Debug.presto_methods[u'sync'] = presto.presto_synchronize (
-                presto_prompt_sync
-                )
+        Debug.presto_methods[u'sync'] = presto_prompt_synchronized
 
 
 # Note about this implementation

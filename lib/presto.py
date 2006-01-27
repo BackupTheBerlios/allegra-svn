@@ -91,9 +91,12 @@ class PRESTo_sync (PRESTo_async):
 
         xml_name = u'http://presto/ sync'
         
+        synchronizer = None
+        synchronizer_size = 16
+        
         def __init__ (self, name, attributes):
+                xml_dom.XML_element.__init__ (self, name, attributes)
                 synchronizer.synchronized (self)
-                xml_dom.XML_dom.__init__ (self, name, attributes)
         
         # Note also that there are two logging interfaces for a synchronized
         # PRESTo instance, asynchronous and synchronous:
@@ -124,10 +127,10 @@ class PRESTo_sync (PRESTo_async):
 
         
 def presto_synchronize (method):
-        def synchronized (self, reactor):
-                xml_reactor = PRESTo_reactor_sync (self.select_trigger)
+        def synchronized (element, reactor):
+                xml_reactor = PRESTo_reactor_sync (element.select_trigger)
                 xml_reactor.presto_vector = reactor.presto_vector.copy ()
-                self.synchronized ((method, (self, xml_reactor)))
+                element.synchronized ((method, (element, xml_reactor)))
                 return xml_reactor
                 
         return synchronized
@@ -196,8 +199,7 @@ class PRESTo_dom (
                 try:
                         self.xml_expat.Parse (data, 0)
                 except expat.ExpatError, error:
-                        self.xml_error = error
-                        self.xml_parse_error ()
+                        self.xml_expat_ERROR (error)
                         self.synchronized ((self.sync_close, ('re', )))
                 else:
                         self.synchronized ((self.sync_read, ()))
@@ -208,8 +210,7 @@ class PRESTo_dom (
                                 try:
                                         self.xml_expat.Parse ('', 1)
                                 except expat.ExpatError, error:
-                                        self.xml_error = error
-                                        self.xml_parse_error ()
+                                        self.xml_expat_ERROR (error)
                         self.xml_expat = self.xml_parsed = None
                         if self.xml_root == None:
                                 self.xml_root = PRESTo_async (
