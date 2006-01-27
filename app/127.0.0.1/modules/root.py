@@ -15,12 +15,11 @@
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 #  USA
 
-"The default PRESTo class available: a root interface"
+"The legacy PRESTo class available: a root interface"
 
 import glob, os, stat, mimetypes
 
-from xml_unicode import xml_attr
-from allegra.presto import PRESTo_async, presto_xml
+from allegra import xml_unicode, presto, presto_http
 
 
 def presto_index (files):
@@ -30,7 +29,7 @@ def presto_index (files):
                                 '<presto:directory name="%s"'
                                 ' mime-type="%s" bytes="%d"'
                                 ' />' % (
-                                        xml_attr (filename), 
+                                        xml_unicode.xml_attr (filename), 
                                         mimetypes.guess_type (filename)[0],
                                         filestat[6]
                                         )
@@ -41,47 +40,49 @@ def presto_index (files):
                                 '<presto:file name="%s"'
                                 ' mime-type="%s" bytes="%d"'
                                 ' />' % (
-                                        xml_attr (filename), 
+                                        xml_unicode.xml_attr (filename), 
                                         mimetypes.guess_type (filename)[0],
                                         filestat[6])
                                 )
                                 
 
-class PRESTo_root (PRESTo_async):
+class PRESTo_root (presto.PRESTo_async):
 
         xml_name = u'http://presto/ root'
         
         def xml_valid (self, dom):
-                self.xml_dom = dom # circle reference to "stick" on load
+                self.xml_dom = dom
+                
+        presto = presto_http.get_method
 
         presto_interfaces = set ((
                 u'PRESTo', u'presto-host', u'presto-path',
                 u'filename', u'static', u'dynamic'
                 ))
 
-        def presto (self, reactor):
+        def presto_root (self, reactor):
                 if not self.xml_children:
                         self.xml_children = [
-                                self.presto_modules (reactor),
-                                self.presto_dynamic (reactor),
-                                self.presto_static (reactor),
+                                self.presto_root_modules (reactor),
+                                self.presto_root_dynamic (reactor),
                                 ]
                 else:
                         if reactor.presto_vector[u'dynamic']:
                                 self.xml_children[1] = \
-                                        self.presto_dynamic (reactor)
-                        if reactor.presto_vector[u'static']:
-                                self.xml_children[2] = \
-                                        self.presto_static (reactor)
+                                        self.presto_root_dynamic (reactor)
 
         def presto_root_load_module (self, reactor):
                 filename = reactor.presto_vector.get (
                         u'filename'
                         ).encode ('ASCII', 'ignore').strip ()
                 if filename and filename != 'root.py':
-                        reactor.presto_root.presto_module_load (filename)
+                        self.xml_dom.presto_root.presto_module_load (
+                                filename
+                                )
                 if self.xml_children:
-                        self.xml_children[0] = self.presto_modules (reactor)
+                        self.xml_children[0] = self.presto_root_modules (
+                                reactor
+                                )
                 else:
                         self.presto (reactor)
                 
@@ -90,76 +91,60 @@ class PRESTo_root (PRESTo_async):
                         u'filename'
                         ).encode ('ASCII', 'ignore').strip ()
                 if filename and filename != 'root.py':
-                        reactor.presto_root.presto_module_unload (filename)
+                        self.xml_dom.presto_root.presto_module_unload (
+                                filename
+                                )
                 if self.xml_children:
-                        self.xml_children[0] = self.presto_modules (reactor)
+                        self.xml_children[0] = self.presto_root_modules (
+                                reactor
+                                )
                 else:
                         self.presto (reactor)
                 
-        def presto_modules (self, reactor):
+        def presto_root_modules (self, reactor):
+                root = self.xml_dom.presto_root
                 loaded = set ([
                         unicode (n, 'ASCII', 'ignore')
-                        for n in reactor.presto_root.presto_modules.keys ()
+                        for n in root.presto_modules.keys ()
                         ])
                 available = set ([
                         unicode (n, 'ASCII', 'ignore')
-                        for n in reactor.presto_root.presto_modules_dir ()
+                        for n in root.presto_modules_dir ()
                         ]).difference (loaded)
                 return ''.join ((
                         '<presto:modules xmlns:presto="http://presto/" >',
                         ''.join ([
                                 '<presto:module loaded="yes" filename="%s" '
-                                '/>' % xml_attr (n) for n in loaded
+                                '/>' % xml_unicode.xml_attr (n) for n in loaded
                                 ]),
                         ''.join ([
                                 '<presto:module loaded="no" filename="%s" '
-                                '/>' % xml_attr (n) for n in available
+                                '/>' % xml_unicode.xml_attr (n) for n in available
                                 ]),
                         '</presto:modules>'
                         ))
         
-        def presto_dynamic (self, reactor):
-                index_path = reactor.presto_vector[u'dynamic']
+        def presto_root_dynamic (self, reactor):
+                path = reactor.presto_vector[u'dynamic']
                 dynamic = [
                         (os.path.basename (n), os.stat (n))
-                        for n in glob.glob (u'./%s/%s*' % (
-                                reactor.presto_root.http_path,
-                                index_path
+                        for n in glob.glob (u'%s/%s*' % (
+                                self.xml_dom.presto_root.presto_path, path
                                 ))
                         ]
                 return ''.join ((
                         '<presto:dynamic xmlns:presto="http://presto/"'
-                        ' path="%s">' % xml_attr (index_path),
+                        ' path="%s">' % xml_unicode.xml_attr (path),
                         ''.join ([s for s in presto_index (dynamic)]),
                         '</presto:dynamic>'
                         ))
 
-        def presto_static (self, reactor):
-                index_host = os.path.basename (
-                        reactor.presto_root.http_path
-                        )
-                index_path = reactor.presto_vector[u'static']
-                static = [
-                        (os.path.basename (n), os.stat (n))
-                        for n in glob.glob (u'./http/%s/%s*' % (
-                                index_host, index_path
-                                ))
-                        ]
-                return ''.join ((
-                        '<presto:static xmlns:presto="http://presto/"'
-                        ' host="%s" path="%s">' % (
-                                index_host, xml_attr (index_path)
-                                ),
-                        ''.join ([s for s in presto_index (static)]),
-                        '</presto:static>'
-                        ))
-
         presto_methods = {
+                None: presto_root,
                 u'load': presto_root_load_module,
                 u'unload': presto_root_unload_module,
-                u'modules': presto_modules,
-                u'dynamic': presto_dynamic,
-                u'static': presto_static,
+                u'modules': presto_root_modules,
+                u'dynamic': presto_root_dynamic,
                 }
                 
                 

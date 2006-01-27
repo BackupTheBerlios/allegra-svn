@@ -19,7 +19,8 @@
   USA
 
 -->
-<?xml-stylesheet type="text/xsl" href="/styles/root.xsl"?>
+<?xml-stylesheet type="text/xsl" href="/styles/root.xsl"?> 
 <presto:root
 	xmlns:presto="http://presto/"
+	dynamic="/"
 	/>

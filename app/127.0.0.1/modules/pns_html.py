@@ -147,3 +147,35 @@ if __name__ == '__main__':
         t = time.time () - t
         sys.stderr.write ('Transformed in %f secs\n' % t) 
         sys.exit ()
+        
+"""
+
+TODO: cleanse an HTML document with tidy into some XHTML, pipe through
+      and XSL transformation that removes any scripts ...
+
+A well-articulated HTML document
+
+<html>
+  <header>
+    <title>Document Title</title>
+    <meta>...</meta>
+  </header>
+  <body>
+  <h1>Document Title</h1>
+  <div class="abstract">...</div>
+  <div class="part">
+    <h2>Part Title</h2>
+    <p>...</p>
+    <div class="chapter">
+      <h3>Chapter Title</h2>
+      <p>...</p>
+      <div class="section">
+        <h4>Section Title</h3>
+        <p>...</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+"""
