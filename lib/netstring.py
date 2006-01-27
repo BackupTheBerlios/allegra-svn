@@ -205,12 +205,15 @@ if __name__ == '__main__':
 	 		buffer_more = 4096
 		def more ():
 			return sys.stdin.read (buffer_more)
+                count = 0
 		if command == 'outline':
 			for n in netpipe (more, buffer_max):
 				sys.stdout.write (netlines (n))
+                                count += 1
 		else:
 			for n in netpipe (more, buffer_max):
-				pass
+				count += 1
+                assert None == sys.stderr.write ('count: %d' % count)
 	elif command == 'encode':
 		for line in sys.stdin.xreadlines ():
 			sys.stdout.write (
