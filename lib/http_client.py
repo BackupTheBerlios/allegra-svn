@@ -56,6 +56,11 @@ class HTTP_client_pipeline (
 	):
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
+        
+        # TODO: debug the HTTP/1.0 keep-alive fail-over
+        #
+        #       but the fact is that I don't have to right now ...
+        #       HTTP/1.1 pipelining works very-well, thank you ;-)
 
         def __init__ (self):
                 async_chat.Async_chat.__init__ (self)
