@@ -45,7 +45,7 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                 
         def http_continue (self, reactor):
                 reactor.presto_path = urllib.unquote (reactor.http_uri[2])
-                if self.presto_dom (reactor):
+                if self.presto_route (reactor):
                         defered = reactor.presto_dom.presto_defered 
                         if defered == None:
                                 self.presto_continue_http (reactor)
@@ -72,16 +72,16 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                 except:
                         result = None
                 self.select_trigger ((
-                        self.async_stat, (reactor, filename, result)
+                        self.async_stat, (reactor, result)
                         ))
         
-        def async_stat (self, reactor, filename, result):
+        def async_stat (self, reactor, result):
                 if result == None or not stat.S_ISREG (result[0]):
                         reactor.http_response = 404
                         reactor.http_channel.http_continue (reactor)
                         return
 
-                self.presto_cache (reactor, filename)
+                self.presto_dom (reactor)
                 
         def presto_continue (self, reactor):
                 self.presto_continue_http (reactor)
@@ -348,7 +348,7 @@ if __name__ == '__main__':
         assert None == loginfo.log (
                 'startup seconds="%f"' % (time.clock () - t), 'PRESTo/HTTP'
                 )
-        async_loop.loop ()
+        async_loop.dispatch ()
         
         
 # Note about this implementation

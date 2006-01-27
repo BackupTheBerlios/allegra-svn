@@ -272,27 +272,25 @@ PRESTo_dom.sync_close = synchronizer.sync_close
                 
 def none (): pass
                 
+PASS = (none, ())
+                
 class PRESTo_root (loginfo.Loginfo):
         
         presto_type = PRESTo_async
         
         def __init__ (self, path):
-                self.presto_path = path
+                self.presto_path = path + '/root'
+                self.presto_path_python = path + '/modules'
                 self.presto_types = {}
                 self.presto_cached = {}
                 self.presto_modules = {}
                 for filename in self.presto_modules_dir ():
                         self.presto_module_load (filename)
-                for filename in glob.glob (self.presto_path + '/*.xml'):
-                        dom = PRESTo_dom (
-                                filename, self.presto_types, self.presto_type
+                for filename in glob.glob (self.presto_path + '/*'):
+                        self.presto_cache (
+                                '/' + os.path.basename (filename), PASS
                                 )
-                        path = '/' + os.path.basename (filename)
-                        self.presto_cached[path] = weakref.ref (dom)
-                        dom.presto_path = path
-                        dom.presto_root = self
-                        dom.presto_rollback ((none, ()))
-                
+                        
         def __repr__ (self):
                 return 'presto-root path="%s"' % self.presto_path
 
@@ -310,7 +308,7 @@ class PRESTo_root (loginfo.Loginfo):
         
         def presto_modules_dir (self):
                 return [os.path.basename (n) for n in glob.glob (
-                        self.presto_path + '/*.py'
+                        self.presto_path_python + '/*.py'
                         )]
 
         def presto_module_load (self, filename):
@@ -319,7 +317,9 @@ class PRESTo_root (loginfo.Loginfo):
                 name, ext = os.path.splitext (filename)
                 try:
                         presto_module = imp.load_source (
-                                name , self.presto_path + '/' + filename
+                                name , '/'.join ((
+                                        self.presto_path_python, filename
+                                        ))
                                 )
                         if (
                                 self.presto_modules.has_key (filename) and 
@@ -366,27 +366,34 @@ class PRESTo_root (loginfo.Loginfo):
         #
         PRESTo_FOLDER_DEPTH = 2
         
-        def presto_dom (self, reactor):
+        def presto_route (self, reactor):
                 # Check for a reference in the root's cache for that path or 
                 # for a folder that contains it and if there is one, try to 
                 # dereference the DOM instance, and return True if the method 
                 # succeeded to attribute such instance to the reactor.
                 #
-                assert reactor.presto_path.startswith ('/')
-                dom = self.presto_cached.get (reactor.presto_path, none) ()
-                if dom != None:
-                        reactor.presto_dom = dom
-                        return True
+                try:
+                        dom = self.presto_cached[reactor.presto_path] ()
+                except KeyError:
+                        pass
+                else:
+                        if dom != None:
+                                reactor.presto_dom = dom
+                                return True
                 
                 if self.PRESTo_FOLDER_DEPTH > 0:
                         depth = 0
                         path = reactor.presto_path.rsplit ('/', 1)[0]
                         while True:
-                                dom = self.presto_cached.get (path, none) ()
-                                if dom:
-                                        reactor.presto_dom = dom
-                                        return True
-                                
+                                try:
+                                        dom = self.presto_cached[path] ()
+                                except KeyError:
+                                        pass
+                                else:
+                                        if dom != None:
+                                                reactor.presto_dom = dom
+                                                return True
+                                        
                                 depth += 1
                                 if path and depth < self.PRESTo_FOLDER_DEPTH:
                                         path = path.rsplit ('/', 1)[0]
@@ -395,23 +402,39 @@ class PRESTo_root (loginfo.Loginfo):
                                 
                 return False
         
-        def presto_cache (self, reactor, filename):
+        def presto_dom (self, reactor):
+                try:
+                        dom = self.presto_cached[reactor.presto_path] ()
+                except KeyError:
+                        dom = None
+                if dom == None:
+                        reactor.presto_dom = self.presto_cache (
+                                reactor.presto_path, (
+                                        self.presto_continue, (reactor, )
+                                        )
+                                )
+                else:
+                        reactor.presto_dom = dom
+                        self.presto_continue (reactor)
+                
+        def presto_cache (self, path, rolledback=PASS):
                 # instanciate a DOM, cache its weak reference, roll it back
                 # and defer the PRESTo continuation ...
                 #
-                reactor.presto_dom = dom = PRESTo_dom (
-                        filename, self.presto_types, self.presto_type
+                dom = PRESTo_dom (
+                        self.presto_path + path, 
+                        self.presto_types, 
+                        self.presto_type
                         )
-                self.presto_cached[reactor.presto_path] = weakref.ref (dom)
-                dom.presto_path = reactor.presto_path
+                self.presto_cached[path] = weakref.ref (dom)
+                dom.presto_path = path
                 dom.presto_root = self
-                dom.presto_rollback ((
-                        self.presto_continue, (reactor, )
-                        ))
+                dom.presto_rollback (rolledback)
                 assert None == self.log (
                         'cached count="%d"' % len (self.presto_cached), 
                         'debug'
                         )
+                return dom
 
         def presto_continue (self, reactor):
                 assert None == self.log ('%r' % reactor, 'presto')

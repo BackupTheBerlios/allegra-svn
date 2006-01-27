@@ -518,6 +518,7 @@ def cli (argv):
                                 port = int (port)
                         if len (argv) > 3:
                                 host = argv[3]
+        root = os.path.abspath (root)
         return root, ip, port, host
 
 
@@ -542,6 +543,7 @@ if __name__ == '__main__':
         server.http_hosts = dict ([
                 (h, HTTP_cache (p)) 
                 for h, p in http_hosts (root, host, port)
+                if stat.S_ISDIR (os.stat (p)[0])
                 ])
         server.async_catch = async_loop.async_catch
         async_loop.async_catch = server.tcp_server_catch
