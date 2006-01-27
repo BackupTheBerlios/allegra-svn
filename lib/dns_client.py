@@ -436,7 +436,7 @@ class TCP_client_DNS (tcp_client.TCP_client):
                         return channel
                         
         def tcp_client_dns (self, channel, addr, resolved):
-                if len (resolved.dns_resources) > 0:
+                if resolved.dns_resources:
                         # DNS address resolved, connect ...
                         channel.tcp_connect ((
                                 resolved.dns_resources[0], addr[1]
