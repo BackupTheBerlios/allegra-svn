@@ -17,23 +17,36 @@
 
 ""
 
-from allegra import presto
+from allegra import presto, presto_http, presto_prompt
 
 
 class PRESTo_prompt_async (presto.PRESTo_async):
         
-        xml_name = u'http://presto/ async'
+        xml_name = u'http://presto/ prompt'
+        
+        presto = presto_http.get_method
+        
+        presto_interfaces = set ((u'PRESTo', u'prompt', ))
+        presto_methods = {
+                u'async': presto_prompt.presto_prompt_async
+                }
 
+        presto_prompt_env = None
+        
 
 class PRESTo_prompt_sync (presto.PRESTo_sync):
         
-        xml_name = u'http://presto/ sync'
+        xml_name = u'http://presto/ prompt-sync'
                 
+        presto = presto_http.get_method
+        
+        presto_interfaces = set ((u'PRESTo', u'prompt', ))
+        presto_methods = {
+                u'async': presto_prompt.presto_prompt_async,
+                u'sync': presto_prompt.presto_prompt_synchronized
+                }
+        
+        presto_prompt_env = None
+        
 
 presto_components = (PRESTo_prompt_async , PRESTo_prompt_sync)
-
-if __debug__:
-        from allegra import presto_prompt
-        presto_prompt.presto_debug_async (PRESTo_prompt_async)
-        presto_prompt.presto_debug_sync (PRESTo_prompt_sync)
-
