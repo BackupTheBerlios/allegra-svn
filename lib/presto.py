@@ -514,6 +514,8 @@ def presto_benchmark (
 
 # Types with safe __str__ 
 
+PRESTo_Unicode = types.UnicodeType
+
 PRESTo_String = (
         # Ordered most common first
         types.StringType, 
@@ -557,6 +559,7 @@ PRESTo_others = (
         types.FunctionType,
         types.XRangeType,
         )
+
 
 def presto_xml (
         instance, walked,
@@ -605,14 +608,14 @@ def presto_xml (
                 else:
                         return '<iter%s>%s</iter>' % (
                                 attributes, 
-                                ''.join ([
+                                ''.join ((
                                         presto_xml (
                                                 i, walked, '',
                                                 horizon, encoding
                                                 )
                                         for i in instance
                                         if not id (i) in walked
-                                        ])
+                                        ))
                                 )
         
         elif isinstance (instance, dict) and not instance_id in walked:
@@ -621,7 +624,7 @@ def presto_xml (
                         attributes += ' horizon="%d"' % horizon
                 else:
                         # 4. dictionnary
-                        items = [(
+                        items = ((
                                 presto_xml (
                                         k, walked, '',
                                         horizon, encoding
@@ -630,13 +633,13 @@ def presto_xml (
                                         v, walked, '',
                                         horizon, encoding
                                         )
-                                ) for k, v in instance.items ()]
+                                ) for k, v in instance.items ())
                         return '<map%s>%s</map>' % (
                                 attributes,
-                                ''.join ([
+                                ''.join ((
                                         '<item>%s%s</item>' % i
                                         for i in items if i[0] or i[1]
-                                        ])
+                                        ))
                                 )
                                         
         if instance_id in walked:
@@ -664,6 +667,11 @@ def presto_xml (
         # 6. all other interfaces/types
         return '<instance%s/>' % attributes
 
+        # Note
+        #
+        # This function is slightly faster than a simple generator derived
+        # from it. Optmization in Python then in C may yield significant
+        # improvement ...
 
 def presto_rest (method, component, reactor):
         try:
@@ -732,276 +740,3 @@ def presto_route_set (element, dom):
         # note that elements and components do not worry about cleaning up
         # this routing table: such elements and components are not meant to
         # be updated in part but in whole.
-
-        
-# Note about this implementation
-#
-# PRESTo towers at the top of Allegra's semantic web stack, providing
-# one obvious way to develop distributed web applications. It integrates
-# Allegra's asynchronous core, synchronization and XML model into one
-# network application component interface (and implementation).
-#
-# This module packs together a simple REST interface for XML component
-# instances rolled-back and committed synchronously to the file system.
-# It provides PRESTo's HTTP server with the simplest implementation of the
-# XML component meme found in many web development framework (see 
-# presto_http.py).
-#
-# Remarkably, its interfaces also support persistence provided by
-# synchronized BSDDB databases and distributed PNS metabases (see 
-# presto_bsddb.py and presto_pns.py).
-#
-# Also, PRESTo comes with a practical middle-ground between simplistic 
-# REST implementations and SOAP's over-engineered specifications. Enough
-# to develop web user interface with stateless XML transformation only.
-#
-# Finally, PRESTo is not restricted to HTTP and can be applied to other
-# MIME or message queue protocols (like SMTP, QMQP, etc ...). PRESTo will
-# not be completed until a reference implementation for another protocol
-# than HTTP has been tested with an application (preferably QMQP).
-#
-#
-# Examples
-#
-# For instance, the XML document
-#
-#         <async xmlns="http://presto/"/>
-#
-# saved as
-#
-#        ./instance.xml
-#
-# can be rolled-back and commited synchronously by a PRESTo_cache as an
-# instance of the class PRESTo_async, provided that the following module 
-# was loaded by this cache:
-#
-#        from allegra import presto
-#        presto_components = (prest.PRESTo_async, )
-#
-# Dispatched this cache, the HTTP request:
-#
-#        GET http://127.0.0.1/instance.xml HTTP/1.1
-#        Host: 127.0.0.1
-#        ...
-#
-# yields an HTTP response with a simple XML body:
-#
-#        HTTP/1.1 200 Ok
-#        ...
-#
-#        <?xml version="1.0" encoding="ASCII"?>
-#        <PRESTo xmlns="http://presto/"
-#                host="127.0.0.1" path="/instance.xml"
-#                >
-#                <presto/>
-#                <async/>
-#        </PRESTo>
-#
-# and provides just enough states to conduct an transaction over a stateless
-# protocol like HTTP: the REST, method and the instance states. Those three
-# states are practically enough to develop asynchronous web interfaces for
-# statefull instances, using stateless XML transformations only (be it XSLT
-# CSS or JavaScript).
-#
-# Here is another example, the infamous HelloWorld for PRESTo:
-#
-#        1. Python Module
-#
-#        from allegra import presto_http
-#        class HelloWorld (presto_http.get_form):
-#                xml_name = u'HelloWorld'
-#                def helloworld (self, reactor):
-#                        return u'Hello %s' % reactor.presto_vector[u'name']
-#                presto_methods = {None: helloworld}
-#                presto_interfaces = ((u'name', ))
-#
-#        2. XML file
-#
-#        <HelloWorld/>
-#
-#        3. HTTP request and REST response:
-#
-#        GET http://127.0.0.1/HelloWorld.xml?name=You HTTP/1.1
-#        Host: 127.0.0.1
-#        ...
-#
-#        HTTP/1.1 200 Ok
-#        ...
-#
-#        <?xml version="1.0" encoding="ASCII"?>
-#        <presto:PRESTo xmlns:presto="http://presto/"
-#                presto-path="/HelloWorld.xml"
-#                name="You"
-#                >
-#                Hello You
-#                <HelloWorld/>
-#        </presto:PRESTo>
-#
-#        with CRLF added in the XML response for better readability.
-#
-# Allegra PRESTo is unRESTricted
-#
-# You may as well handle HTTP yourself, set the HTTP response's MIME body 
-# to a simple XML producer like:
-#
-#         def presto (self, reactor):
-#                presto_http.rest (
-#                        reactor, '<pizza-order>...</pizza-order>', 200
-#                        )
-#
-# if you prefer to provide your flavor of REST to your client. Developpers
-# of AJAX applications can also provide simple RPC producers and bypass
-# serialization of all three PRESTo states (using XML/RPC, JSON, etc ...).
-#
-# Also, PRESTo can deliver "degraded" stateless interfaces for safe web 
-# clients (without JavaScript I mean) and flicker-free AJAX interfaces, by 
-# synchronizing all or parts of the server and client DOM.
-#
-#
-# A Few States Only
-#
-# There are at least four and at most seven types of PRESTo states for each
-# REST request:
-#
-# 1. a synchronized filesystem persitence root containing ...
-# 2. a cached XML document object model holding ...
-# 3. a PRESTo component instance which methods may return ...
-# 4. an asynchronous or synchronized REST reactor, a producer,
-#    a simple 8-bit string or any Python instance that can be
-#    serialized safely with presto_xml () and be included in ...
-# 5. an asynchronous XML producer
-# 
-# The first two PRESTo states listed above are cached, the third may be cached 
-# too and the fourth and fifth may be replaced by a single response producer 
-# state for methods that are specialized for a protocol. 
-# 
-# To those 4/5 states must be added the protocol states. Usually three for 
-# HTTP/1.1: channel, request/response reactor and chunked producer wrapper, 
-# maybe more depending on the kind of HTTP command and headers.
-#
-# I don't count the select_trigger, synchronizer, thread or queue states
-# implied by synchronization since they are all cached or limited, using
-# only more resources when they are available.
-#
-#
-# High Performances
-#
-# HTTP request to cached PRESTo component instance need by default at most
-# five states, but only four once pipelined through the same session. The
-# result is sub-millisecond performance for simplistic REST call: 0.000527
-# seconds on a 1.7Ghz Intel CPU under Windows XP Pro, from the request
-# instanciation to the instanciation of a MIME producer body for the HTTP
-# response. And that figure will still improve - possibly of one order of 
-# magnitude - once all high-profile functions of Allegra have been optimized
-# in a C module.
-#
-# All that power derives from a simple and consistent stack or well-
-# articulated API that sticked to a practical and time-proven design
-# for high-performance asynchronous network server.
-#
-#
-# Blurb Mode On
-#
-# PRESTo is radically simple. 
-#
-# It is radically simpler than .NET or J2EE. It is also simpler than Rails, 
-# Zope or your own flavor of LAMP, be it PHP or that good old Perl. 
-#
-# It's the One Obvious Way To Do It, the Python way.
-#
-# PRESTo is simpler to learn, simpler to apply and simpler to scale up.
-#
-# It is a web development jumpstart solution like Rails, but carrying all the
-# experience of Python's asynchronous network development and bringing in a
-# disruptive innovation. It provides web application developpers a functional
-# equivalent of LAMP/J2EE/.NET host, reduced to Python and the simplest stack
-# of standards common to all: MIME, HTTP, HTML, XML, XSLT, CSS and JavaScript. 
-# PRESTo integrates a distributed resource resolution system (PNS) to enable 
-# web application distribution on a peer network.
-#
-#
-# Riding the Riddle of Asynchronicity
-#
-# This is what PRESTo makes possible and simple.
-#
-# 
-#
-#
-# Simpler to learn
-#
-# PRESTo is simpler to understand because it extends the common stack of
-# web standards in the simplest way possible to achieve the same effect 
-# than mega-frameworks. 
-#
-# From logging and threading to distributed resource resolution, Allegra
-# provides simpler protocols, simpler implementations and simpler APIs
-# than its competitors. 
-
-# PRESTo is simpler to learn because its sources are much shorther.
-# With less than 50 modules and 20.000 lines or code and comments,
-# Allegra - its supporting library - is a lot faster to skip through.
-#
-# Also, Allegra is written like a library, divided into relevant
-# parts, each module and groups of modules preceding all the ones 
-# that depend on it. Reading Allegra's API documentation, source
-# code and manual will leave the same lasting understanding of the
-# framework and most profitable knowledge, a practical one.
-#
-# Toying with Allegra's sources from the prompt is probably easier and
-# more effective than trying to cope with the succint documentation
-# of a verbose and proprietary API. A seasoned web developper will
-# get actual experience of all Allegra's features in less time than 
-# it takes to skip through its competitors documentation.
-#
-# Last but not least, PRESTo is simpler to learn because it does not
-# try to reinvent the wheel and sticks to the stable stack of Web
-# standards allready implemented in browsers, Python and its builtin
-# C libraries.
-#
-#
-# Simpler to apply
-#
-# PRESTo is simpler to apply because it provides a consistent and integrated
-# implementation of a simpler stack of standards. If you have developped
-# web applications, you know that it entails the integration of HTTP and
-# HTML, but also JavaScript, CSS and now XML, XSLT and AJAX. The language
-# use to develop the code of a web application may be PHP, Perl, Python,
-# Java, C or C#, its host may be Apache, Microsoft IIS or a JBoss server,
-# but it will be integrated to the same standard stack.
-#
-# PRESTo sticks to this standard stack, adding as less protocol and 
-# specification as possible to implement statefullness, persistence and
-# distribution, leaving the developpers the opportunity to articulate most
-# of their application with that standard stack.
-#
-# As you will notice, PRESTo does not come with yet another markup language 
-# of its own but instead rely exclusively on the client's ability to use
-# JavaScript, XSLT or CSS stylesheets to display or otherwise handle the XML
-# returned.
-#
-# Also, and that is almost a blaspheme, PRESTo does not come with yet another
-# ORM or string of SQL connectors. Instead, this web framework rely on BSDDB
-# for all its database applications and depends on a PNS metabase peer to
-# develop distributed applications.
-#
-# Maybe as unorthodox, PRESTo comes with a simple XML component model for
-# REST call to instance's method and the default persistence is to the
-# file system, not some SQL server.
-#
-# By default, PRESTo produces XML documents that bundle the REST request's
-# state, its response as well as the result state of the method's instance
-# invoked. Also, by default, PRESTo serialize the invoked methods result
-# in the most practical way for a stateless web client interface.
-#
-#
-# Simpler to Scale Up
-#
-# At the bottom of PRESTo there is the integration into the PNS metabase
-#
-# The Allegra library integrates PRESTo and builds on its PNS reference
-# implementation to deliver a simpler solution than SPREAD, JXTA and other
-# distributed resource resolution systems. Thanks to PNS, PRESTo provides a
-# simpler way to scale up web services but also a foundation to develop new 
-# kind of metabase applications.
-#
-#
