@@ -132,45 +132,50 @@ class Length_collector (object):
 		return self.length_collector_left == 0
 	
 
-"""
-allegra/collectors.py
-
-the Collector interface is nothing new, it is simply an excerp of
-the Medusa asynchat.async_chat interface:
-
-	collect_incoming_data (data)
-	found_terminator ()
-	set_terminator (terminator)
-	get_terminator ()
-
-I though it deserved a module of its own, with null, string, file and
-length collectors. I also added one property to the interface:
-
-	collector_is_simple = False or True
-
-to signal which collector use their set_terminator interface or leave its
-management to their accessor (usually a TCP channel).
-
-The Simple_collector wraps around complex collectors and provide its accessor
-with a simple interface. The Length_collector simply allow a complex collector
-to simply fed with a given length of data. They are both usefull to chain 
-complex collectors together, like Chunked and Multipart for chunked HTTP file 
-uploads for instance.
-
-
-Blurb
-
-Using collectors, an application can process data as it comes with
-optimal buffering and without blocking. Suppose for instance that you
-want to scan attachements of incoming mails or need to check digital
-signatures of S/MIME envelopes. If you were to collect the whole data
-and _then_ process it all, you will more quickly run out of memory for
-buffers and the overall performance will drop fast under high load
-unless you thread. Asynchronous processing collectors can help to make
-non-blocking peers that conserve memory and can deliver high
-availability, even under very high load.
-
-See the mime_collectors.py module for mime, chunked, multipart, form data,
-escaping, but also http and mail (smtp/pop) collectors.
-
-"""
+class Block_decoder (object):
+        
+        # collect fixed size blocks to decode (like Base64), for instance:
+        #
+        #         Block_collector (collector, 20, base64.b64decode)
+        
+        collector_is_simple = True
+        
+        def __init__ (self, collector, block, decode):
+                self.collector = collector
+                self.block = block
+                self.decode = decode
+                self.buffer = ''
+        
+        def collect_incoming_data (self, data):
+                if self.buffer:
+                        tail = (len (self.buffer) + len (data)) % self.block
+                        if tail:
+                                self.buffer = data[-tail:]
+                                self.collector.collect_incoming_data (
+                                        self.decode (
+                                                self.buffer + data[:-tail]
+                                                )
+                                        )
+                        else:
+                                self.collector.collect_incoming_data (
+                                        self.decode (self.buffer + data)
+                                        )
+                else:
+                        tail = len (data) % self.block
+                        if tail:
+                                self.buffer = data[-tail:]
+                                self.collector.collect_incoming_data (
+                                        self.decode (data[:-tail])
+                                        )
+                        else:
+                                self.collector.collect_incoming_data (
+                                        decode (data)
+                                        )
+        
+        def found_terminator (self):
+                if self.buffer:
+                        self.collector.collect_incoming_data (
+                                decode (self.buffer)
+                                )
+                        self.buffer = ''
+                return self.collector.found_terminator ()
