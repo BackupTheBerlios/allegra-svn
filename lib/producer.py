@@ -20,9 +20,6 @@
 import types, exceptions
 
 
-def true ():
-        return True
-
 def false ():
         return False
 
@@ -31,7 +28,8 @@ class Stalled_producer (object):
         def more (self):
                 return ''
         
-        producer_stalled = true
+        def producer_stalled (self):
+                return True
         
         def __call__ (self):
                 self.producer_stalled = false
