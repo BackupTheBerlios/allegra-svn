@@ -112,25 +112,28 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                         reactor.http_response = 500 # Server Error
 
 
-def presto_decode (urlencoded, result, encoding='UTF-8'):
-        "index URL encoded form data into a dictionnary"
+def presto_decode (urlencoded, vector, encoding='UTF-8'):
+        "map URL encoded form data to UNICODE keys and values"
         for param in urlencoded.split ('&'):
                 if param.find ('=') > -1:
                         name, value = param.split ('=', 1)
-                        result[unicode (
+                        vector[unicode (
                                 urllib.unquote (name), encoding, 'replace'
                                 )] = unicode (
                                         urllib.unquote (value), encoding,
                                         'replace'
                                         )
                 elif param:
-                        result[unicode (
+                        vector[unicode (
                                 urllib.unquote (param), encoding, 'replace'
                                 )] = True
-        return result
+        return vector
 
 
-def presto_vector (urlencoded, interfaces, vector, encoding='UTF-8'):
+def presto_vector (
+        urlencoded, vector, interfaces, encoding='UTF-8', strict=True
+        ):
+        "map only URL encoded form data declared in the interfaces set"
         for param in urlencoded.split ('&'):
                 if param.find ('=') > -1:
                         encoded, value = param.split ('=', 1)
@@ -141,29 +144,39 @@ def presto_vector (urlencoded, interfaces, vector, encoding='UTF-8'):
                                 vector[name] = unicode (urllib.unquote (
                                         value
                                         ), encoding, 'replace')
+                        elif strict:
+                                return
+                        
                 elif param:
                         name = unicode (urllib.unquote (
                                 param
                                 ), encoding, 'replace')
                         if name in interfaces:
                                 vector[name] = True
+                        elif strict:
+                                return
+                        
+        return vector
+        #
+        # The rational for such function is that a URL query string might be 
+        # irrelevant to its handler, which should waiste no time unquoting
+        # and decoding such bogus argument. When handling POSTed form, an
+        # application should be guarded against malicious attacks like a
+        # flood of 
 
-
-# Functions that completes the HTTP response
+# Functions that completes the HTTP REST response, without or with a 
+# benchmark producer.
 
 def rest_response (reactor, result, response):
         charsets = mime_headers.preferences (
                 reactor.mime_collector_headers, 'accept-charset', 'ascii'
                 )
         if 'utf-8' in charsets:
-                encoding = 'UTF-8'
+                encoding = 'UTF-8' # prefer UTF-8 over any other encoding!
         else:
                 encoding = charsets[-1].upper ()
         reactor.mime_producer_body = presto.presto_producer (
-                reactor.presto_dom,
-                reactor.presto_vector,
-                result, 
-                encoding
+                reactor.presto_dom, reactor.presto_vector, result, encoding
                 )
         reactor.mime_producer_headers [
                 'Content-Type'
@@ -180,10 +193,7 @@ def rest_benchmark (reactor, result, response):
         else:
                 encoding = charsets[-1].upper ()
         reactor.mime_producer_body = presto.presto_benchmark (
-                reactor.presto_dom,
-                reactor.presto_vector,
-                result,
-                encoding, 
+                reactor.presto_dom, reactor.presto_vector, result, encoding,
                 presto.PRESTo_benchmark (reactor.http_request_time)
                 )
         reactor.mime_producer_headers [
@@ -191,10 +201,11 @@ def rest_benchmark (reactor, result, response):
                 ] = 'text/xml; charset=%s' % encoding
         reactor.http_response = response
                 
+                
 if __debug__:
         rest = rest_benchmark
 else:
-        rest = rest_response        
+        rest = rest_response
 
 
 def get_method (component, reactor):
@@ -206,15 +217,15 @@ def get_method (component, reactor):
                 reactor.presto_vector.update (component.xml_attributes)
         if reactor.http_uri[3] and component.presto_interfaces:
                 presto_vector (
-                        reactor.http_uri[3][1:].replace ('+', ' '),
+                        reactor.http_uri[3].replace ('+', ' '),
+                        reactor.presto_vector,
                         component.presto_interfaces,
-                        reactor.presto_vector
                         )
         method = component.presto_methods.get (
                 reactor.presto_vector.get (u'PRESTo')
                 )
         if method == None:
-                rest (reactor, '<presto:presto/>', 200)
+                rest (reactor, '<presto xmlns="http://presto/"/>', 200)
         else:
                 rest (reactor, presto.presto_rest (
                         method, component, reactor
@@ -241,14 +252,14 @@ def post_method (component, reactor):
         if reactor.mime_collector_body.data and component.presto_interfaces:
                 presto_vector (
                         reactor.mime_collector_body.data.replace ('+', ' '),
-                        component.presto_interfaces,
-                        reactor.presto_vector
+                        reactor.presto_vector,
+                        component.presto_interfaces
                         )
         method = component.presto_methods.get (
                 reactor.presto_vector.get (u'PRESTo')
                 )
         if method == None:
-                rest (reactor, '<presto:presto/>', 200)
+                rest (reactor, '<presto xmlns="http://presto/"/>', 200)
         else:
                 rest (reactor, presto.presto_rest (
                         method, component, reactor
@@ -270,8 +281,8 @@ def form_method (component, reactor):
                                 reactor.mime_collector_body.data.replace (
                                         '+', ' '
                                         ),
-                                component.presto_interfaces,
-                                reactor.presto_vector
+                                reactor.presto_vector,
+                                component.presto_interfaces
                                 )
         elif (
                 reactor.http_request[0] == 'POST' and
@@ -291,9 +302,9 @@ def form_method (component, reactor):
                                 )
                 if reactor.http_uri[3] and component.presto_interfaces:
                         presto_vector (
-                                reactor.http_uri[3][1:].replace ('+', ' '),
-                                component.presto_interfaces,
-                                reactor.presto_vector
+                                reactor.http_uri[3].replace ('+', ' '),
+                                reactor.presto_vector,
+                                component.presto_interfaces
                                 )
         else:
                 reactor.http_response = 405 # Method Not Allowed
@@ -303,7 +314,7 @@ def form_method (component, reactor):
                 reactor.presto_vector.get (u'PRESTo')
                 )
         if method == None:
-                rest (reactor, '<presto:presto/>', 200)
+                rest (reactor, '<presto xmlns="http://presto/"/>', 200)
         else:
                 rest (reactor, presto.presto_rest (
                         method, component, reactor
@@ -323,7 +334,7 @@ def post_multipart (component, reactor):
                 else:
                         reactor.http_response = 405 # Method Not Allowed
         else:
-                pass
+                pass # continue ...
                 
                 
 if __name__ == '__main__':

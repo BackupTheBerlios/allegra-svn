@@ -43,7 +43,7 @@ class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
 
 # split a URL into ('http://hostname', '/path', '?query', '#fragment')
 #
-HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)([?][^#]+)?(#.+)?')
+HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)[?]?([^#]+)?(#.+)?')
 
 class HTTP_server_channel (
         async_chat.Async_chat, mime_reactor.MIME_collector
