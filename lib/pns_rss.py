@@ -19,8 +19,7 @@
 
 import re
 
-from allegra import \
-        netstring, xml_dom, xml_utf8, pns_model, pns_sat, pns_xml
+from allegra import xml_dom, pns_xml
 
 
 class RSS_channel (pns_xml.XML_PNS_context):
@@ -53,7 +52,7 @@ class RSS_pubDate (pns_xml.XML_PNS_subject):
                 ), )
         
 
-RSS_NAMESPACE = {
+RSS_TYPES = {
         # RSS 2.0 is real cool, simple *and* well articulated
         #
         'channel': RSS_channel,
@@ -96,6 +95,7 @@ RSS_NAMESPACE = {
         #
         }
 
+
 # The best part of it is that there is no need to declare DTD or worse
 # to get the actual structure of the XML strings in a semantically
 # undispersed graph, providing an interropperable namespace to application
@@ -104,7 +104,7 @@ RSS_NAMESPACE = {
 # let it then evolve.
 
 if __name__ == '__main__':
-        import sys, re
+        import sys, time
         from allegra import async_loop, loginfo, http_client, xml_reactor
         assert None == loginfo.log (
                 'Allegra PNS/RSS'
@@ -114,30 +114,25 @@ if __name__ == '__main__':
         host, port, urlpath = re.compile (
                 'http://([^/:]+)[:]?([0-9]+)?(/.+)'
                 ).match (sys.argv[1]).groups ()
-        def pns_stdio_statement (statement):
-                encoded = netstring.encode (statement)
-                if len (encoded) > 1024:
-                        sys.stderr.write (
-                                '%d:%s,' % (len (encoded), encoded)
-                                )
-                        return False
-                        
-                try:
-                        sys.stdout.write (
-                                '%d:%s,' % (len (encoded), encoded)
-                                )
-                except Exception, error:
-                        sys.stderr.write ('Exception: %r\n' % error)
-                        return False
-                else:
-                        return True
-        
-        dom = xml_reactor.XML_collector (unicoding=0)
+        t = time.clock ()
+        if __debug__:
+                dom = xml_reactor.XML_benchmark (unicoding=0)
+        else:
+                dom = xml_reactor.XML_collector (unicoding=0)
         dom.xml_type = pns_xml.XML_PNS_subject
-        dom.xml_types = RSS_NAMESPACE
-        dom.pns_statement = pns_stdio_statement
+        dom.xml_types = RSS_TYPES
+        dom.pns_statement = pns_xml.log_statement
         dom.PNS_HORIZON = 126
         dom.pns_subject = sys.argv[1]
         http_client.GET (http_client.HTTP_client (
                 ) (host, int (port or '80')), urlpath) (dom)
+        async_loop.loop ()
+        t = time.clock () - t
+        assert None == loginfo.log (
+                'fetched in %f seconds, '
+                'as %d chunks parsed in %f seconds' % (
+                        t, dom.xml_benchmark_count, dom.xml_benchmark_time
+                        ), 'info'
+                )
         async_loop.dispatch ()
+        
