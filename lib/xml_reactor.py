@@ -15,6 +15,8 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
+import time
+
 from xml.parsers import expat
 
 from allegra import \
@@ -102,46 +104,78 @@ class XML_collector (xml_dom.XML_dom):
                         self.xml_expat = None
                 return True
 
-        # An XML collector and parser, bundled to the DOM, because flat
-        # is a better (and faster ;-) Python Zen. This collector might
-        # be wrapped with a chain of collectors, like for instance a Chunked
-        # Transfert Encoding collector wrapping a Simple collector that
-        # articulates a Multipart MIME collector which will instanciate
-        # this XML collector and maybe even wrap a charset decoder around 
-        # if it happens to provide transcoding to one of Expat's supported
-        # charsets.
-        #
-        # It may sound clumsy and slow at first (and specially the part
-        # about instanciation, which is not Python's forte), but think
-        # twice about memory consumption, CPU waisted on I/O wait state
-        # by synchronous processes, network *latency* and the requirement
-        # of *perceived* speed of a request/response cycle.
-        #
-        # But what if you have to:
-        #
-        # 1. Save the MIME Multipart envelope. Where? In memory? What if it
-        #    is big? The filesystem is not really an option. cStringIO?
-        #
-        # 2. Well, then you have to open that envelope once it completed
-        #    which may be a long time from now, while your program is
-        #    waisting all that buffer *and* CPU time!
-        #
-        # 3. And it is not finished, because you have to transcode and
-        #    parse it real fast now if you don't want to waiste your peer's
-        #    precious time, CPU resources and computer memory. Unfortunately
-        #    those are the most heavy processes, the slowest, the application
-        #    accessed itself.
-        #
-        # Instead, the XML_collector and possibly the charset transcoder
-        # may do that hard work as data is fetched from the network: slowly,
-        # each client beeing rationated via the size of its I/O buffer :-)
-        #
-        # This is very handy for ... entreprise network application
-        # interfaces, for computers that still don't know there is a
-        # network of peers out there and which produce batches. Mainframes
-        # and other big iron's applications are connected together by
-        # queues, can't export anything else than a batch. That translates
-        # into large XML interchanges with a practical request: get an
-        # acknowledgement ASAP for the whole batch.
+
+class XML_benchmark (XML_collector):
         
+        collector_is_simple = True
+        
+        xml_benchmark_time = xml_benchmark_count = 0
+        
+        def collect_incoming_data (self, data):
+                self.xml_benchmark_count += 1
+                if self.xml_error == None:
+                        try:
+                                t = time.clock ()
+                                self.xml_expat.Parse (data, 0)
+                                self.xml_benchmark_time += time.clock () - t
+                        except expat.ExpatError, error:
+                                self.xml_expat_ERROR (error)
+                                self.xml_expat = None
+
+        def found_terminator (self):
+                if self.xml_error == None:
+                        try:
+                                t = time.clock ()
+                                self.xml_expat.Parse ('', 1)
+                                self.xml_benchmark_time += time.clock () - t
+                        except expat.ExpatError, error:
+                                self.xml_expat_ERROR (error)
+                        self.xml_expat = None
+                return True
+
+
+# Note about this implementation
+#
+# An XML collector and parser, bundled to the DOM, because flat
+# is a better (and faster ;-) Python Zen. This collector might
+# be wrapped with a chain of collectors, like for instance a Chunked
+# Transfert Encoding collector wrapping a Simple collector that
+# articulates a Multipart MIME collector which will instanciate
+# this XML collector and maybe even wrap a charset decoder around 
+# if it happens to provide transcoding to one of Expat's supported
+# charsets.
+#
+# It may sound clumsy and slow at first (and specially the part
+# about instanciation, which is not Python's forte), but think
+# twice about memory consumption, CPU waisted on I/O wait state
+# by synchronous processes, network *latency* and the requirement
+# of *perceived* speed of a request/response cycle.
+#
+# But what if you have to:
+#
+# 1. Save the MIME Multipart envelope. Where? In memory? What if it
+#    is big? The filesystem is not really an option. cStringIO?
+#
+# 2. Well, then you have to open that envelope once it completed
+#    which may be a long time from now, while your program is
+#    waisting all that buffer *and* CPU time!
+#
+# 3. And it is not finished, because you have to transcode and
+#    parse it real fast now if you don't want to waiste your peer's
+#    precious time, CPU resources and computer memory. Unfortunately
+#    those are the most heavy processes, the slowest, the application
+#    accessed itself.
+#
+# Instead, the XML_collector and possibly the charset transcoder
+# may do that hard work as data is fetched from the network: slowly,
+# each client beeing rationated via the size of its I/O buffer :-)
+#
+# This is very handy for ... entreprise network application
+# interfaces, for computers that still don't know there is a
+# network of peers out there and which produce batches. Mainframes
+# and other big iron's applications are connected together by
+# queues, can't export anything else than a batch. That translates
+# into large XML interchanges with a practical request: get an
+# acknowledgement ASAP for the whole batch.
+
                 
