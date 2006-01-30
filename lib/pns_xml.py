@@ -215,11 +215,14 @@ def articulate_enclosure (self, dom):
                 self.pns_subject = self.pns_sats[0][0]
                 if self.pns_subject == self.pns_object:
                         self.pns_object = ''
+        #
         # get a valid XML string, prefixed and with namespace
         # declarations but without processing intstructions.
         # this *is* <?xml version="1.0" encoding="UTF-8"?>
         #
-        self.xml_string = xml_utf8.xml_document (valid)
+        self.xml_string = xml_utf8.xml_strings (
+                valid.xml_root, valid.xml_prefixes
+                )
         self.xml_first = self.xml_children = None
         #
         # Note that it writes back *valid* XML, complete with
