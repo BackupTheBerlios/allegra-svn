@@ -16,17 +16,14 @@
 # USA
 #
 
-import exceptions
-
-
-class NetstringsError (exceptions.Exception): pass
+class NetstringsError (Exception): pass
 
 
 def encode (strings):
-	"encode an sequence of 8-bit byte strings as netstrings"
-	return ''.join (['%d:%s,' % (len (s), s) for s in strings])
+        "encode an sequence of 8-bit byte strings as netstrings"
+        return ''.join (['%d:%s,' % (len (s), s) for s in strings])
 
-
+        
 def decode (buffer):
 	"decode the netstrings found in the buffer, trunk garbage"
 	size = len (buffer)
