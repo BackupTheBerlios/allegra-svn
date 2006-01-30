@@ -63,7 +63,7 @@ def articulate_subject (self, dom):
                 self.xml_string = xml_utf8.xml_string (
                         self, dom.xml_prefixes, ''
                         )
-        elif articulate_cdata (dom):
+        elif articulate_cdata (self, dom):
                 # self.xml_string = self.xml_first
                 self.xml_string = xml_utf8.xml_string (self, None, '')
                 self.xml_attributes = None
@@ -110,7 +110,7 @@ def articulate_cdata (self, dom):
                 SAT_HORIZON = self.SAT_HORIZON or dom.SAT_HORIZON
                 pns_sat.pns_sat_chunk (
                         self.pns_object, self.pns_horizon, self.pns_sats,
-                        SAT_RE, SAT_STRIP, SAT_HORIZON
+                        SAT_RE, 507, SAT_STRIP, SAT_HORIZON, 0
                         )
                 if (
                         len (self.pns_sats) > 1 and 
@@ -139,18 +139,15 @@ def articulate_enclosure (self, dom):
         # recode the original CDATA first, for instance HTML using
         # Tidy and some UNICODE magic ... but that's another story).
         #
-        valid = xml_dom.XML_dom ()
-        valid.xml_unicoding = 0
-        valid.xml_parser_reset ()
-        e = valid.xml_parse_string (self.xml_first)
-        if not e:
+        valid = xml_dom.parse_string (self.xml_first, unicoding=0)
+        if not valid.xml_root:
                 self.xml_first = self.xml_children = None
                 return
                 
         # drop any markup, add whitespaces between CDATAs
         SAT_STRIP = self.SAT_STRIP or dom.SAT_STRIP
         self.pns_object = (
-                ' '.join (xml_utf8.xml_cdatas (e))
+                ' '.join (xml_utf8.xml_cdatas (dom.xml_root))
                 ).strip (SAT_STRIP)
         if not self.pns_object:
                 self.xml_first = self.xml_children = None
@@ -161,7 +158,7 @@ def articulate_enclosure (self, dom):
         SAT_HORIZON = self.SAT_HORIZON or dom.SAT_HORIZON
         pns_sat.pns_sat_chunk (
                 self.pns_object, self.pns_horizon, self.pns_sats, 
-                SAT_STRIP, SAT_RE, SAT_HORIZON,
+                SAT_RE, 507, SAT_STRIP, SAT_HORIZON, 0
                 )
         if (
                 len (self.pns_sats) > 1 and 
@@ -179,9 +176,7 @@ def articulate_enclosure (self, dom):
         # declarations but without processing intstructions.
         # this *is* <?xml version="1.0" encoding="UTF-8"?>
         #
-        self.xml_string = xml_utf8.xml_string (
-                e, valid.xml_prefixes, ''
-                )
+        self.xml_string = xml_utf8.xml_document (valid)
         self.xml_first = self.xml_children = None
         #
         # Note that it writes back *valid* XML, complete with
