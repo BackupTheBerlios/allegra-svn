@@ -131,24 +131,74 @@ class Length_collector (object):
 			self.set_terminator (self.length_collector_left)
 		return self.length_collector_left == 0
 	
-
-class Block_decoder (object):
         
-        # collect fixed size blocks to decode (like Base64), for instance:
+class Codec_decoder (object):
+        
+        # Decode collected data using the codecs' decode interface:
         #
-        #         Block_collector (collector, 20, base64.b64decode)
+        #        import codecs
+        #        Codec_decoder (collector, codecs.lookup ('zlib')[1])
+        #
+        # Note that the decode function *must* decode byte strings, not
+        # UNICODE strings.
         
         collector_is_simple = True
         
-        def __init__ (self, collector, block, decode):
+        def __init__ (self, collector, decode):
+                assert collector.collector_is_simple
                 self.collector = collector
-                self.block = block
                 self.decode = decode
                 self.buffer = ''
         
         def collect_incoming_data (self, data):
                 if self.buffer:
-                        tail = (len (self.buffer) + len (data)) % self.block
+                        decoded, consumed = self.decode (self.buffer + data)
+                        consumed -= len (self.buffer)
+                else:
+                        decoded, consumed = self.decode (data)
+                self.collector.collect_incoming_data (decoded)
+                if consumed < len (data) + 1:
+                        self.buffer = data[consumed:]
+                        
+        def found_terminator (self, data):
+                if self.buffer:
+                        decoded, consumed = self.decode (self.buffer)
+                        if decoded:
+                                self.collector.collect_incoming_data (decoded)
+                self.collector.found_terminator ()
+                return True
+        
+
+class Padded_decoder (object):
+        
+        # Collect padded blocks to decode, for instance:
+        #
+        #        import base64
+        #        Padded_collector (collector, 20, base64.b64decode)
+        #
+        # because padding does matter to the base binascii implementation,
+        # and is not handled by the codecs module, a shame when a large
+        # XML string is encoded in base64 and should be decoded and parsed
+        # asynchronously. Padding is also probably a requirement from block
+        # cypher protocols and the likes.
+        
+        collector_is_simple = True
+        
+        def __init__ (self, collector, padding, decode):
+                assert collector.collector_is_simple
+                self.collector = collector
+                self.padding = padding
+                self.decode = decode
+                self.buffer = ''
+        
+        def collect_incoming_data (self, data):
+                if self.buffer:
+                        length = len (self.buffer) + len (data) 
+                        if length < self.padding:
+                                self.buffer += data
+                                return
+
+                        tail = length % self.padding
                         if tail:
                                 self.buffer = data[-tail:]
                                 self.collector.collect_incoming_data (
@@ -161,7 +211,11 @@ class Block_decoder (object):
                                         self.decode (self.buffer + data)
                                         )
                 else:
-                        tail = len (data) % self.block
+                        if length < self.padding:
+                                self.buffer += data
+                                return
+
+                        tail = len (data) % self.padding
                         if tail:
                                 self.buffer = data[-tail:]
                                 self.collector.collect_incoming_data (
@@ -178,4 +232,5 @@ class Block_decoder (object):
                                 decode (self.buffer)
                                 )
                         self.buffer = ''
-                return self.collector.found_terminator ()
+                self.collector.found_terminator ()
+                return True
