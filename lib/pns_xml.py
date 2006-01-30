@@ -21,126 +21,216 @@ from allegra import \
         netstring, xml_dom, xml_utf8, xml_unicode, pns_model, pns_sat
 
 
-# XML to PNS articulation
+# XML to PNS articulation (UTF-8 encoding only!)
 
-class XML_PNS_articulate (xml_dom.XML_element):
+SAT_RE = {
+        'en': pns_sat.SAT_ARTICULATE_EN,
+        'fr': pns_sat.SAT_ARTICULATE_FR,
+        }
+
+XML_LANG = 'en'
+
+
+def articulate_context (self, dom):
+        parent = self.xml_parent ()
+        if parent.pns_subject == '':
+                articulate_children (parent, dom)
+        articulate_subject (self, dom)
+        self.pns_articulate (self.pns_subject, parent.pns_subject, dom)
+        xml_dom.xml_delete (self)
+        
+
+def articulate_subject (self, dom):
+        self.xml_first = (self.xml_first or '').strip (
+                self.SAT_STRIP
+                )
+        if self.xml_parent:
+                self.pns_context = self.xml_parent ().pns_subject
+        if self.xml_children and (
+                articulate_children (self, dom) or articulate_cdata (self, dom)
+                ):
+                # let children articulate in the context of this
+                # element's subject ...
+                for child in self.xml_children:
+                        child.xml_follow = (
+                                child.xml_follow or ''
+                                ).strip (self.SAT_STRIP)
+                        child.pns_articulate (
+                                self.pns_subject, 
+                                self.pns_context or dom.pns_subject, 
+                                dom
+                                )
+                self.xml_string = xml_utf8.xml_string (
+                        self, dom.xml_prefixes, ''
+                        )
+        elif articulate_cdata (dom):
+                # self.xml_string = self.xml_first
+                self.xml_string = xml_utf8.xml_string (self, None, '')
+                self.xml_attributes = None
+        self.xml_first = self.xml_children = None
+        
+        
+def articulate_children (self, dom):
+        if self.xml_children:
+                names = [
+                        child.pns_subject 
+                        for child in self.xml_children
+                        if (child.pns_subject and xml_utf8.xml_tag (
+                                child.xml_name
+                                ) in self.pns_articulated)
+                        ]
+                if len (names) > 1:
+                        self.pns_subject = pns_model.pns_name (
+                                netstring.encode (names), self.pns_horizon
+                                )
+                        return self.pns_subject != ''
+                        
+                if len (names) > 0:
+                        self.pns_subject = names[0]
+                        return True
+                        
+        return False
+
+        
+def articulate_cdata (self, dom):
+        # articulate the element's CDATA to make a name and an
+        # object:
+        #
+        # 1. join the CDATA with whitespace, then strip 
+        # withespaces before trying to articulate a name
+        SAT_STRIP = self.SAT_STRIP or dom.SAT_STRIP
+        self.pns_object = (
+                ' '.join (xml_utf8.xml_cdatas (self))
+                ).strip (SAT_STRIP)
+        # 2. extract regular expressions and simply articulate the
+        # rest of the text as one public name (save the horizon
+        # for latter use ...).
+        if self.pns_object:
+                SAT_RE = self.SAT_RE or dom.SAT_RE
+                SAT_HORIZON = self.SAT_HORIZON or dom.SAT_HORIZON
+                pns_sat.pns_sat_chunk (
+                        self.pns_object, self.pns_horizon, self.pns_sats,
+                        SAT_RE, SAT_STRIP, SAT_HORIZON
+                        )
+                if (
+                        len (self.pns_sats) > 1 and 
+                        len (self.pns_horizon) < SAT_HORIZON
+                        ):
+                        self.pns_subject = pns_model.pns_name (
+                                netstring.encode ([
+                                        item[0] for item in self.pns_sats
+                                        ]), set ()
+                                )
+                elif len (self.pns_sats) > 0:
+                        self.pns_subject = self.pns_sats[0][0]
+                        if self.pns_subject == self.pns_object:
+                                self.pns_object = ''
+                return not (
+                        self.pns_subject == '' and len (self.pns_sats) == 0
+                        )
+                        
+        return False
+
+
+def articulate_enclosure (self, dom):
+        # validate the CDATA as an XML string, use the default
+        # XML_element class only and do not even try to articulate
+        # unknown "foreign" markup (derived class may cleanse or 
+        # recode the original CDATA first, for instance HTML using
+        # Tidy and some UNICODE magic ... but that's another story).
+        #
+        valid = xml_dom.XML_dom ()
+        valid.xml_unicoding = 0
+        valid.xml_parser_reset ()
+        e = valid.xml_parse_string (self.xml_first)
+        if not e:
+                self.xml_first = self.xml_children = None
+                return
+                
+        # drop any markup, add whitespaces between CDATAs
+        SAT_STRIP = self.SAT_STRIP or dom.SAT_STRIP
+        self.pns_object = (
+                ' '.join (xml_utf8.xml_cdatas (e))
+                ).strip (SAT_STRIP)
+        if not self.pns_object:
+                self.xml_first = self.xml_children = None
+                return
+                
+        # articulate cleansed CDATA
+        SAT_RE = self.SAT_RE or dom.SAT_RE
+        SAT_HORIZON = self.SAT_HORIZON or dom.SAT_HORIZON
+        pns_sat.pns_sat_chunk (
+                self.pns_object, self.pns_horizon, self.pns_sats, 
+                SAT_STRIP, SAT_RE, SAT_HORIZON,
+                )
+        if (
+                len (self.pns_sats) > 1 and 
+                len (self.pns_horizon) < SAT_HORIZON
+                ):
+                self.pns_subject = pns_model.pns_name (
+                        netstring.encode (self.pns_sats),
+                        set ()
+                        )
+        elif len (self.pns_sats) > 0:
+                self.pns_subject = self.pns_sats[0][0]
+                if self.pns_subject == self.pns_object:
+                        self.pns_object = ''
+        # get a valid XML string, prefixed and with namespace
+        # declarations but without processing intstructions.
+        # this *is* <?xml version="1.0" encoding="UTF-8"?>
+        #
+        self.xml_string = xml_utf8.xml_string (
+                e, valid.xml_prefixes, ''
+                )
+        self.xml_first = self.xml_children = None
+        #
+        # Note that it writes back *valid* XML, complete with
+        # namespace declaration. this will quickly overflow the
+        # PNS/UDP datagram limit (1024 8-bit bytes), but that's a 
+        # feature not a bug. PNS is made to articulate microformat,
+        # it is not and XML database ... yet.
+        #
+        # A true Metabase should use 4KBytes PNS/UDP datagrams.
+        #
+        # That's more than enough room to store a quite large and
+        # undispersed XML "porte-manteaux".
+        
+
+class XML_PNS_subject (xml_dom.XML_element):
         
         # The basic SAT and RE articulator, your mileage may vary ...
         
         pns_context = pns_subject = pns_object = xml_string = ''
+
+        SAT_RE = SAT_STRIP = SAT_HORIZON = None
         
-        sat_re = pns_sat.SAT_RE_WWW
-        sat_strip = pns_sat.SAT_STRIP_UTF8
-        sat_articulators = pns_sat.SAT_ARTICULATE_EN
-        sat_horizon = 126
+        SAT_RE = SAT_RE[XML_LANG]
+        SAT_STRIP = pns_sat.SAT_STRIP_UTF8
+        SAT_HORIZON = 126
 
         pns_articulated = set ()
 
-        def __init__ (self):
+        def __init__ (self, name, attributes):
                 self.pns_horizon = set ()
                 self.pns_sats = []
-        
-        def xml_valid (self, dom):
-                self.xml_first = (self.xml_first or '').strip (
-                        self.sat_strip
-                        )
-                if self.xml_parent:
-                        self.pns_context = self.xml_parent ().pns_subject
-                if self.xml_children and (
-                        self.pns_articulate_children (dom) or
-                        self.pns_articulate_cdata (dom)
-                        ):
-                        # let children articulate in the context of this
-                        # element's subject ...
-                        for child in self.xml_children:
-                                child.xml_follow = (
-                                        child.xml_follow or ''
-                                        ).strip (self.sat_strip)
-                                child.pns_articulate (
-                                        self.pns_subject, 
-                                        self.pns_context or dom.pns_subject, 
-                                        dom
-                                        )
-                        self.xml_string = xml_utf8.xml_string (
-                                self, dom.xml_prefixes, ''
-                                )
-                elif self.pns_articulate_cdata (dom):
-                        # self.xml_string = self.xml_first
-                        self.xml_string = xml_utf8.xml_string (
-                                self, None, ''
-                                )
-                        self.xml_attributes = None
-                self.xml_first = self.xml_children = None
+                try:
+                        self.SAT_RE = SAT_RE[attributes[
+                                'http://www.w3.org/XML/1998/namespace lang'
+                                ]]
+                except KeyError:
+                        parent = self.xml_parent
+                        while parent:
+                                try:
+                                        self.SAT_RE = parent.SAT_RE
+                                except:
+                                        parent = parent.xml_parent
+                                else:
+                                        break
+                                
+                xml_dom.XML_element.__init__ (self, name, attributes)
                 
-        def pns_articulate_children (self, dom):
-                if self.xml_children:
-                        names = [
-                                child.pns_subject 
-                                for child in self.xml_children
-                                if (
-                                        child.pns_subject and 
-                                        xml_utf8.xml_tag (
-                                                child.xml_name
-                                                ) in self.pns_articulated
-                                        )
-                                ]
-                        if len (names) > 1:
-                                self.pns_subject = pns_model.pns_name (
-                                        netstring.encode (names),
-                                        self.pns_horizon
-                                        )
-                                return self.pns_subject != ''
-                                
-                        if len (names) > 0:
-                                self.pns_subject = names[0]
-                                return True
-                                
-                return False
-                
-        def pns_articulate_cdata (self, dom):
-                # articulate the element's CDATA to make a name and an
-                # object:
-                #
-                # 1. join the CDATA with whitespace, then strip 
-                # withespaces before trying to articulate a name
-                self.pns_object = (
-                        ' '.join (xml_utf8.xml_cdatas (self))
-                        ).strip (self.sat_strip)
-                # 2. extract regular expressions and simply articulate the
-                # rest of the text as one public name (save the horizon
-                # for latter use ...).
-                if self.pns_object:
-                        pns_sat.pns_sat_articulate (
-                                self.pns_object, 
-                                self.pns_horizon, 
-                                self.pns_sats,
-                                self.sat_re, 
-                                self.sat_strip, 
-                                self.sat_articulators,
-                                self.sat_horizon,
-                                )
-                        if (
-                                len (self.pns_sats) > 1 and 
-                                len (self.pns_horizon) < self.sat_horizon
-                                ):
-                                self.pns_subject = pns_model.pns_name (
-                                        netstring.encode ([
-                                                item[0] 
-                                                for item in self.pns_sats
-                                                ]),
-                                        set ()
-                                        )
-                        elif len (self.pns_sats) > 0:
-                                self.pns_subject = self.pns_sats[0][0]
-                                if self.pns_subject == self.pns_object:
-                                        self.pns_object = ''
-                        return not (
-                                self.pns_subject == '' and 
-                                len (self.pns_sats) == 0
-                                )
-                                
-                return False
-        
+        xml_valid = articulate_subject
+
         def pns_articulate (self, subject, context, dom):
                 # SAT articulate
                 if self.pns_object and self.pns_subject and len (
@@ -186,19 +276,11 @@ class XML_PNS_articulate (xml_dom.XML_element):
                         dom.pns_statement ((
                                 subject, tag, self.xml_string, context
                                 ))
-
-
-class XML_PNS_context (XML_PNS_articulate):
         
-        def xml_valid (self, dom):
-                parent = self.xml_parent ()
-                if parent.pns_subject == '':
-                        parent.pns_articulate_children (dom)
-                XML_PNS_articulate.xml_valid (self, dom)
-                self.pns_articulate (
-                        self.pns_subject, parent.pns_subject, dom
-                        )
-                xml_dom.xml_delete (self)
+
+class XML_PNS_context (XML_PNS_subject):
+        
+        xml_valid = articulate_context
         
         def pns_articulate (self, subject, context, dom):
                 # XML, no SAT for a context!
@@ -215,94 +297,13 @@ class XML_PNS_context (XML_PNS_articulate):
                 # structure to PNS in the subject of its context.
 
 
-class XML_PNS_validate (XML_PNS_articulate):
+class XML_PNS_enclosure (XML_PNS_subject):
 
         # first validate XML encoded in CDATA, then articulate
         
-        def xml_valid (self, dom):
-                # validate the CDATA as an XML string, use the default
-                # XML_element class only and do not even try to articulate
-                # unknown "foreign" markup (derived class may cleanse or 
-                # recode the original CDATA first, for instance HTML using
-                # Tidy and some UNICODE magic ... but that's another story).
-                #
-                valid = xml_dom.XML_dom ()
-                valid.xml_unicoding = 0
-                valid.xml_parser_reset ()
-                e = valid.xml_parse_string (self.xml_first)
-                if not e:
-                        self.xml_first = self.xml_children = None
-                        return
-                        
-                # drop any markup, add whitespaces between CDATAs
-                self.pns_object = (
-                        ' '.join (xml_utf8.xml_cdatas (e))
-                        ).strip (self.sat_strip)
-                if not self.pns_object:
-                        self.xml_first = self.xml_children = None
-                        return
-                        
-                # articulate cleansed CDATA
-                pns_sat.pns_sat_articulate (
-                        self.pns_object, 
-                        self.pns_horizon,
-                        self.pns_sats, 
-                        self.sat_re, 
-                        self.sat_strip, 
-                        self.sat_articulators,
-                        self.sat_horizon,
-                        )
-                if (
-                        len (self.pns_sats) > 1 and 
-                        len (self.pns_horizon) < self.sat_horizon
-                        ):
-                        self.pns_subject = pns_model.pns_name (
-                                netstring.encode (self.pns_sats),
-                                set ()
-                                )
-                elif len (self.pns_sats) > 0:
-                        self.pns_subject = self.pns_sats[0][0]
-                        if self.pns_subject == self.pns_object:
-                                self.pns_object = ''
-                # get a valid XML string, prefixed and with namespace
-                # declarations but without processing intstructions.
-                # this *is* <?xml version="1.0" encoding="UTF-8"?>
-                #
-                self.xml_string = xml_utf8.xml_string (
-                        e, valid.xml_prefixes, ''
-                        )
-                self.xml_first = self.xml_children = None
-                #
-                # Note that it writes back *valid* XML, complete with
-                # namespace declaration. this will quickly overflow the
-                # PNS/UDP datagram limit (1024 8-bit bytes), but that's a 
-                # feature not a bug. PNS is made to articulate microformat,
-                # it is not and XML database ... yet.
-                #
-                # A true Metabase should use 4KBytes PNS/UDP datagrams.
-                #
-                # That's more than enough room to store a quite large and
-                # undispersed XML "porte-manteaux".
+        xml_valid = articulate_enclosure
                 
                                                           
-class XML_PNS_delete (xml_dom.XML_element):
-        
-        # drop the element from the articulated XML tree 
-        
-        def xml_valid (self, dom):
-                xml_dom.xml_delete (self)
-
-
-class XML_PNS_orphan (xml_dom.XML_element):
-        
-        # remove the element from the tree and move its orphans to its
-        # parent children, effectively making the element shallow to
-        # the articulator
-
-        def xml_valid (self, dom):
-                xml_dom.xml_orphan (self)
-
-
 # PNS to XML model
 #
 # A few functions to markup Public Names, Public RDF and PNS statements
