@@ -202,8 +202,6 @@ class XML_PNS_subject (xml_dom.XML_element):
         
         pns_context = pns_subject = pns_object = xml_string = ''
 
-        SAT_RE = SAT_STRIP = SAT_HORIZON = None
-        
         SAT_RE = SAT_RE[XML_LANG]
         SAT_STRIP = pns_sat.SAT_STRIP_UTF8
         SAT_HORIZON = 126

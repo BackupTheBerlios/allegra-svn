@@ -66,7 +66,8 @@ RSS_NAMESPACE = {
         'http://purl.org/rss/1.0/ channel': RSS_channel,
         'http://purl.org/rss/1.0/ item': RSS_item,
         'http://purl.org/rss/1.0/ pubDate': RSS_pubDate,
-        'http://purl.org/rss/1.0/modules/content/ encoded': RSS_description,
+        'http://purl.org/rss/1.0/modules/content/ encoded': 
+                pns_xml.XML_PNS_enclosure,
         'http://purl.org/rss/1.0/ items': xml_dom.XML_delete,
         # 'http://purl.org/rss/1.0/ image': ... rdf:resource
         #
@@ -103,15 +104,16 @@ RSS_NAMESPACE = {
 # let it then evolve.
 
 if __name__ == '__main__':
-        import sys, time, os
-        from allegra import loginfo
+        import sys, re
+        from allegra import async_loop, loginfo, http_client, xml_reactor
         assert None == loginfo.log (
                 'Allegra PNS/RSS'
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0\n', 'info'
                 )
-        # transform an RSS document fetched from the network
-        #
+        host, port, urlpath = re.compile (
+                'http://([^/:]+)[:]?([0-9]+)?(/.+)'
+                ).match (sys.argv[1]).groups ()
         def pns_stdio_statement (statement):
                 encoded = netstring.encode (statement)
                 if len (encoded) > 1024:
@@ -130,28 +132,12 @@ if __name__ == '__main__':
                 else:
                         return True
         
-        t = time.time ()
-        dom = xml_dom.XML_dom ()
-        dom.xml_unicoding = 0 # UTF-8 only!
-        dom.xml_type = pns_xml.XML_PNS_articulate
+        dom = xml_reactor.XML_collector (unicoding=0)
+        dom.xml_type = pns_xml.XML_PNS_subject
         dom.xml_types = RSS_NAMESPACE
-        dom.xml_parser_reset ()
         dom.pns_statement = pns_stdio_statement
         dom.PNS_HORIZON = 126
-        if len (sys.argv) > 1:
-                dom.pns_subject = sys.argv[1]
-                devnull, stdin, stderr = os.popen3 (
-                        'curl %s -q -H'
-                        ' "Accept-Charset: utf-8, ascii-us;"' % dom.pns_subject
-                        )
-        else:
-                dom.pns_subject = '' # use xml:base?
-                stdin = sys.stdin
-        data = stdin.read (4096)
-        while data:
-                dom.xml_expat.Parse (stdin, 0)
-        dom.xml_expat.Parse ('', 1)
-        t = time.time () - t
-        sys.stderr.write ('Transformed in %f secs\n' % t) 
-        sys.exit ()
-        
+        dom.pns_subject = sys.argv[1]
+        http_client.GET (http_client.HTTP_client (
+                ) (host, int (port or '80')), urlpath) (dom)
+        async_loop.dispatch ()
