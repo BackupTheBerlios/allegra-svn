@@ -165,9 +165,9 @@ class XML_dom (object):
                         # the tree.
 
         def xml_expat_ERROR (self, error):
-                dom.xml_error = error
-                while dom.xml_parsed != None:
-                        dom.xml_expat_END (dom.xml_parsed.xml_name)
+                self.xml_error = error
+                while self.xml_parsed != None:
+                        self.xml_expat_END (self.xml_parsed.xml_name)
         
         # The XML_dom instance hosts a "sparse" expat parser and holds the 
         # document's prefixes and processing instructions separately from 
