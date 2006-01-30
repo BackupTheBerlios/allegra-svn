@@ -293,8 +293,10 @@ def pns_sat_chunk (
         
 
 def articulate (
-        articulated, articulators, 
-        CHUNK=507, HORIZON=126, whitespaces=SAT_STRIP_UTF8
+        articulated, articulators,
+        CHUNK=504, # Seven lines of 72 characters
+        HORIZON=126, # the PNS/Model limit for 1024 byte RDF statements
+        whitespaces=SAT_STRIP_UTF8 # Strip UTF-8 whitespaces
         ):
         chunks = []
         return (pns_sat_chunk (
