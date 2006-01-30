@@ -303,12 +303,21 @@ class DNS_client (udp_peer.UDP_dispatcher):
                 #
                 datagram, peer = self.recvfrom ()
                 uid = (ord (datagram[0]) << 8) + ord (datagram[1])
-                dns_request = self.dns_pending.pop (uid)
-                if dns_request == None or dns_request.dns_peer != peer:
-                        assert None == self.log (
-                                'noise ip="%s" port="%d"' % peer, 'debug'
+                try:
+                        dns_request = self.dns_pending.pop (uid)
+                except:
+                        self.log (
+                                'maybe-poison ip="%s" port="%d"' % peer, 
+                                'fraud'
                                 )
-                        return # log any unsolicitted requests!
+                        return
+                
+                if dns_request.dns_peer != peer:
+                        self.log (
+                                'impersonate ip="%s" port="%d"' % peer, 
+                                'fraud'
+                                )
+                        return
                         
                 # consider the DNS request as answered: unpack and cache 
                 # the response, ...
