@@ -190,10 +190,28 @@ if __name__ == '__main__':
 
 
 # Note about this implementation
+#
+# SYNOPSYS
+#
+#        >>> horizon = set ()
+#        >>> pns_name ('8:1:Z,1:A,,12:1:B,1:B,1:C,,4:1:D,,', horizon)
+#        '8:1:A,1:Z,,8:1:B,1:C,,1:D,'
+#        >>> horizon
+#        >>> set(['A', 'B', 'Z', 'C', 'D'])
+#
+# The pns_name function is the real magic behind PNS and Allegra. This
+# apparently trivial piece of code has outstanding applications for
+# computer networks. It can validate *and* map non-dispersed semantic
+# graphs made of arbitrary articulations of 8-bit byte strings. Which
+# means that it can be used to index any articulation in a network
+# system that is infinitely diverse, yet dispersed in no given context.
 #        
+# If you don't understand the magnitude of the disruption made possible
+# by Public Names applications, skip it alltogether and wait ... ;-)
+#
 # KISS!
 #
-# The PNS/Model is implemented as a simple sequence of strings.
+# The rest of PNS/Model is implemented as a simple sequence of strings.
 #
 # ['subject', 'predicate']
 # ['subject', 'predicate', 'object']
@@ -202,8 +220,8 @@ if __name__ == '__main__':
 #
 # where 'ip:port' is a PNS/TCP session text reference for the PNS peer.
 #
-# The whole Object shebang is not so nice, specially if this design was to be
-# reimplemented as system pipes, a la DJB, passing netstrings between
+# The whole Object shebang is not so nice, specially if this design was to
+# ever be reimplemented as system pipes, a la DJB, passing netstrings between
 # supervised and reliably logged queued processes and safe asynchronous
 # network I/O. A simple string/list/tuple keeps you think on industrial
 # strength simplicity of the protocol.
@@ -221,24 +239,36 @@ if __name__ == '__main__':
 # allways a list, but its copies handled by the threads are mostly tuples.
 #
 #
-# Performances
-#
-# A C module for netstrings and public name validation will certainly improve
-# performances of Allegra. Basically, those two functions are probably the one
-# where the peer will spend the greater share if not most of its CPU time.
-#
-#
-# Blurb: Python Rules!
+# Python Rules!
 #
 # With Python it is possible to design large cross-plateform projects,
-# then to reach a stable interface and implementation faster than with C.
-# And yet be able# to reuse countless C libs or optimize to a C module later.
+# then reach a stable interface and implementation faster than with C.
 #
-# Allegra *is* such a projet (on a individual scale, myself ;-) and I could
-# not have made it without Python 2.4, sets types, C heap queue, bsddb or
-# expat bindings and standard distribution. Compared to Java or C#, Python
-# offers a narrower set of practical solutions, the one selected by its
-# community. One database C library (BSDDB). One XML C library (Expat and its
-# cElementTree sibbling). One Object Database C library (cPickle) and
-# interface (ZODB). Peer review tend to elect a few standard implementation,
-# possibly one for common functions. 
+# With very decent performances, thanks to countless fine C libs and the
+# ability to spend more time on doing the right thing first.
+#
+# Optimizing a few high profile functions to a C module later is a sure
+# bet, with CPython's VM sources and bindings at hand.
+#
+# Allegra is a projet I could not have completed without CPython 2.4, 
+# sets types, C heap queue, bsddb or expat bindings and standard distribution.
+# Compared to Java or C#, Python offers a narrower set of practical solutions,
+# the one selected by its community. One database C library (BSDDB). One XML
+# C library (Expat and its cElementTree sibbling). One Object Database C
+# library (cPickle) and interface (ZODB).
+#
+# Peer review tend to elect a few standard implementation, possibly one for
+# common functions. And it has been at work on the CPython VM and bindings
+# for more years than C# or Java.
+#
+# Which means that as a developer I don't assume that my Python code is
+# portable everywhere. I know it is, because the source code of the VM
+# *is* of the same trunk and that it has been under a very long process
+# of review by the worse bunch of all programmers, by mathematicians.
+#
+# I truly hope this module will make CPython the next Java-killer on the
+# next generation of peer network devices. Although with CPython 2.2
+# installing Windows XP Pro on a new Thinkpad and the same running
+# mod_python on Nokia's OS, I'm not really taking any risks ;-)
+# 
+# CPython 2.4 is finally becoming mainstream.
