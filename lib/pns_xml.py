@@ -220,7 +220,7 @@ def articulate_enclosure (self, dom):
         # declarations but without processing intstructions.
         # this *is* <?xml version="1.0" encoding="UTF-8"?>
         #
-        self.xml_string = xml_utf8.xml_strings (
+        self.xml_string = xml_utf8.xml_string (
                 valid.xml_root, valid.xml_prefixes
                 )
         self.xml_first = self.xml_children = None
