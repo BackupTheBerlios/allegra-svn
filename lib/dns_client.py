@@ -265,6 +265,7 @@ class DNS_client (udp_peer.UDP_dispatcher):
 
         # Parameters
         #
+        dns_failover = 2
         dns_timeout = 1
         #
         # one second timeout, enough to notice the delay, reduce to a lower
