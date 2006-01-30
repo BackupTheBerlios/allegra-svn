@@ -191,7 +191,7 @@ class PRESTo_dom (
                         self.synchronized ((self.sync_read, ()))
                 elif mode[0] == 'w':
                         self.synchronized ((self.sync_write, (
-                                xml_unicode.xml_string (self.xml_root, self),
+                                xml_unicode.xml_document (self)
                                 )))
                         self.synchronized ((self.sync_close, ('w', )))
 
