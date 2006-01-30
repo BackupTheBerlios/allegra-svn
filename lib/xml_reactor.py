@@ -91,15 +91,15 @@ class XML_collector (xml_dom.XML_dom):
                                 self.xml_expat.Parse (data, 0)
                         except expat.ExpatError, error:
                                 self.xml_expat_ERROR (error)
-                                dom.xml_expat = None
+                                self.xml_expat = None
 
-        def found_terminator (self, data):
+        def found_terminator (self):
                 if self.xml_error == None:
                         try:
                                 self.xml_expat.Parse ('', 1)
                         except expat.ExpatError, error:
                                 self.xml_expat_ERROR (error)
-                        dom.xml_expat = None
+                        self.xml_expat = None
                 return True
 
         # An XML collector and parser, bundled to the DOM, because flat

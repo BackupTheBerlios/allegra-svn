@@ -213,13 +213,12 @@ def xml_string (root, prefixes, delimiter=''):
 
 
 def xml_document (
-        root, dom, delimiter='', 
-        head='<?xml version="1.0" encoding="UTF8"?>'
+        dom, delimiter='', head='<?xml version="1.0" encoding="UTF8"?>'
         ):
         if dom.xml_pi:
                 head = delimiter.join ((head, xml_pi (dom.xml_pi)))
         return delimiter.join ((
-                head, xml_string (root, dom.xml_prefixes, delimiter)
+                head, xml_string (dom.xml_root, dom.xml_prefixes, delimiter)
                 ))
 
 

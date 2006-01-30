@@ -99,9 +99,9 @@ class XML_dom (object):
         xml_unicoding = 1
         xml_expat = xml_parsed = xml_error = None
 
-        def __init__ (self, xml_prefixes=None, xml_pi=None):
-                self.xml_prefixes = xml_prefixes or {}
-                self.xml_pi = xml_pi or {}
+        def __init__ (self, prefixes=None, pi=None):
+                self.xml_prefixes = prefixes or {}
+                self.xml_pi = pi or {}
 
         def xml_parser_reset (self):
                 if self.xml_unicoding:
@@ -192,6 +192,7 @@ def parse_string (data, DOM=XML_dom, unicoding=1):
                 dom.xml_expat.Parse (data, 1)
         except expat.ExpatError, error:
                 dom.xml_expat_ERROR (error)
+        dom.xml_expat = None
         return dom
 
 
@@ -209,6 +210,7 @@ def parse_more (more, DOM=XML_dom, unicoding=1):
                 dom.xml_expat.Parse ('', 1)
         except expat.ExpatError, error:
                 dom.xml_expat_ERROR (error)
+        dom.xml_expat = None
         return dom
 
 
