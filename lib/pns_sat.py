@@ -223,7 +223,8 @@ def pns_sat_re (
                                 continue
                                 
                         name = pns_sat_re (
-                                text, set (), articulators, HORIZON, depth+1 
+                                text, set (), articulators, 
+                                whitespaces, HORIZON, depth+1 
                                 ) 
                         if name:
                                 names.append (name)
@@ -274,19 +275,19 @@ def pns_sat_chunk (
                 # chunk no more, articulate ...
                 name = pns_sat_re (
                         articulated, horizon, articulators, 
-                        HORIZON, depth, whitespaces
+                        whitespaces, HORIZON, depth
                         )
                 if name:
                         chunks.append ((name, articulated))
                 return horizon
                 
         # bottom of the stack reached, split ...
-        names = articulators[depth].split (articulated)
+        names = [n for n in articulators[depth].split (articulated) if n]
         if len (names) > 1:
                 name = pns_model.pns_name (netstring.encode (names), horizon)
                 if name:
                         chunks.append ((name, articulated))
-        elif len (names) > 0 and names[0]:
+        elif names and names[0]:
                 chunks.append ((names[0], None))
         return horizon
         
