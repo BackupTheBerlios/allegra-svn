@@ -17,19 +17,62 @@
 
 ""
 
-from allegra import \
-        netstring, xml_dom, xml_utf8, xml_unicode, pns_model, pns_sat
+from allegra import (
+        netstring, loginfo,              # Asynchronous Network Peer 
+        xml_dom, xml_utf8, xml_unicode,  # Internet Application Protocols
+        pns_model, pns_sat               # PNS Reference Implementation
+        )
 
 
 # XML to PNS articulation (UTF-8 encoding only!)
+
+# PNS/SAT Parameters
 
 SAT_RE = {
         'en': pns_sat.SAT_ARTICULATE_EN,
         'fr': pns_sat.SAT_ARTICULATE_FR,
         }
 
+SAT_CHUNK = 504
+
 XML_LANG = 'en'
 
+PNS_LENGTH = 1024
+
+
+# What to do with the PNS Statement tuple produced
+
+def log_statement (model):
+        "Log valid statement to STDOUT, errors to STDERR"
+        #
+        # Length validation, extracted from PNS/Model (there is no need
+        # to valide the subject and context as Public Names, this should
+        # have been allready done!)
+        #
+        if model[0]:
+                sp_len = len (model[0]) + len (model[1]) + len (
+                        '%d%d' % (len (model[0]), len (model[1]))
+                        )
+                if sp_len > PNS_LENGTH/2:
+                        assert None == loginfo.log (
+                                netstring.encode (model), 
+                                '3 invalid statement length %d' % sp_len
+                                )
+                        return False
+
+                if model[2]:
+                        model = (model[0], model[1], model[2][:(
+                                PNS_LENGTH - sp_len - len (
+                                        '%d' % (PNS_LENGTH - sp_len)
+                                        )
+                                )], model[3])
+        loginfo.log (netstring.encode (model))
+        return True
+
+
+# The PNS/XML Articulators for context and subject markup, CDATA elements
+# and enclosure (XHTML embedded in a description for instance, etc ...),
+# attributed as methods to all or one of the three classes below.
 
 def articulate_context (self, dom):
         parent = self.xml_parent ()
@@ -110,7 +153,7 @@ def articulate_cdata (self, dom):
                 SAT_HORIZON = self.SAT_HORIZON or dom.SAT_HORIZON
                 pns_sat.pns_sat_chunk (
                         self.pns_object, self.pns_horizon, self.pns_sats,
-                        SAT_RE, 507, SAT_STRIP, SAT_HORIZON, 0
+                        SAT_RE, SAT_CHUNK, SAT_STRIP, SAT_HORIZON, 0
                         )
                 if (
                         len (self.pns_sats) > 1 and 
@@ -158,7 +201,7 @@ def articulate_enclosure (self, dom):
         SAT_HORIZON = self.SAT_HORIZON or dom.SAT_HORIZON
         pns_sat.pns_sat_chunk (
                 self.pns_object, self.pns_horizon, self.pns_sats, 
-                SAT_RE, 507, SAT_STRIP, SAT_HORIZON, 0
+                SAT_RE, SAT_CHUNK, SAT_STRIP, SAT_HORIZON, 0
                 )
         if (
                 len (self.pns_sats) > 1 and 
@@ -193,7 +236,7 @@ def articulate_enclosure (self, dom):
 
 class XML_PNS_subject (xml_dom.XML_element):
         
-        # The basic SAT and RE articulator, your mileage may vary ...
+        # The basic RE articulator type, your mileage may vary ...
         
         pns_context = pns_subject = pns_object = xml_string = ''
 
