@@ -141,12 +141,12 @@ def xml_unprefixed (e, xml_attributes='', encoding='ASCII'):
         else:
                 tag = e.xml_name.split (u' ')[1].xml_name.encode (encoding)
         if e.xml_attributes:
-                xml_attributes = ''.join ([
+                xml_attributes = ''.join ((
                         ' %s="%s"' % (
                                 name.encode (encoding, 'xmlcharrefreplace'), 
                                 xml_attr (value, encoding))
                         for name, value in e.xml_attributes.items ()
-                        ])
+                        ))
         if e.xml_children:
                 if e.xml_first:
                         yield '<%s%s>%s' % (
@@ -187,12 +187,12 @@ def xml_unprefixed (e, xml_attributes='', encoding='ASCII'):
 def xml_prefixed (e, prefixes, xml_attributes='', encoding='ASCII'):
         tag, xmlns = xml_prefix_FQN (e.xml_name, prefixes, encoding)
         if e.xml_attributes:
-                xml_attributes += xmlns + ''.join ([
+                xml_attributes += xmlns + ''.join ((
                         xml_prefix_FQN_attribute (
                                 name, value, prefixes, encoding
                                 )
                         for name, value in e.xml_attributes.items ()
-                        ])
+                        ))
         if e.xml_children:
                 if e.xml_first:
                         yield '<%s%s>%s' % (
@@ -234,13 +234,13 @@ def xml_prefixed (e, prefixes, xml_attributes='', encoding='ASCII'):
                          
 
 def xml_pi (processing_instructions, encoding='ASCII', delimiter=''):
-        return delimiter.join ([
-                delimiter.join (['<?%s %s?>' % (
+        return delimiter.join ((
+                delimiter.join (('<?%s %s?>' % (
                         pi[0].encode (encoding, 'xml_charrefreplace'),
                         cdata.encode (encoding, 'xml_charrefreplace')
-                        ) for cdata in pi[1]])
+                        ) for cdata in pi[1]))
                 for pi in processing_instructions.items ()
-                ])
+                ))
 
 
 def xml_string (root, prefixes, encoding='ASCII', delimiter=''):

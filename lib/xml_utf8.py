@@ -117,10 +117,10 @@ def xml_unprefixed (e, xml_attributes=''):
         else:
                 tag = e.xml_name.split (' ')[1]
         if e.xml_attributes:
-                xml_attributes = ''.join ([
+                xml_attributes = ''.join ((
                         ' %s="%s"' % (name, xml_attr (value))
                         for name, value in e.xml_attributes.items ()
-                        ])
+                        ))
         if e.xml_children:
                 if e.xml_first:
                         yield '<%s%s>%s' % (
@@ -159,10 +159,10 @@ def xml_unprefixed (e, xml_attributes=''):
 def xml_prefixed (e, prefixes, xml_attributes=''):
         tag, xmlns = xml_prefix_FQN (e.xml_name, prefixes)
         if e.xml_attributes:
-                xml_attributes += xmlns + ''.join ([
+                xml_attributes += xmlns + ''.join ((
                         xml_prefix_FQN_attribute (name, value, prefixes)
                         for name, value in e.xml_attributes.items ()
-                        ])
+                        ))
         if e.xml_children:
                 if e.xml_first:
                         yield '<%s%s>%s' % (
@@ -195,12 +195,12 @@ def xml_prefixed (e, prefixes, xml_attributes=''):
                          
 
 def xml_pi (processing_instructions, delimiter=''):
-        return delimiter.join ([
-                delimiter.join ([
+        return delimiter.join ((
+                delimiter.join ((
                         '<?%s %s?>' % (pi[0], cdata) for cdata in pi[1]
-                        ])
+                        ))
                 for pi in processing_instructions.items ()
-                ])
+                ))
                 
 
 def xml_string (root, prefixes, delimiter=''):
