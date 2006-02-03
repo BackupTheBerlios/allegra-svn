@@ -25,8 +25,8 @@ class Finalization (object):
 	finalization = None
 
 	def __del__ (self):
-		# if any, thunk the finalization through the async_finalized
-		# loop and let async_loop.async_immediate call it ...
+		# if any, thunk the finalization to the async_finalized
+		# loop and let async_loop.async_finalize call it ...
 		if self.finalization == None:
 			return
 
