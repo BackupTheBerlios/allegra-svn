@@ -231,7 +231,7 @@ def async_schedule (when, defered):
 	heapq.heappush (async_scheduled, (when, defered))
 	
 def async_clock ():
-	"call all defered scheduled after now"
+	"call all defered scheduled before now"
 	if not async_scheduled:
 		return
 		
