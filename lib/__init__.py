@@ -21,57 +21,36 @@ __all__ = [
         #
         'netstring', 'prompt', 'loginfo', 
         'async_loop', 'finalization', 'async_core',
-        'select_trigger', 'thread_loop', 'sync_stdio', 'synchronizer', 
+        'select_trigger', 'thread_loop', 'sync_stdio', 
         'async_net', 'async_chat', 'async_limits', 
-        'producer', 'collector', 'reactor', 
-        'udp_peer', 'tcp_server', 'tcp_client', 
+        'producer', 'collector', 'reactor', 'timeouts',
+        'udp_peer', 'tcp_server', 'tcp_client', 'synchronizer', 
         #
         # Web Application Protocols
         #
         'dns_client', 'mime_headers', 'mime_reactor',
         # 'smtp_client', 'pop_client', 'nnrp_client', 
-        # 'smtp_server', 'pop_server', 'nnrp_server', 
         'http_reactor', 'http_client', 'http_server', 
         'xml_dom', 'xml_unicode', 'xml_utf8', 'xml_reactor',
         #
         # PNS, The Reference Implementation
         #
-        'pns_model', 'pns_sat', 'pns_xml', 'pns_mime',
+        'pns_model', 'pns_sat', 'pns_mime', 'pns_xml', 'pns_rss', # 'pns_html', 
         'pns_tcp', 'pns_resolution', 'pns_inference', 'pns_udp', 
         'pns_peer', 'pns_client', 'pns_articulator', 
         #
         # Allegra Presto
         #
-        'presto', 'presto_http', # presto_smtp, presto_pop,
-        'presto_prompt', 'presto_bsddb', 'presto_pns', 
+        'presto', 'presto_http', 
+        'presto_prompt', # 'presto_bsddb', 'presto_pns', 
         #
         # The Last DNS Application
         #
-        # 'dns_peer'
+        # 'pns_dns'
         ]
 
 __author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
 
-# Note about This Implementation
-#
-#
-# PNS Developper ToolKit
-#
-# Allegra, the library, can be applied to something else than the Semantic
-# Web Peer. First and foremost, it is a reference implementation of PNS and
-# it should provides a practical toolkit for PNS developpers.
-#
-# Many modules include a script that is their "primary" application, 
-# their first practical application test cases. For instance you 
-# can use the module that implements PNS/Model to validate a PNS/TCP
-# session input or output:
-#        
-#   python -00 pns_model.py < input 1> valid 2> invalid
-# 
-# Other applications of the pns_model.py API are to be found in the various
-# other pns_*.py modules of Allegra that implement PNS peer and user agents.
-#
-#
 # Roadmap
 #
 # This is a reference implementation. It is slow, unoptimized and possibly
