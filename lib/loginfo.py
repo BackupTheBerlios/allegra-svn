@@ -204,33 +204,31 @@ def loginfo_traceback (ctb=None):
 
 # SYNOPSIS
 #
-# 	>>> from allegra import loginfo
-#	>>> loginfo.log ('data')
-#	data
-#	>>> loginfo.log ('data', 'info')
-#	info
-#	data
+# >>> from allegra import loginfo
+#>>> loginfo.log ('message')
+# message
+# >>> loginfo.log ('message', 'info')
+# info
+# message
 #	
-#	>>> try:
-#		foobar ()
-#	except:
-#		ctb = loginfo.loginfo_traceback ()
-#	traceback,
-#	  exceptions.NameError,
-#	  name 'foobar' is not defined,
-#	  11:<stdin>|?|2,
+# >>> try:
+# ...    foobar ()
+# ... except:
+# ...    ctb = loginfo.loginfo_traceback ()
+# traceback
+#   exceptions.NameError
+#   name 'foobar' is not defined
+#     <stdin> | ? | 2
 #
-#	>>> logged = loginfo.Loginfo ()
-#	>>> logged.log ('data')
-#	Loginfo pid="8da4e0"
-#	data
+# >>> logged = loginfo.Loginfo ()
+# >>> logged.log ('message')
+# Loginfo pid="8da4e0"
+# message
 #	
-#	>>> logged.log ('data', 'info')
-#	info,
-#	  Loginfo pid="8da4e0"
-#	  data
-#
-#	>>>
+# >>> logged.log ('message', 'info')
+# info
+#   Loginfo pid="8da4e0"
+#   message
 #
 # The Loginfo interface and implementation provide a simpler, yet more
 # powerfull and practical logging facility than the one currently integrated
