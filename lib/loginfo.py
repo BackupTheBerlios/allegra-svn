@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"http://laurentszyster.be/loginfo/"
+""
 
 import sys, types
 
@@ -118,7 +118,7 @@ class Loginfo (object):
 	loginfo_logger = Loginfo_stdio ()
 	
 	def __repr__ (self):
-		return '%s pid="%x"' % (
+		return '%s id="%x"' % (
 			self.__class__.__name__, id (self)
 			)
 
@@ -202,6 +202,11 @@ def loginfo_traceback (ctb=None):
 	return ctb
 
 
+__doc__ = "http://laurentszyster.be/blog/loginfo/"
+
+__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
+        
+
 # SYNOPSIS
 #
 # >>> from allegra import loginfo
@@ -222,12 +227,12 @@ def loginfo_traceback (ctb=None):
 #
 # >>> logged = loginfo.Loginfo ()
 # >>> logged.log ('message')
-# Loginfo pid="8da4e0"
+# Loginfo id="8da4e0"
 # message
 #	
 # >>> logged.log ('message', 'info')
 # info
-#   Loginfo pid="8da4e0"
+#   Loginfo id="8da4e0"
 #   message
 #
 # The Loginfo interface and implementation provide a simpler, yet more
