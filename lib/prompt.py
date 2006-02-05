@@ -85,3 +85,38 @@ def python_prompt (line, env):
                 
         else:
                 return (method, result)
+        
+
+__doc__ = "http://laurentszyster.be/blog/prompt/"
+
+__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
+        
+# Synopsis
+#
+# >>> from allegra import prompt
+# >>> env = {}
+# >>> prompt.python_prompt ('1+1', env)
+# ('eval', 2)
+# >>> prompt.python_prompt ('a=1+1', env)
+# ('exec', None)
+# >>> env['a']
+# 2
+# >>> prompt.python_prompt ('foobar', env)
+# ('excp', (
+#     'exceptions.NameError', 
+#     "name 'foobar' is not defined", 
+#     [
+#         ('prompt.py', 'python_eval', '53'),
+#         ('python_line', '?', '0')
+#         ]
+#     ))
+# >>> try:
+# ...     foobar
+# ... except:
+# ...     prompt.compact_traceback ()
+# ...
+# (
+#     'exceptions.NameError', 
+#     "name 'foobar' is not defined", 
+#     [('<stdin>', '?', '2')]
+#     )
