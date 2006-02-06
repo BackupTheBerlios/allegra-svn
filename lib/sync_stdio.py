@@ -172,6 +172,6 @@ if __name__ == '__main__':
 		' - Copyright 2005 Laurent A.V. Szyster'
 		' | Copyleft GPL 2.0', 'info'
 		)
-	Python_prompt ().start ()
+        Python_prompt ().start ()
         async_loop.dispatch ()
         
