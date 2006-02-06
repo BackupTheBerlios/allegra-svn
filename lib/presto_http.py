@@ -130,6 +130,28 @@ def presto_decode (urlencoded, vector, encoding='UTF-8'):
         return vector
 
 
+# You can do pretty much what you want with an HTTP request from within the
+# component presto implementation: handle HTTP/1.1 extended methods, collect
+# and process file uploads synchronously or set the response's headers and
+# body. However, the bigger part of a web application ban best be reduced
+# to its REST. Below is PRESTo's implementation of REST for URL encoded form
+# data submitted by POST and GET methods.
+#
+# Feel free to implement your own flavor of AJAX, RPC or whatever crazy
+# template language you happen to like. I'll stay with the stable stack:
+#
+#        XML + XSLT = XHTML + CSS + JavaScript
+#
+# It saves PRESTo the burden of display rendering, and saves its 
+# applications all the troubles that inevitably arise from the use of
+# client/server designs for a stateless protocol like HTTP.
+#
+# I consider AJAX the harmfull return of the C/S zombie. Web pages with 
+# JavaScript user interface automation is nice, but holding the full
+# application state in a crash-prone browser and an insecure PC is not
+# a very good idea. If cookies aren't enough
+
+
 def presto_vector (
         urlencoded, vector, interfaces, encoding='UTF-8', strict=True
         ):
@@ -164,8 +186,21 @@ def presto_vector (
         # application should be guarded against malicious attacks like a
         # flood of 
 
-# Functions that completes the HTTP REST response, without or with a 
-# benchmark producer.
+# Functions that completes PRESTo's asynchronous REST response headers and
+# body, with or without a benchmark producer:
+#
+# HTTP/1.1 200 Ok
+# Content-Type: text/xml; charset=iso-8859-1
+#
+# <PRESTo 
+#    presto="http://presto" 
+#    ... request/response state ...
+#    >
+#    ... result: byte string, unicode, XML element or generator ...
+#    <instance/>
+#    <!-- ... benchmarks ... -->
+# </PRESTo>
+#
 
 def rest_response (reactor, result, response):
         charsets = mime_headers.preferences (
@@ -208,7 +243,9 @@ else:
         rest = rest_response
 
 
-def get_method (component, reactor):
+# GET form data, return the REST
+
+def get_rest (component, reactor):
         if reactor.http_request[0] != 'GET':
                 reactor.http_response = 405 # Method Not Allowed
                 return
@@ -232,7 +269,9 @@ def get_method (component, reactor):
                         ), 200)
         
 
-def post_method (component, reactor):
+# POST form data, return the REST
+
+def post_rest (component, reactor):
         if reactor.mime_collector_body == None:
                 if (
                         reactor.http_request[0] == 'POST' and
@@ -266,7 +305,7 @@ def post_method (component, reactor):
                         ), 200)
         
 
-def form_method (component, reactor):
+def form_rest (component, reactor):
         "GET or POST handler for REST request"
         if reactor.mime_collector_body != None:
                 if component.xml_attributes:
@@ -321,7 +360,7 @@ def form_method (component, reactor):
                         ), 200)
 
 
-def post_multipart (component, reactor):
+def post_multipart (reactor):
         if reactor.mime_collector_body == None:
                 if (
                         reactor.http_request[0] == 'POST' and
@@ -329,13 +368,18 @@ def post_multipart (component, reactor):
                                 'content-type'
                                 ].startswith ('multipart/form-data')
                         ):
-                        reactor.mime_collector_body = \
-                                mime_reactor.MULTIPART ()
-                else:
-                        reactor.http_response = 405 # Method Not Allowed
-        else:
-                pass # continue ...
-                
+                        return True
+
+        return False
+        
+        # Synopsis
+        #
+        # def presto (component, reactor):
+        #        if presto_http.post_multipart (reactor):
+        #                ... set a reactor.mime_collector_body ...
+        #
+        #        ... handle errors or finalize the collected body ...
+
                 
 if __name__ == '__main__':
         import sys, time
@@ -362,9 +406,8 @@ if __name__ == '__main__':
                 ])
         server.async_catch = async_loop.async_catch
         async_loop.async_catch = server.tcp_server_catch
+        del server
         assert None == loginfo.log (
                 'startup seconds="%f"' % (time.clock () - t), 'PRESTo/HTTP'
                 )
         async_loop.dispatch ()
-        
-        
