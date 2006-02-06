@@ -211,16 +211,18 @@ async_finalized = collections.deque ()
 def async_finalize ():
 	"call all finalization queued"
 	while True:
-		try:
-			finalize, finalized = async_finalized.popleft ()
-		except IndexError:
-			break
-			
-		try:
-			finalize (finalized)
-		except:
-			loginfo.loginfo_traceback ()
-	
+                try:
+                       finalized = async_finalized.popleft ()
+                except IndexError:
+                       break
+                       
+                try:
+                       finalized.finalization = finalized.finalization (
+                               finalized
+                               ) # finalize and maybe continue ...
+                except:
+                       loginfo.loginfo_traceback () # log exception and
+        
 	
 # Scheduled Events
 

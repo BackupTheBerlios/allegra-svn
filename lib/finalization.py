@@ -25,20 +25,8 @@ class Finalization (object):
 	finalization = None
 
 	def __del__ (self):
-		# if any, thunk the finalization to the async_finalized
-		# loop and let async_loop.async_finalize call it ...
-		if self.finalization == None:
-			return
-
-		async_loop.async_finalized.append ((
-			self.finalization, self
-			))
-		self.finalization = None
-		#
-		# since exceptions are ignored in __del__ and result in
-		# warnings instead, the same applies to the 'finalization'
-		# callable and they should not be more complex than defering
-		# for immediate execution in async_loop.
+                if self.finalization != None:
+                         async_loop.async_finalized.append (self)
 
 	# the purpose of finalization is to implement asynchronous pipe-like
 	# interfaces, like this:
@@ -53,12 +41,6 @@ class Finalization (object):
 	# HTTP factory, it will be passed as argument to the callable instance
 	# factoried by 'mailto'. Effectively, the collected web page is mailed
 	# as an attachement to me.
-	#
-	# there is no other practical way to program asynchronous peer
-	# workflow from the interpreter's prompt. 
-	#
-	# this is the REBOL way ... with a *real* language ;-)
-
 
 # Join
 #
