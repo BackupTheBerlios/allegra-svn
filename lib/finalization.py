@@ -19,28 +19,14 @@
 
 from allegra import async_loop
 
-
 class Finalization (object):
 
-	finalization = None
+        finalization = None
 
-	def __del__ (self):
+        def __del__ (self):
                 if self.finalization != None:
                          async_loop.async_finalized.append (self)
 
-	# the purpose of finalization is to implement asynchronous pipe-like
-	# interfaces, like this:
-	#
-	#	get (
-	#		'http://del.icio.us/tag/semantic'
-	#		).finalization = mailto (
-	#			'contact@laurentszyster.be'
-	#			)
-	#
-	# when the instance returned by wget is dereferenced by its pipeline
-	# HTTP factory, it will be passed as argument to the callable instance
-	# factoried by 'mailto'. Effectively, the collected web page is mailed
-	# as an attachement to me.
 
 # Join
 #
