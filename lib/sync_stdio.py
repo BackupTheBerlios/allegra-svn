@@ -173,4 +173,5 @@ if __name__ == '__main__':
 		' | Copyleft GPL 2.0', 'info'
 		)
 	Python_prompt ().start ()
-	async_loop.loop ()
+        async_loop.dispatch ()
+        
