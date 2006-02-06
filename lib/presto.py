@@ -328,8 +328,7 @@ class PRESTo_root (loginfo.Loginfo):
                                 ):
                                 presto_module.presto_onload (self)
                 except:
-                        self.loginfo_traceback ()
-                        return
+                        return self.loginfo_traceback ()
         
                 # update this PRESTo root XML namespace to classes mapping
                 # with any module's name that has an 'xml_name' attribute.
@@ -673,27 +672,26 @@ def presto_xml (
         # from it. Optmization in Python then in C may yield significant
         # improvement ...
 
+
+def presto_ctb (ctb):
+        return '<excp xmlns="http://presto/">%s</excp>' % presto_xml (
+                ctb, set (), ''
+                )
+
 def presto_rest (method, component, reactor):
         try:
                 result = method (component, reactor)
         except:
-                # log traceback via the handler
-                return (
-                        '<presto:excp'
-                        ' xmlns:presto="http://presto/"'
-                        ' >%s</presto:excp>' % presto_xml (
-                                loginfo.loginfo_traceback (), set ()
-                                )
-                        )
+                return presto_ctb (loginfo.loginfo_traceback ())
                                 
-        # return <presto/> for None (the "default" continuation)
         if result == None:
-                return '<presto:presto xmlns:presto="http://presto/" />'
+                # None return <presto/>
+                return '<presto xmlns="http://presto/" />'
                 
         if (
-                type (result) in types.StringTypes or 
-                hasattr (result, 'more') or 
-                hasattr (result, 'xml_name')
+                type (result) in (str, unicode) or 
+                hasattr (result, 'xml_name') or
+                hasattr (result, 'more')
                 ):
                 # UNICODE, byte string, producer or XML element, ...
                 return result
@@ -740,3 +738,7 @@ def presto_route_set (element, dom):
         # note that elements and components do not worry about cleaning up
         # this routing table: such elements and components are not meant to
         # be updated in part but in whole.
+
+# TODO: get the XML namespaces prefixes issue right (optimize for 8-bit
+#       byte string dump and an unprefixed PRESTo namespace, this *is*
+#       the framework context ...).
