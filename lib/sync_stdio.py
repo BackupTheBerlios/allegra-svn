@@ -167,6 +167,11 @@ class Python_prompt (Sync_prompt):
 		
 
 if __name__ == '__main__':
+        import sys
+        if '-d' in sys.argv:
+                sys.argv.remove ('-d')
+                loginfo.Loginfo_stdio.log = \
+                        loginfo.Loginfo_stdio.loginfo_netlines     
 	assert None == loginfo.log (
 		'Allegra Prompt'
 		' - Copyright 2005 Laurent A.V. Szyster'
