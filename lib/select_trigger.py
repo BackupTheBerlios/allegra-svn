@@ -180,6 +180,7 @@ else:
 
 # Trigger.log = Trigger.log_info = loginfo.Loginfo.log
 Trigger.select_triggers = 0
+Trigger.finalization = None
 
 
 class Select_trigger (loginfo.Loginfo, finalization.Finalization):
