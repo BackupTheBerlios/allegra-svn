@@ -19,13 +19,15 @@
 
 from allegra import async_loop
 
+
 class Finalization (object):
 
         finalization = None
+        async_finalized = async_loop.async_finalized
 
         def __del__ (self):
                 if self.finalization != None:
-                         async_loop.async_finalized.append (self)
+                         self.async_finalized.append (self)
 
 
 # Join
