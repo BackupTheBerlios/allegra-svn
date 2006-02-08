@@ -29,10 +29,11 @@ def xml_tag (name):
 def xml_attr (data, encoding='ASCII'):
         assert type (data) == types.UnicodeType
         data = data.replace (u"&", u"&amp;")
-        data = data.replace (u"'", u"&apos;")
         data = data.replace (u"\"", u"&quot;")
         data = data.replace (u"<", u"&lt;")
-        data = data.replace (u">", u"&gt;")
+        data = data.replace (u"\t", u"&#x9;")
+        data = data.replace (u"\r", u"&#xD;")
+        data = data.replace (u"\n", u"&#xA;")
         return data.encode (encoding, 'xmlcharrefreplace')
 
 def xml_cdata (data, encoding='ASCII'):

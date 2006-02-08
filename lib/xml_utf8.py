@@ -29,9 +29,11 @@ def xml_tag (name):
 def xml_attr (data):
         assert type (data) == types.StringType
         data = data.replace ("&", "&amp;")
-        data = data.replace ("'", "&apos;")
         data = data.replace ("\"", "&quot;")
         data = data.replace ("<", "&lt;")
+        data = data.replace ("\t", u"&#x9;")
+        data = data.replace ("\r", u"&#xD;")
+        data = data.replace ("\n", u"&#xA;")
         return data.replace (">", "&gt;")
 
 def xml_cdata (data):
