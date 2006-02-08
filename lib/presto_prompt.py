@@ -37,11 +37,11 @@ _RE_dir_of = re.compile ('^.*?[(](.*?)[)]$')
 
 PRESTo_types = (types.InstanceType, object)
 
-class _NO_INSTANCE: pass
+class NONE: pass
 
 def presto_xdir (self, instance):
         e = xml_dom.XML_element (u'http://presto/ dir', None)
-        if instance == _NO_INSTANCE:
+        if instance == NONE:
                 e.xml_children = [
                         presto.presto_xml (None, set ()),
                         presto.presto_xml (
@@ -53,10 +53,7 @@ def presto_xdir (self, instance):
         e.xml_attributes = {u'base': _RE_dir_of.match (
                 self.presto_prompt_line
                 ).groups ()[0]}
-        walked = (
-                id (self.presto_prompt_env['__builtins__']),
-                id (self.presto_prompt_env)
-                )
+        walked = set ((id (self.presto_prompt_env), ))
         names = dir (instance)
         try:
                 properties = set (instance.__dict__.keys ())
@@ -65,31 +62,25 @@ def presto_xdir (self, instance):
         else:
                 names = list (set (names).difference (properties))
         e.xml_children = [
-                presto.presto_xml (instance, set (walked)),
-                presto.presto_xml (names, set ())
+                presto.presto_xml (instance, walked), # walked)),
+                presto.presto_xml (names, walked)
                 ]
         if properties:
                 e.xml_children.append (presto.presto_xml (dict ([
                         (n, instance.__dict__.get (n)) for n in properties
-                        ]), set (walked)))
+                        ]), walked))
         # self.presto_prompt_env['__builtins__'] = None
         return e
         
         
 def presto_prompt_async (self, reactor):
-        # 0. if no prompt line, return None
+        # 1. setup the interpreter environement
         #
         self.presto_prompt_line = reactor.presto_vector.get (u'prompt')
-        if not self.presto_prompt_line:
-                return
-                
-        # 1. setup the interpreter environement and decode the
-        # prompt line submitted,
-        #
         if self.presto_prompt_env == None:
                 self.presto_prompt_env = {}
         self.presto_prompt_env['xdir'] = (
-                lambda x=_NO_INSTANCE, s=self:presto_xdir (s, x)
+                lambda x=NONE, s=self:presto_xdir (s, x)
                 )
         self.presto_prompt_env['self'] = self
         self.presto_prompt_env['reactor'] = reactor
@@ -103,14 +94,6 @@ def presto_prompt_async (self, reactor):
         method, result = prompt.python_prompt (
                 self.presto_prompt_line, self.presto_prompt_env
                 )
-        # do not walk the __builtins__ or the prompt environnement
-        # dictionnary when serializing Python instance trees in
-        # presto_xml ...
-        #
-        walked = (
-                # id (self.presto_prompt_env['__builtins__']), 
-                id (self.presto_prompt_env), 
-                )
         # remove any references to the instance and the reactor from
         # the prompt environnement (and xdir is one!)
         #
@@ -119,8 +102,7 @@ def presto_prompt_async (self, reactor):
         del self.presto_prompt_env['reactor']
         try:
                 # make sure the _ reference is deleted from the
-                # eval/exec __builtins__ dictionnary, and avoid
-                # nasty infinite loop in presto_xml ...
+                # eval/exec __builtins__ dictionnary ...
                 #
                 del self.presto_prompt_env['__builtins__']['_']
         except:
@@ -128,10 +110,11 @@ def presto_prompt_async (self, reactor):
         #
         # 3. either pass a XML element, a producer, or the Python
         # instance presto_xml string as a result. Note that None
-        # simply result in an empty element.
+        # simply result in an empty element and that this reactor
+        # cannot be considered as a valid producer!
         #
         if method == 'excp':
-                result = presto.presto_xml (result, set (walked))
+                result = presto.presto_xml (result, set ()) # walked))
         elif hasattr (result, 'xml_name') or (
                 result != reactor and hasattr (result, 'more')
                 ):
@@ -140,7 +123,7 @@ def presto_prompt_async (self, reactor):
                 return e
                 
         elif self.presto_prompt_env.has_key ('__builtins__'):
-                result = presto.presto_xml (result, set (walked))
+                result = presto.presto_xml (result, set ())
                 del self.presto_prompt_env['__builtins__']
         return (
                 '<presto:%s'
@@ -169,8 +152,8 @@ def presto_prompt_async (self, reactor):
 
 
 def presto_prompt_sync (self, reactor):
-        line = reactor.presto_vector.get (u'prompt')
-        if not line:
+        source = reactor.presto_vector.get (u'prompt')
+        if not source:
                 reactor ('<presto:presto xmlns:presto="http://presto/" />')
                 reactor ('')
                 return
@@ -178,10 +161,10 @@ def presto_prompt_sync (self, reactor):
         try:        
                 env = self.presto_prompt_env.copy () # not thread-safe!
         except:
-                env = {} 
+                env = {}
         env['reactor']= reactor
         env['self'] = self
-        method, result = prompt.python_prompt (line, env)
+        method, result = prompt.python_prompt (source, env)
         reactor ('<presto:%s xmlns:presto="http://presto/">' % method)
         reactor (presto.presto_xml (result, set ()))
         reactor ('</presto:%s>' % method)
