@@ -22,29 +22,11 @@ import glob, os, stat, mimetypes
 from allegra import xml_unicode, presto, presto_http
 
 
-def presto_index (files):
-        for filename, filestat in files:
-                if stat.S_ISDIR (filestat[0]):
-                        yield (
-                                '<presto:directory name="%s"'
-                                ' mime-type="%s" bytes="%d"'
-                                ' />' % (
-                                        xml_unicode.xml_attr (filename), 
-                                        mimetypes.guess_type (filename)[0],
-                                        filestat[6]
-                                        )
-                                )
-                        
-                elif stat.S_ISREG (filestat[0]):
-                        yield (
-                                '<presto:file name="%s"'
-                                ' mime-type="%s" bytes="%d"'
-                                ' />' % (
-                                        xml_unicode.xml_attr (filename), 
-                                        mimetypes.guess_type (filename)[0],
-                                        filestat[6])
-                                )
-                                
+def filesystem_index (component, reactor):
+        # browse a filesystem
+        pass
+
+
 
 class PRESTo_root (presto.PRESTo_async):
 
@@ -66,10 +48,6 @@ class PRESTo_root (presto.PRESTo_async):
                                 self.presto_root_modules (reactor),
                                 self.presto_root_dynamic (reactor),
                                 ]
-                else:
-                        if reactor.presto_vector[u'dynamic']:
-                                self.xml_children[1] = \
-                                        self.presto_root_dynamic (reactor)
 
         def presto_root_load_module (self, reactor):
                 filename = reactor.presto_vector.get (
@@ -126,16 +104,16 @@ class PRESTo_root (presto.PRESTo_async):
         
         def presto_root_dynamic (self, reactor):
                 path = reactor.presto_vector[u'dynamic']
-                dynamic = [
+                dynamic = (
                         (os.path.basename (n), os.stat (n))
                         for n in glob.glob (u'%s/%s*' % (
                                 self.xml_dom.presto_root.presto_path, path
                                 ))
-                        ]
+                        )
                 return ''.join ((
                         '<presto:dynamic xmlns:presto="http://presto/"'
                         ' path="%s">' % xml_unicode.xml_attr (path),
-                        ''.join ([s for s in presto_index (dynamic)]),
+                        ''.join ((s for s in presto_index (dynamic))),
                         '</presto:dynamic>'
                         ))
 

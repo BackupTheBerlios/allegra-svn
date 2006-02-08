@@ -20,4 +20,4 @@
 
 -->
 <?xml-stylesheet type="text/xsl" href="/styles/presto.xsl"?>
-<presto:sync xmlns:presto="http://presto/" />
+<presto:prompt-sync xmlns:presto="http://presto/" />

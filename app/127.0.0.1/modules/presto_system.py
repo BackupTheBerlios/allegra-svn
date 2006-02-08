@@ -6,12 +6,12 @@
 # other synchronized pipes. Give it a simple web interface using the
 # stock PRESTo synchronized method:
 #
-#        <presto:system 
-#                command="\python24\python pns_rss.py "
+#        <presto:pipe
+#                command="python -OO pns_rss.py"
 #                options="http://feed/"
 #                />
 #
-# The strange thing about the stock PRESTo system command is that it returns
+# The strange thing about the stock PRESTo system pipe is that it returns
 # immediately ... with a new state: a new "job". Remember the good all batch
 # days? As the synchronous job proceeds its output is buffered by this
 # element, its status (time, size, etc ...) updated until it exits.
@@ -41,15 +41,14 @@
 # same hosts were legacy applications are in production! So it is both safe
 # and practical *not* to dedicate a thread for each job batched.
 #
-# With PRESTo, system administrators can easely to set a high-enough limit
-# on concurrency, on the number of synchronized thread queue available to
-# handle jobs. Exactly as they do with Apache, yet with the ability to
-# develop a realy asynchronous web interface for their job management.
+# With PRESTo, system administrators can easely set a high-enough limit
+# on  the number of synchronized thread queue available to handle jobs.
+# Exactly as they do with Apache, yet with the ability to develop an
+# asynchronous web interface for their job management. 
 #
 # And the best part is that users won't even notice about rationning.
 # Because the response to job submission and its status are managed and
 # available asynchronously to the web browser. Checking the status of
 # a synchronized job (like a CC submission) is as fast as it can be ...
-# and weight nothing for PRESTo.
-#
+# asynchronously.
 

@@ -22,7 +22,7 @@ class PRESTo_form (presto.PRESTo_async):
         
         xml_name = u'http://presto/ form'
         
-        presto = presto_http.form_method
+        presto = presto_http.form_rest
         
         presto_interfaces = set ((u'subject', u'object'))
 

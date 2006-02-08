@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="ascii"?>
 <!--
 
   Copyright (C) 2005 Laurent A.V. Szyster
@@ -19,21 +19,5 @@
   USA
 
 -->
-<?xml-stylesheet type="text/xsl" href="/styles/database.xsl"?>
-<presto:route 
-    xmlns:presto="http://presto/" 
-    >
-    <presto:bsddb-open 
-        database="./app/databases" 
-        name="database.db" 
-        type="HASH" 
-        />
-    <presto:bsddb-get 
-        database="./app/databases" 
-        name="database.db" 
-        />
-    <presto:bsddb-set 
-        database="./app/databases" 
-        name="database.db" 
-        />
-</presto:route>
+<?xml-stylesheet type="text/xsl" href="/styles/modules.xsl"?> 
+<modules xmlns="http://presto/" />

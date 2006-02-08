@@ -18,7 +18,9 @@
  *
  */
 
-@namespace url(http://www.w3.org/1999/xhtml); /* set default namespace to HTML */
+/* set default namespace to XHTML */
+
+@namespace url(http://www.w3.org/1999/xhtml); 
 
 /* a few base HTML tag styles */
 
@@ -27,6 +29,7 @@ body {
 	border: 0;
 	padding: 0;
 	background-color: #FFFFFF;
+	font-family: 'Trebuchet MS', 'Lucida Grande', Verdana, Arial, Sans-Serif;
 	}
 	
 a {
@@ -90,7 +93,9 @@ div, span, table, thead, tbody, tfoot, tr, td {
 	padding: 0px;
 	}
 
-/* The Basic PRESTo styles */
+/* The Basic PRESTo styles - Mozilla Only! */
+
+/* 1. PRESTo/XML */
 
 span[class="presto-str"] {
 	font-family: -moz-fixed;
@@ -109,6 +114,33 @@ span[class="presto-unicode"] {
 	padding-left: 2px;
 	padding-right: 2px;
 	}
+
+table[class="presto-map"] {
+	margin: 0px;
+	padding: 0px;
+	}
+
+tr[class="presto-map-item"] {
+	margin: 0px;
+	padding: 0px;
+	}
+
+td[class="presto-map-key"] {
+	margin: 0px;
+	padding: 0px;
+	vertical-align: top;
+	background-color: #EEEEEE;
+	border: 1px solid #EEEEEE;
+	}
+
+td[class="presto-map-value"] {
+	margin: 0px;
+	padding: 0px;
+	vertical-align: top;
+	border: 1px solid #EEEEEE;
+	}
+
+/* 2. The four basic visual components of a page */
 
 div[class="presto-menu"] {
 	padding: 2px;
@@ -134,31 +166,6 @@ div[class="presto-body"] {
 	}
 
 div[class="presto-box"] {
-	border: 1px solid #EEEEEE;
-	}
-
-table[class="presto-map"] {
-	margin: 0px;
-	padding: 0px;
-	}
-
-tr[class="presto-map-item"] {
-	margin: 0px;
-	padding: 0px;
-	}
-
-td[class="presto-map-key"] {
-	margin: 0px;
-	padding: 0px;
-	vertical-align: top;
-	background-color: #EEEEEE;
-	border: 1px solid #EEEEEE;
-	}
-
-td[class="presto-map-value"] {
-	margin: 0px;
-	padding: 0px;
-	vertical-align: top;
 	border: 1px solid #EEEEEE;
 	}
 
@@ -197,13 +204,6 @@ a[class="presto-method"] {
 	padding-right: 4px;
 	}
   
-/* Note about this implementation
- *
- * This is the "common" PRESTo CSS style. It provides a single place
- * to theme the general Look & Feel of your web applications.
- *
- */
- 
 /* PRESTo Prompt CSS Style */
 
 div[class="presto-prompt-menu"] {
@@ -224,7 +224,7 @@ form[class="presto-prompt-form"] {
 div[class="presto-prompt-return"] {
 	padding: 4px;
 	padding-bottom: 8px;
-	border-bottom: 1px solid #DDDDDD;
+	border-bottom: 1px solid #000000;
 	}
 
  

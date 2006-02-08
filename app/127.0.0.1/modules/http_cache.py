@@ -54,7 +54,7 @@ class PRESTo_http_cache (presto.PRESTo_async, http_server.HTTP_cache):
                 if reactor.presto_path != self.xml_dom.presto_path:
                         self.http_continue (reactor)
                 else:
-                        presto_http.get_method (self, reactor)
+                        presto_http.get_rest (self, reactor)
 
         presto_interfaces = set ()
         

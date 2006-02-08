@@ -24,7 +24,7 @@ class PRESTo_prompt_async (presto.PRESTo_async):
         
         xml_name = u'http://presto/ prompt'
         
-        presto = presto_http.get_method
+        presto = presto_http.get_rest
         
         presto_interfaces = set ((u'PRESTo', u'prompt', ))
         presto_methods = {
@@ -38,7 +38,7 @@ class PRESTo_prompt_sync (presto.PRESTo_sync):
         
         xml_name = u'http://presto/ prompt-sync'
                 
-        presto = presto_http.get_method
+        presto = presto_http.get_rest
         
         presto_interfaces = set ((u'PRESTo', u'prompt', ))
         presto_methods = {
