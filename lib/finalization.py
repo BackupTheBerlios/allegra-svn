@@ -20,9 +20,12 @@
 from allegra import async_loop
 
 
+# Finalize
+
 class Finalization (object):
 
         finalization = None
+        
         async_finalized = async_loop.async_finalized
 
         def __del__ (self):
@@ -32,13 +35,19 @@ class Finalization (object):
 
 # Join
 #
-# the equivalent of "thread joining" with finalization does not need a 
-# specific interface because it is enough to set the "joining" finalized
+# the equivalent of "thread joining" with finalization does not really need 
+# a specific interface because it is enough to set the "joining" finalized
 # as the finalization of all "joined" finalized.
 #
 #	joined.finalization = joining
 #
 # how simple ...
+
+def join (finalizations, continuation):
+        def finalize (finalized):
+                for joined in finalizations:
+                        joined.finalization = continuation
+        return finalize
 
 
 # Branch
@@ -48,34 +57,51 @@ class Finalizations (Finalization):
 	def __init__ (self, finalizations):
 		self.finalizations = finalizations
 
-	def __call__ (self, instance):
+	def __call__ (self, finalized):
 		for finalization in self.finalizations:
-			finalization (instance)
+			finalization (finalized)
 
-def finalization_extend (extended, finalization):
+def branch (branched, finalization):
 	try:
-		extended.finalization.finalizations.append (finalization)
+		branched.finalization.finalizations.append (finalization)
 	except:
-		extended.finalization = Finalizations ([
-			extended.finalization, finalization
+		branched.finalization = Finalizations ([
+			branched.finalization, finalization
 			])
 		
 		
 # Continue
+
+class Continuation (object):
+
+        finalization = None
+        async_finalized = async_loop.async_finalized
+        
+        def __call__ (self): pass
+
+        def __del__ (self):
+                if self.finalization != None:
+                         self.async_finalized.append (self)
+
 	
 def continuation (finalizations):
-	"combines finalization instances into one execution path"
-	assert len (finalizations) > 1
-	last = finalization = finalizations.pop ()
-	while finalizations:
-		finalizations[-1].finalization = finalization
-		finalization = finalizations.pop ()
-	return finalization, last
+	"combines continuations into one execution path"
+        i = iter (finalizations)
+	first = continued = i.next ()
+        try:
+        	while True:
+                        continued.finalization = i.next ()
+                        continued = continued.finalization
+        except StopIteration:
+                pass
+	return first, continued
 
 
 class Continue (object):
 
 	finalization = None
+        
+        def __call__ (self, finalized): pass
 
 	def __init__ (self, finalizations):
 		self.__call__, self.last = continuation (finalizations)
@@ -84,13 +110,7 @@ class Continue (object):
 		self.last.finalization = self.finalization
 
 
-# This is my own "cheap" pure Python 2.2 implementation of PEP-0342
-#
-# Finalization is a Lisp construct, and finally somebody else noticed that
-# the GIL and cyclic garbage collector could be applied to good asynchronous
-# use ...
-#
-# Why does is it a good idea to use the GC for continuation?
+# Why does is it a good idea to use finalizations for continuation?
 #
 # Practically, this "hack" ensures that any program using continuation
 # for its flow is then "memory-driven", naturally "memory-safe" because 
