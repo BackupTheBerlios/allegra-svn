@@ -33,23 +33,6 @@ class Finalization (object):
                          self.async_finalized.append (self)
 
 
-# Join
-#
-# the equivalent of "thread joining" with finalization does not really need 
-# a specific interface because it is enough to set the "joining" finalized
-# as the finalization of all "joined" finalized.
-#
-#	joined.finalization = joining
-#
-# how simple ...
-
-def join (finalizations, continuation):
-        def finalize (finalized):
-                for joined in finalizations:
-                        joined.finalization = continuation
-        return finalize
-
-
 # Branch
 
 class Finalizations (Finalization):
@@ -97,18 +80,43 @@ def continuation (finalizations):
 	return first, continued
 
 
-class Continue (object):
-
-	finalization = None
+class Continue (Continuation):
         
-        def __call__ (self, finalized): pass
-
 	def __init__ (self, finalizations):
-		self.__call__, self.last = continuation (finalizations)
+		self.__call__, self.continued = continuation (
+                        finalizations
+                        )
 
-	def __del__ (self):
-		self.last.finalization = self.finalization
+# Join
+#
+# the equivalent of "thread joining" with finalization does not really need 
+# a specific interface because it is enough to set the "joining" finalized
+# as the finalization of all "joined" finalized.
+#
+#        joined.finalization = joining
+#
+# how simple ...
 
+def join (finalizations, continuation):
+        def finalize (finalized):
+                for joined in finalizations:
+                        joined.finalization = continuation
+        return finalize
+                
+
+class Join (Continuation):
+
+        def __init__ (self, finalizations):
+                self.finalizations = finalizations
+        
+        def __call__ (self, finalized):
+                if self.finalizations:
+                        # start
+                        for joined in self.finalizations:
+                                joined.finalization = self
+                        self.finalizations = None
+                #
+                # join
 
 # Why does is it a good idea to use finalizations for continuation?
 #
