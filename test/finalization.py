@@ -5,7 +5,7 @@ from allegra import loginfo, async_loop, finalization
 
 # boiler plate
 
-def inspect (finalized):
+def watch (finalized):
         "inspect the continuation"
         loginfo.log ('%r - %d: %r' % (
                 finalized, 
@@ -13,12 +13,12 @@ def inspect (finalized):
                 finalized.async_finalized
                 ))
 
-class Finalization (finalization.Finalization):
+class Labeled (finalization.Finalization):
         "labeled test finalization"
         def __init__ (self, label): self.label = label
         def __repr__ (self): return self.label
         
-class Continuation (Finalization):
+class Watch (Labeled):
         "log test continuation and inspect the continuation"
         def __call__ (self, finalized):
                 loginfo.log ('%r continue %r - %d: %r' % (
@@ -27,28 +27,60 @@ class Continuation (Finalization):
                         finalized.async_finalized
                         ))
 
+class Continue (Watch):
+        
+        label = 'Continue'
+        
+        def __init__ (self, finalizations):
+                self.__call__, self.continued = finalization.continuation (
+                        finalizations
+                        )
+
+class Join (Watch):
+        
+        label = 'Join'
+
+        def __init__ (self, finalizations):
+                self.finalizations = finalizations
+        
+        def __call__ (self, finalized):
+                if self.finalizations:
+                        for joined in self.finalizations:
+                                joined.finalization = self
+                        self.finalizations = None
+                else:
+                        watch (finalized)
+
 # Test Syntax
+
+def test_watch ():
+        Watch ('A').finalization = Watch ('B')
+        async_loop.dispatch ()
 
 def test_continuation ():
         "test Continuation, Continue, Join and finalization"
-        finalization.Continue ((
-                Continuation ('begin'),
-                finalization.Join ((
-                        Continuation ('one'), 
-                        Continuation ('two')
+        Continue ((
+                Watch ('begin'),
+                Watch ('one'),
+                Join ((
+                        Watch ('two'), 
+                        Watch ('three')
                         )),
-                Continuation ('joined'),
-                Continuation ('end')
-                )).finalization = inspect
+                Watch ('joined'),
+                finalization.Branch ((
+                        Watch ('end'), 
+                        Watch ('branched'),
+                        ))
+                ))
         async_loop.dispatch ()
 
 
 def test_cycle ():
         "test a finalizations' cycle collection"
-        one = Continuation ('one')
-        two = Continuation ('two')
-        three = Continuation ('three')
-        four = Continuation ('four')
+        one = Watch ('one')
+        two = Watch ('two')
+        three = Watch ('three')
+        four = Watch ('four')
         finalization.continuation ([one, two, three, four])
         four.cycle = three
         del one, two, three, four
@@ -74,10 +106,10 @@ def test_scale (N, M, Finalization=finalization.Finalization, count=False):
         c = []
         for i in range (M):
                 f = Finalization ()
+                c.append (f)
                 for j in range (N):
                         f.finalization = Finalization ()
                         f = f.finalization
-                c.append (f)
         t = time.clock () - t
         loginfo.log ('%d instanciations: %f seconds' % (N*M, t))
         t = time.clock ()
@@ -92,6 +124,7 @@ def test_scale (N, M, Finalization=finalization.Finalization, count=False):
                 loginfo.log ('finalization: %f seconds' % t)
                 
 if __name__ == '__main__':
+        test_watch ()
         test_continuation ()
         test_cycle ()
         test_scale (10, 10, count=False)
