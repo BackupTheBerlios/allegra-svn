@@ -35,7 +35,7 @@ class Finalization (object):
 
 # Branch
 
-class Finalizations (Finalization):
+class Branch (Finalization):
 
 	def __init__ (self, finalizations):
 		self.finalizations = finalizations
@@ -48,7 +48,7 @@ def branch (branched, finalization):
 	try:
 		branched.finalization.finalizations.append (finalization)
 	except:
-		branched.finalization = Finalizations ([
+		branched.finalization = Branch ([
 			branched.finalization, finalization
 			])
 		
