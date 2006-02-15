@@ -17,9 +17,7 @@
 
 "PNS/SAT - Public Name System / Simple Articulated Text"
 
-import re
-
-from allegra import netstring, pns_model
+from allegra import netstring, pns_model, sat
 
 
 # Articulators an whitespaces for the roman alphabet, ymmv :-)
@@ -83,110 +81,31 @@ def articulate_utf8 (articulated, articulators=SAT_SPLIT_UTF8, HORIZON=126):
         
 # Now the real thing: Simple Articulated Text
         
-def sat_articulators_re (articulators):
-        return re.compile (
-                '(?:^|\\s+)'
-                '((?:%s))'
-                '(?:$|\\s+)' % ')|(?:'.join (articulators)
-                )
+LANGUAGES = {}
 
-# English linguists have mercy! Here's a frenchspeaker coding ...
-#
-# To put it straight, I aggregated a bizarre english grammar, scraped
-# from the web at various places teaching the language's basics. This
-# is an empirical and practical stack of simple RE that make up a
-# simplistic but effective natural language lexer.
-#
-# writing a natural language lexer as a stack of RE is both practical
-# and effective: CPython's SRE library is compliant and fast, and a
-# stack is one of the easiest programming pattern possible.
-#
-# yet the result are surprisingly good for such vocabulary and formal
-# pattern articulation (punctuation, case, etc). with as little loss
-# as possible a SAT lexer can produce very well-articulated Public
-# Names, but only time and test will tell which RE stack will prevail
-# or carve a contextual niche and which one will be abandonned.
+def language (name):
+        try:
+                return LANGUAGES[name]
+        except KeyError:
+                try:
+                        exec ('from allegra.sat import %s' % name)
+                except:
+                        articulator = LANGUAGES[name] = sat.ARTICULATE
+                        #
+                        # unknown languages should be articulated as ASCII
+                        # using as much as possible of common punctuation and 
+                        # capitalization for latin written languages.
+                        #
+                        # localized implementation may altern the default
+                        # language by setting pns_sat.SAT_ARTICULATE to
+                        # their alternative preference ...
+                        #
+                        # but failing is not an option!
+                else:
+                        articulator = LANGUAGES[name] = \
+                                eval (name).ARTICULATE
+                return articulator
 
-SAT_RE_Public_Names = re.compile ('[0-9]+[:]([^\\s]+?),+')
-
-SAT_ARTICULATE_ASCII_Head = (
-        # Public Names (and any netstring encoded look-alike ...)
-        SAT_RE_Public_Names,
-        # Major punctuation
-        re.compile ('[?!.](?:\\s+|$)'), # sentences
-        re.compile ('[:;](?:\\s+)'),    # property(ies)
-        re.compile ('[,](?:\\s+)'),     # enumeration
-        # All brackets, flattened, plus the ' - ' common pattern
-        re.compile ('[(]|[)]|[[]|[]]|{|}|\\s+-+\\s+'),
-        # Double quotes and a common web separator
-        re.compile ('["&|]'), 
-        # Subordinating Conjunctions
-        )
-
-SAT_ARTICULATE_ASCII_Tail = (
-        # Noun (Upper case, like "D.J. Bernstein" or "RDF")
-        re.compile ('(?:^|\\s+)((?:[A-Z]+[^\\s]*?(?:\\s+|$))+)'),
-        # Whitespaces
-        re.compile ('\\s'), 
-        # All sorts of hyphens 
-        re.compile ("[/*+\\-#']")
-        )
-
-
-SAT_ARTICULATE_EN = SAT_ARTICULATE_ASCII_Head + (
-        # Subordinating Conjunctions
-        sat_articulators_re ((
-                'after', 'although', 'because', 'before', 
-                'once', 'since', 'though', 'till', 'unless', 'until', 'when', 
-                'whenever', 'where', 'whereas', 'wherever', 'while', 
-                'as', 'even', 'if', 'that', 'than',
-                )), 
-        # Coordinating and Correlative Conjunctions
-        sat_articulators_re ((
-                'and', 'or', 'not', 'but', 'yet', 
-                'for', 'so', 
-                'both', 'either', 'nor', 'neither', 'whether', 
-                )), 
-        # Prepositions: Locators in Time and Place
-        sat_articulators_re ((
-                'in', 'at', 'on', 'to',
-                )),
-        # Articles
-        sat_articulators_re ((
-                'a', 'an', 'the', 
-                )),
-        ) + SAT_ARTICULATE_ASCII_Tail
-
-
-SAT_ARTICULATE_FR = SAT_ARTICULATE_ASCII_Head + (
-        # Conjonctions de Subordination
-        sat_articulators_re ((
-                'comme', 'lorsque', 'puisque', 'quand', 'que', 'quoique', 'si'
-                )),
-        # Conjonctions de Coordination
-        sat_articulators_re ((
-                'mais', 'ou', 'et', 'donc', 'or', 'ni', 'car', 'cependant', 
-                'néanmoins', 'toutefois',
-                )),
-        # Prépositions
-        sat_articulators_re ((
-                'devant', 'derrière', 'après', # le rang
-                'dans', 'en', 'chez', 'sous', # le lieu
-                'avant', 'après', 'depuis', 'pendant', # le temps
-                'avec', 'selon', 'de', # la manière
-                'vu', 'envers', 'pour', 'à', 'sans', 'sauf' # ? dispersés
-                )),
-        # Articles
-        sat_articulators_re ((
-                'un', 'une', 'des', 'le', 'la', 'les', 'du', 
-                'de\\s+la', "de\\+l'",
-                ))
-        ) + SAT_ARTICULATE_ASCII_Tail
-
-LANGUAGES = {
-        'en': SAT_ARTICULATE_EN,
-        'fr': SAT_ARTICULATE_FR
-        }
 
 # the SAT Regular Expression lexer itself ...
 

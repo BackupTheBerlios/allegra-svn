@@ -17,13 +17,19 @@
 
 from distutils.core import setup
 
+try:
+        import py2exe
+except:
+        pass
+
 setup (
         name='Allegra', 
         version='beta', 
-        description='The Semantic Web Peer',
+        description='Allegra for Windows',
         author='Laurent Szyster',
         author_email='contact@laurentszyster.be',
         url='http://laurentszyster.be/blog/allegra/',
-        packages=['allegra'],
+        packages=['allegra', 'allegra.sat'],
         package_dir = {'allegra': 'lib'},
+        console=['allegra_presto.py']
         )
