@@ -36,12 +36,12 @@ SAT_SPLIT_UTF8 = (
         # whitespaces: CRLF, LF, TAB and whitespace
         '\n\r\t ', 
         # hyphens
-        "/*+-_#'", 
+        "/*+-#'", 
         )
 
 SAT_STRIP_UTF8 = '\r\n\t '
 
-def pns_sat_utf8 (articulated, horizon, articulators, HORIZON, depth):
+def pns_sat_utf8 (articulated, field, articulators, HORIZON, depth):
         "a simplistic lexer for short UTF-8 text"
         bottom = len (articulators)
         while True:
@@ -56,16 +56,16 @@ def pns_sat_utf8 (articulated, horizon, articulators, HORIZON, depth):
                 
         if depth + 1 < bottom:
                 names = [pns_sat_utf8 (
-                        name, horizon, HORIZON, depth+1, articulators
+                        name, field, HORIZON, depth+1, articulators
                         ) for name in names]
-        h = set ()
-        name = pns_model.pns_name (netstring.encode (names), h)
-        if len (h) > 1:
-                if name in horizon:
+        f = set ()
+        name = pns_model.pns_name (netstring.encode (names), f)
+        if len (f) > 1:
+                if name in field:
                         return ''
                         
                 # articulated Public Names
-                horizon.add (name)
+                field.add (name)
                 return name
                 
         elif name:
@@ -75,10 +75,10 @@ def pns_sat_utf8 (articulated, horizon, articulators, HORIZON, depth):
         
 
 def articulate_utf8 (articulated, articulators=SAT_SPLIT_UTF8, HORIZON=126):
-        horizon = set ()
+        field = set ()
         return (pns_sat_utf8 (
-                articulated, horizon, articulators, HORIZON, 0
-                ), horizon)
+                articulated, field, articulators, HORIZON, 0
+                ), field)
         
         
 # Now the real thing: Simple Articulated Text
@@ -129,7 +129,7 @@ SAT_ARTICULATE_ASCII_Tail = (
         # Whitespaces
         re.compile ('\\s'), 
         # All sorts of hyphens 
-        re.compile ("[/*+\\-_#']") 
+        re.compile ("[/*+\\-#']")
         )
 
 
@@ -183,12 +183,15 @@ SAT_ARTICULATE_FR = SAT_ARTICULATE_ASCII_Head + (
                 ))
         ) + SAT_ARTICULATE_ASCII_Tail
 
+LANGUAGES = {
+        'en': SAT_ARTICULATE_EN,
+        'fr': SAT_ARTICULATE_FR
+        }
 
 # the SAT Regular Expression lexer itself ...
 
 def pns_sat_re (
-        articulated, horizon, articulators, 
-        whitespaces=SAT_STRIP_UTF8, HORIZON=126, depth=0, 
+        articulated, field, articulators, whitespaces, HORIZON, depth
         ):
         "Articulate text using a simple regular expression lexer"
         bottom = len (articulators)
@@ -209,7 +212,7 @@ def pns_sat_re (
                 names = [
                         pns_model.pns_name (netstring.encode ([
                                 s.strip (whitespaces) for s in groups
-                                ]), horizon) for groups in matched
+                                ]), field) for groups in matched
                         ]
         else:
                 names = []
@@ -222,18 +225,19 @@ def pns_sat_re (
                         if not text.strip (whitespaces):
                                 continue
                                 
+                        f = set ()
                         name = pns_sat_re (
-                                text, set (), articulators, 
+                                text, f, articulators, 
                                 whitespaces, HORIZON, depth+1 
                                 ) 
                         if name:
                                 names.append (name)
-                                if len (horizon) > HORIZON:
+                                if len (field) > HORIZON:
                                         break
-                                                       
+                                
         # validate the articulated name(s) as a Public Names
         if len (names) > 1:
-                return pns_model.pns_name (netstring.encode (names), horizon)
+                return pns_model.pns_name (netstring.encode (names), field)
                 
         if len (names) > 0 and names[0]:
                 return names[0]
@@ -244,7 +248,7 @@ def pns_sat_re (
 # SAT chunking interface 
         
 def pns_sat_chunk (
-        articulated, horizon, chunks, articulators,
+        articulated, field, chunks, articulators,
         CHUNK, whitespaces, HORIZON, depth 
         ):
         bottom = len (articulators)
@@ -255,7 +259,7 @@ def pns_sat_chunk (
                         continue
                 
                 # ... the end.
-                return articulated
+                return field
 
         # ... an articulation is found.
         if depth + 1 < bottom:
@@ -266,30 +270,30 @@ def pns_sat_chunk (
                                 if text.strip (whitespaces) == '':
                                         continue
                                         
-                                horizon.update (pns_sat_chunk (
+                                field.update (pns_sat_chunk (
                                         text, set (), chunks, articulators, 
                                         CHUNK, whitespaces, HORIZON, depth+1
                                         ))
-                        return horizon
+                        return field
                         
                 # chunk no more, articulate ...
                 name = pns_sat_re (
-                        articulated, horizon, articulators, 
+                        articulated, field, articulators, 
                         whitespaces, HORIZON, depth
                         )
                 if name:
                         chunks.append ((name, articulated))
-                return horizon
+                return field
                 
         # bottom of the stack reached, split ...
         names = [n for n in articulators[depth].split (articulated) if n]
         if len (names) > 1:
-                name = pns_model.pns_name (netstring.encode (names), horizon)
+                name = pns_model.pns_name (netstring.encode (names), field)
                 if name:
                         chunks.append ((name, articulated))
         elif names and names[0]:
                 chunks.append ((names[0], None))
-        return horizon
+        return field
         
 
 def articulate (
@@ -299,8 +303,9 @@ def articulate (
         whitespaces=SAT_STRIP_UTF8 # Strip UTF-8 whitespaces
         ):
         chunks = []
+        field = set ()
         return (pns_sat_chunk (
-                text, set (), chunks, articulators, 
+                articulated, field, chunks, articulators, 
                 CHUNK, whitespaces, HORIZON, 0
                 ), chunks)
         
@@ -309,10 +314,10 @@ def articulate (
 # >>> from allegra import pns_sat
 # >>> pns_sat.articulate_utf8 ('inarticulated')
 # 'inarticulated'
-# >>> horizon = set ()
-# >>> pns_sat.articulate_utf8 ('articulated text', horizon)
+# >>> field = set ()
+# >>> pns_sat.articulate_utf8 ('articulated text', field)
 # '11:articulated,4:text,', set ()
-# >>> horizon
+# >>> field
 # set (['articulated', 'text'])
 #
 # >>> chunks = pns_sat.articulate_language (
@@ -336,7 +341,7 @@ def articulate (
 #        sat
 #        The first articulated text
 #
-# to make in a context named after the chunk's semantic horizon.
+# to make in a context named after the chunk's semantic field.
 #
 # PNS/SAT is CPU intensive, actually it is quite slow in Python. Performances
 # will improve as Public Names validation is optimized, yet the simplicity
