@@ -51,24 +51,27 @@ def decode (buffer):
 
 
 def outline (encoded, format, indent):
-	"Recursively format nested netstrings as a CRLF outline"
+	"recursively format nested netstrings as a CRLF outline"
 	n = tuple (decode (encoded))
 	if len (n) > 0:
-		return ''.join ([outline (
+		return ''.join ((outline (
 			e, indent + format, indent
-			) for e in n])
+			) for e in n))
 			
 	return format % encoded
 
 
 def netstrings (instance):
-	"encode a tree of iterables and strings as nested netstrings"
+	"encode a tree of instances as nested netstrings"
 	t = type (instance)
 	if t == str:
 		return instance
 		
-	if t in (tuple, list, dict, set, frozenset):
-		return encode ([netstrings (i) for i in instance])
+	if t in (tuple, list, set, frozenset):
+		return encode ((netstrings (i) for i in instance))
+                
+        if t == dict:
+                return encode ((netstrings (i) for i in instance.items ()))
 
 	try:
 		return '%s' % instance
@@ -92,24 +95,24 @@ def nettree (encoded):
 
 
 def netlines (encoded, format='%s\n', indent='  '):
-	"Beautify a netstring as an outline ready to log"
+	"beautify a netstring as an outline ready to log"
 	n = tuple (decode (encoded))
 	if len (n) > 0:
-		return format % ''.join ([outline (
+		return format % ''.join ((outline (
 			e, format, indent
-			) for e in n])
+			) for e in n))
 			
 	return format % encoded
 
 
 def netoutline (encoded, indent=''):
-        "Recursively format nested netstrings as an outline with length"
+        "recursively format nested netstrings as an outline with length"
         n = tuple (decode (encoded))
         if len (n) > 0:
                 return '%s%d:\n%s%s,\n' % (
-                        indent, len (encoded), ''.join ([netoutline (
+                        indent, len (encoded), ''.join ((netoutline (
                                 e, indent + '  '
-                                ) for e in n]), indent)
+                                ) for e in n)), indent)
         
         return '%s%d:%s,\n' % (indent, len (encoded), encoded)
 
@@ -203,14 +206,16 @@ if __name__ == '__main__':
 		def more ():
 			return sys.stdin.read (buffer_more)
                 count = 0
-		if command == 'outline':
-			for n in netpipe (more, buffer_max):
-				sys.stdout.write (netlines (n))
-                                count += 1
-		else:
-			for n in netpipe (more, buffer_max):
-				count += 1
-                assert None == sys.stderr.write ('count: %d' % count)
+                try:
+        		if command == 'outline':
+        			for n in netpipe (more, buffer_max):
+        				sys.stdout.write (netlines (n))
+                                        count += 1
+        		else:
+        			for n in netpipe (more, buffer_max):
+        				count += 1
+                finally:
+                        assert None == sys.stderr.write ('%d' % count)
 	elif command == 'encode':
 		for line in sys.stdin.xreadlines ():
 			sys.stdout.write (
