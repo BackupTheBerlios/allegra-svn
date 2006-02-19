@@ -27,7 +27,7 @@ SAT_STRIP_UTF8 = '\r\n\t '
 
 # the SAT Regular Expression lexer itself ...
 
-def articulate_re (text, articulated, articulators, depth=0):
+def articulate_re (text, articulate, articulators, depth=0):
         "Articulate text using a simple regular expression lexer"
         bottom = len (articulators)
         # move down the stack until a pattern is matched ...
@@ -49,18 +49,18 @@ def articulate_re (text, articulated, articulators, depth=0):
                 # not yet at the bottom of the stack, recurse ...
                 name = pns_model.pns_name (netstring.encode ((
                         articulate_re (
-                                t, articulated, articulators, depth
+                                t, articulate, articulators, depth
                                 ) for t in texts
                         )), field)
         # validate the articulated name(s) as a Public Names
         if len (field) > 1:
-                articulated.append ((name, text))
+                articulate ((len (field), field, name, text))
         return name
         
 
 # SAT chunking interface 
         
-def articulate_chunk (text, articulated, articulators, CHUNK, depth=0):
+def articulate_chunk (text, articulate, articulators, CHUNK, depth=0):
         "articulate in chunks"
         bottom = len (articulators)
         # move down the stack until a pattern is matched ...
@@ -88,11 +88,11 @@ def articulate_chunk (text, articulated, articulators, CHUNK, depth=0):
         for t in texts:
                 if len (t) > CHUNK:
                         articulate_chunk (
-                                t, articulated, articulators, CHUNK, depth, 
+                                t, articulate, articulators, CHUNK, depth, 
                                 )
                 else:
                         articulate_re (
-                                t, articulated, articulators, depth
+                                t, articulate, articulators, depth
                                 )
         return None
 
@@ -123,6 +123,18 @@ def language (name):
                                 eval (name).ARTICULATE
                 return articulator
 
+
+def articulate_languages (text, languages):
+        "return the most articulated context and its language identifier"
+        articulated_languages = []
+        for lang in languages:
+                articulated = []
+                articulate_re (text, articulated.append, language (lang))
+                articulated_languages.append ((
+                        len (articulated), articulated, lang
+                        ))
+        articulated_languages.sort ()
+        return articulated_languages[-1]
 
 # Note about this implementation
 #
