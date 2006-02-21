@@ -20,6 +20,19 @@
 from allegra import async_chat, loginfo
 
 
+class File_collector (object):
+        
+        collector_is_simple = True
+        
+        def __init__ (filename, mode='w'):
+                self.file = open (filename, mode)
+                self.collect_incoming_data = open (filename, mode).write
+
+        def found_terminator (self):
+                self.file.close ()
+                return True
+                
+
 class Limited_collector (object):
         
         collector_is_simple = True
