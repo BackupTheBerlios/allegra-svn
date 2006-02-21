@@ -22,7 +22,35 @@ from allegra import netstring, pns_model, sat
 
 # Whitespaces for the roman alphabet, ymmv :-)
 
-SAT_STRIP_UTF8 = '\r\n\t '
+SAT_STRIP_UTF8 = ' \t\r\n'
+
+
+# PNS/SAT languages - as named Stacks of Regular Expressions
+
+LANGUAGES = {}
+
+def language (name):
+        try:
+                return LANGUAGES[name]
+        except KeyError:
+                try:
+                        exec ('from allegra.sat import %s' % name)
+                except:
+                        articulator = LANGUAGES[name] = sat.ARTICULATE
+                        #
+                        # unknown languages should be articulated as ASCII
+                        # using as much as possible of common punctuation and 
+                        # capitalization for latin written languages.
+                        #
+                        # localized implementation may altern the default
+                        # language by setting pns_sat.SAT_ARTICULATE to
+                        # their alternative preference ...
+                        #
+                        # but failing is not an option!
+                else:
+                        articulator = LANGUAGES[name] = \
+                                eval (name).ARTICULATE
+                return articulator
 
 
 # the SAT Regular Expression lexer itself ...
@@ -58,10 +86,8 @@ def articulate_re (text, articulate, articulators, depth=0):
         return name
         
 
-# SAT chunking interface 
-        
 def articulate_chunk (text, articulate, articulators, CHUNK, depth=0):
-        "articulate in chunks"
+        "Articulate in chunks, usefull for larger text articulations"
         bottom = len (articulators)
         # move down the stack until a pattern is matched ...
         while True:
@@ -97,33 +123,6 @@ def articulate_chunk (text, articulate, articulators, CHUNK, depth=0):
         return None
 
 
-
-LANGUAGES = {}
-
-def language (name):
-        try:
-                return LANGUAGES[name]
-        except KeyError:
-                try:
-                        exec ('from allegra.sat import %s' % name)
-                except:
-                        articulator = LANGUAGES[name] = sat.ARTICULATE
-                        #
-                        # unknown languages should be articulated as ASCII
-                        # using as much as possible of common punctuation and 
-                        # capitalization for latin written languages.
-                        #
-                        # localized implementation may altern the default
-                        # language by setting pns_sat.SAT_ARTICULATE to
-                        # their alternative preference ...
-                        #
-                        # but failing is not an option!
-                else:
-                        articulator = LANGUAGES[name] = \
-                                eval (name).ARTICULATE
-                return articulator
-
-
 def articulate_languages (text, languages):
         "return the most articulated context and its language identifier"
         articulated_languages = []
@@ -136,14 +135,3 @@ def articulate_languages (text, languages):
         articulated_languages.sort ()
         return articulated_languages[-1]
 
-# Note about this implementation
-#
-# PNS/SAT is CPU intensive, actually it is quite slow in Python. Performances
-# will improve as Public Names validation is optimized, yet the simplicity
-# of the RE stack lexer and the process of articulation itself imply a high 
-# profile. It is a fairly complex task, even if its implementation in Python
-# appears so simple (but then that's more because of Python's elegance and
-# its first class support for regular expression matching and simple text 
-# processing).
-#
-# PNS/SAT articulator should therefore be threaded.
