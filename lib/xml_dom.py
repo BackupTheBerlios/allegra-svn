@@ -54,6 +54,31 @@ class XML_delete (object):
                 parent.xml_children.pop ()
 
 
+def xml_sparse (self, dom):
+        parent = dom.xml_parsed
+        if parent == None:
+                return # do not fold a root element!
+                
+        parent.xml_children.pop ()
+        if self.xml_first:
+                if parent.xml_children:
+                        prev = parent.xml_children[-1]
+                        if prev.xml_follow:
+                                prev.xml_follow += self.xml_first
+                        else:
+                                prev.xml_follow = self.xml_first
+                elif parent.xml_first:
+                        parent.xml_first += self.xml_first
+                else:
+                        parent.xml_first = self.xml_first
+        if self.xml_children:
+                parent.xml_children.extend (
+                        self.xml_children
+                        )
+                parent = self.xml_parent
+                for child in self.xml_children:
+                        child.xml_parent = parent
+
 class XML_sparse (object):
         
         "A sparse element that folds itself from the tree, preserves CDATA"
@@ -63,31 +88,8 @@ class XML_sparse (object):
 
         xml_name = xml_parent = xml_attributes = \
                 xml_first = xml_children = xml_follow = None
-        
-        def xml_valid (self, dom):
-                parent = dom.xml_parsed
-                if parent == None:
-                        return # do not fold a root element!
-                        
-                parent.xml_children.pop ()
-                if self.xml_first:
-                        if parent.xml_children:
-                                prev = parent.xml_children[-1]
-                                if prev.xml_follow:
-                                        prev.xml_follow += self.xml_first
-                                else:
-                                        prev.xml_follow = self.xml_first
-                        elif parent.xml_first:
-                                parent.xml_first += self.xml_first
-                        else:
-                                parent.xml_first = self.xml_first
-                if self.xml_children:
-                        parent.xml_children.extend (
-                                self.xml_children
-                                )
-                        parent = self.xml_parent
-                        for child in self.xml_children:
-                                child.xml_parent = parent
+
+        xml_valid = xml_sparse        
         
 
 class XML_dom (object):
