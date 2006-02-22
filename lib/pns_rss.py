@@ -22,25 +22,32 @@ import re
 from allegra import xml_dom, pns_xml
 
 
-class RSS_channel (pns_xml.XML_PNS_context):
+class RSS_channel (pns_xml.Articulate):
         
-        pns_articulated = set (('title', ))
+        xml_valid = pns_xml.xml_utf8_context
 
+
+class RSS_title (pns_xml.Articulate):
+        
+        xml_valid = pns_xml.xml_utf8_name
+        
+
+class RSS_item (pns_xml.Articulate):
+        
+        xml_valid = pns_xml.xml_utf8_context
+        
         def xml_valid (self, dom):
-                self.pns_articulate (
-                        self.pns_subject, dom.pns_subject, dom
-                        )
+                pns_xml.xml_utf8_context (self, dom)
                 xml_dom.xml_delete (self)
+                #
+                # remove articulated items from the parse tree
 
-        
-class RSS_item (pns_xml.XML_PNS_context):
-        
-        pns_articulated = set (('title', ))
-        
 
-class RSS_pubDate (pns_xml.XML_PNS_subject):
+class RSS_pubDate (pns_xml.Articulate):
         
-        SAT_RE = (re.compile (
+        xml_valid = pns_xml.xml_utf8_chunk
+        
+        pns_sat_language = (re.compile (
                 '^(?:'
                 '(?:([A-z]+?)[,]?\\s+)?' # day of the week Mon, Tue, ..., Sun. 
                 '([0-3][0-9])\\s+([A-z]+)\\s+([0-9]{4})'# date 01 Jan 2001
@@ -49,26 +56,31 @@ class RSS_pubDate (pns_xml.XML_PNS_subject):
                 '\\s+([0-2][0-9]:[0-5][0-9]:[0-5][0-9])' # time 23:59:59
                 '\\s+((?:GMT)|(?:[+\\-][0-9]{4}))' # and zone GMT or +0000
                 ')?' 
-                ), )
+                ),)
+        
+
+class RSS_description (pns_xml.Articulate):
+        
+        xml_valid = pns_xml.xml_utf8_chunk
         
 
 RSS_TYPES = {
         # RSS 2.0 is real cool, simple *and* well articulated
         #
         'channel': RSS_channel,
+        'title': RSS_title,
         'item': RSS_item,
         'pubDate': RSS_pubDate,
-        'description': pns_xml.XML_PNS_enclosure,
+        'description': RSS_description,
         #
         # http://purl.org/rss/1.0/ 
         #
         'http://purl.org/rss/1.0/ channel': RSS_channel,
         'http://purl.org/rss/1.0/ item': RSS_item,
         'http://purl.org/rss/1.0/ pubDate': RSS_pubDate,
-        'http://purl.org/rss/1.0/modules/content/ encoded': 
-                pns_xml.XML_PNS_enclosure,
-        'http://purl.org/rss/1.0/ items': xml_dom.XML_delete,
-        # 'http://purl.org/rss/1.0/ image': ... rdf:resource
+        'http://purl.org/rss/1.0/modules/content/ encoded': RSS_description,
+        #'http://purl.org/rss/1.0/ items': xml_dom.XML_delete,
+        #'http://purl.org/rss/1.0/ image': ... rdf:resource
         #
         # http://purl.org/dc/elements/1.1/
         #
@@ -96,6 +108,15 @@ RSS_TYPES = {
         }
 
 
+def rss_articulator (name, statement, dom=None):
+        if dom == None:
+                dom = xml_reactor.XML_collector (unicoding=0)
+        dom.xml_type = xml_dom.XML_delete
+        dom.xml_types = RSS_TYPES
+        dom.pns_name = name
+        dom.pns_statement = statement
+        return dom
+
 # The best part of it is that there is no need to declare DTD or worse
 # to get the actual structure of the XML strings in a semantically
 # undispersed graph, providing an interropperable namespace to application
@@ -119,11 +140,9 @@ if __name__ == '__main__':
                 dom = xml_reactor.XML_benchmark (unicoding=0)
         else:
                 dom = xml_reactor.XML_collector (unicoding=0)
-        dom.xml_type = pns_xml.XML_PNS_subject
-        dom.xml_types = RSS_TYPES
-        dom.pns_statement = pns_xml.log_statement
-        dom.PNS_HORIZON = 126
-        dom.pns_subject = sys.argv[1]
+        pns_xml.articulate (
+                dom, sys.argv[1], 'en', RSS_TYPES, xml_dom.XML_delete
+                )
         http_client.GET (http_client.HTTP_client (
                 ) (host, int (port or '80')), urlpath) (dom)
         async_loop.loop ()
@@ -135,4 +154,3 @@ if __name__ == '__main__':
                         ), 'info'
                 )
         async_loop.dispatch ()
-        

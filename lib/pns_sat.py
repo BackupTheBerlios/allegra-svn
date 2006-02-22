@@ -30,6 +30,7 @@ SAT_STRIP_UTF8 = ' \t\r\n'
 LANGUAGES = {}
 
 def language (name):
+        "load a language module on demand and return its ARTICULATE stack"
         try:
                 return LANGUAGES[name]
         except KeyError:
