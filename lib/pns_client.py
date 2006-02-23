@@ -286,7 +286,7 @@ if __name__ == '__main__':
                         except exceptions.StopIteration:
                                 # no more statements to handle, close
                                 self.async_net_push (('0:,0:,0:,0:,',))
-                                self.close_when_done ()
+                                # self.close_when_done ()
                                 return
 
                         model = list (netstring.decode (encoded))
