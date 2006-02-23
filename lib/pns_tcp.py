@@ -154,8 +154,8 @@ class PNS_TCP_peer (tcp_server.TCP_server_limit):
 	TCP_SERVER_CHANNEL = PNS_session
 
         tcp_server_clients_limit = 256 # ? find out about select/poll limit
-	tcp_inactive_timeout = 3600 # one hour timeout for inactive client
-	tcp_server_precision = 6 # six seconds precision for defered
+	tcp_server_timeout = 3600 # one hour timeout for inactive client
+	tcp_server_precision = 60 # one minute precision for defered
 
 	def __init__ (self, pns_peer, ip):
 		self.pns_peer = pns_peer
@@ -180,7 +180,7 @@ class PNS_TCP_server (tcp_server.TCP_server_limit):
 	TCP_SERVER_CHANNEL = PNS_session
 	
         tcp_server_clients_limit = 1 # a decent limit ;-)
-	tcp_inactive_timeout = 30 # thirty seconds timeout for inactive client
+	tcp_server_timeout = 30 # thirty seconds timeout for inactive client
 	tcp_server_precision = 3 # one seconds precision for defered
 
 	def __repr__ (self):
@@ -239,8 +239,8 @@ class PNS_TCP_seed (tcp_server.TCP_server_throttle):
 	TCP_SERVER_CHANNEL = PNS_TCP_seed_session
 
         tcp_server_clients_limit = 1 # one connection per IP address
-	tcp_inactive_timeout = 6 # minimal timeout for inactive sessions
-	tcp_server_precision = 6 # checked evey six seconds, quite fuzzy
+	tcp_server_timeout = 6 # minimal timeout for inactive sessions
+	tcp_server_precision = 3 # checked evey three seconds, quite fuzzy
 
 	def __init__ (self, pns_peer, ip):
 		self.pns_peer = pns_peer
