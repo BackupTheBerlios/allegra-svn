@@ -38,14 +38,12 @@ class RSS_item (pns_xml.Articulate):
         
         def xml_valid (self, dom):
                 pns_xml.xml_utf8_context (self, dom)
-                xml_dom.xml_delete (self)
+                xml_children = None
                 #
                 # remove articulated items from the parse tree
 
 
 class RSS_pubDate (pns_xml.Articulate):
-        
-        xml_valid = pns_xml.xml_utf8_chunk
         
         pns_sat_language = (re.compile (
                 '^(?:'
@@ -57,13 +55,24 @@ class RSS_pubDate (pns_xml.Articulate):
                 '\\s+((?:GMT)|(?:[+\\-][0-9]{4}))' # and zone GMT or +0000
                 ')?' 
                 ),)
-        
+
+        def xml_valid (self, dom):
+                pns_xml.xml_utf8_name (self, dom)
+                self.pns_name = None        
+                
+
+markup = re.compile ('<.+?>')
 
 class RSS_description (pns_xml.Articulate):
         
-        xml_valid = pns_xml.xml_utf8_chunk
-        
+        def xml_valid (self, dom):
+                # remove all markup from the description
+                self.xml_first = ''.join (markup.split (self.xml_first))
+                pns_xml.xml_utf8_chunk (self, dom)
+                #
+                # TODO: escape &#... to UTF-8 ?
 
+                
 RSS_TYPES = {
         # RSS 2.0 is real cool, simple *and* well articulated
         #
@@ -72,6 +81,8 @@ RSS_TYPES = {
         'item': RSS_item,
         'pubDate': RSS_pubDate,
         'description': RSS_description,
+        'link': pns_xml.Inarticulate,
+        'guid': pns_xml.Inarticulate,
         #
         # http://purl.org/rss/1.0/ 
         #
@@ -136,7 +147,7 @@ if __name__ == '__main__':
                 'http://([^/:]+)[:]?([0-9]+)?(/.+)'
                 ).match (sys.argv[1]).groups ()
         t = time.clock ()
-        if __debug__:
+        if __debug__ or '-d' in sys.argv:
                 dom = xml_reactor.XML_benchmark (unicoding=0)
         else:
                 dom = xml_reactor.XML_collector (unicoding=0)
@@ -147,10 +158,12 @@ if __name__ == '__main__':
                 ) (host, int (port or '80')), urlpath) (dom)
         async_loop.loop ()
         t = time.clock () - t
-        assert None == loginfo.log (
-                'fetched in %f seconds, '
-                'as %d chunks parsed in %f seconds' % (
-                        t, dom.xml_benchmark_count, dom.xml_benchmark_time
-                        ), 'info'
-                )
+        if __debug__ or '-d' in sys.argv:
+                loginfo.log (
+                        'fetched in %f seconds, '
+                        'as %d chunks parsed in %f seconds' % (
+                                t, dom.xml_benchmark_count, 
+                                dom.xml_benchmark_time
+                                ), 'info'
+                        )
         async_loop.dispatch ()

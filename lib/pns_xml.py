@@ -27,7 +27,7 @@ def xml_utf8_to_pns (e):
         if e.xml_attributes:
                 yield netstring.encode ((
                         netstring.encode (item) 
-                        for item in e.xml_attributes
+                        for item in e.xml_attributes.items ()
                         if item[0] != 'pns' # do not pass-through the names!
                         ))
         
@@ -72,7 +72,7 @@ def xml_utf8_to_pns (e):
         # XHTML or DocBook, 4KB or bigger datagrams are probably
         # required (unless of course you just want to index it all,
         # not store it all ;-)
-
+        
 def xml_utf8_chunk (element, dom):
         if element.xml_children:
                 element.pns_sat_articulated = []
@@ -127,7 +127,7 @@ def xml_utf8_context (element, dom):
                                 child.pns_name,
                                 child.xml_name,
                                 netstring.encode (xml_utf8_to_pns (child)),
-                                element.pns_name
+                                dom.pns_name
                                 ))
                 else:
                         dom.pns_statement ((
@@ -170,6 +170,12 @@ class Articulate (xml_dom.XML_element):
                         xml_utf8_name (self, dom)
                 else:
                         xml_utf8_chunk (self, dom)
+
+
+class Inarticulate (xml_dom.XML_element):
+        
+        pns_name = None
+        pns_sat_articulated = ()
 
 
 # PNS/UDP Constant
@@ -239,7 +245,7 @@ def xml_unicode_to_pns (e):
                         netstring.encode ((
                                 key.encode ('utf-8'), val.encode ('utf-8')
                                 ))
-                        for key, val in e.xml_attributes
+                        for key, val in e.xml_attributes.items ()
                         if key != u'pns'
                         ))
         
