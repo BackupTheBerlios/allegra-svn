@@ -153,9 +153,9 @@ class PNS_TCP_peer (tcp_server.TCP_server_limit):
 
 	TCP_SERVER_CHANNEL = PNS_session
 
-        tcp_server_clients_limit = 65536 # ? find out about select/poll limit
+        tcp_server_clients_limit = 256 # ? find out about select/poll limit
 	tcp_inactive_timeout = 3600 # one hour timeout for inactive client
-	tcp_server_precision = 6	# six seconds precision for defered
+	tcp_server_precision = 6 # six seconds precision for defered
 
 	def __init__ (self, pns_peer, ip):
 		self.pns_peer = pns_peer
