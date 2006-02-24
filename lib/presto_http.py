@@ -411,3 +411,11 @@ if __name__ == '__main__':
                 'startup seconds="%f"' % (time.clock () - t), 'PRESTo/HTTP'
                 )
         async_loop.dispatch ()
+        if __debug__:
+                import gc
+                collected = gc.collect ()
+                if collected >0:
+                        loginfo.log ('collected: %d, garbage: %r' % (
+                                collected, gc.garbage
+                                ), 'debug')
+                        
