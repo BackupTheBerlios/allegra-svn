@@ -441,10 +441,11 @@ class PNS_XML_continuation (finalization.Finalization):
                         attr[u'pns'] = unicode (model[0], 'utf-8')
                 else:
                         attr = {u'pns': unicode (model[0], 'utf-8')}
-                # instanciate a named XML element type
+                # decode the name and instanciate an XML element
+                name = unicode (model[1], 'utf-8')
                 self.xml_parsed = e = self.pns_dom.xml_types.get (
-                        model[1], self.pns_dom.xml_type
-                        ) (model[1], attr)
+                        name, self.pns_dom.xml_type
+                        ) (name, attr)
                 if first:
                         e.xml_first = unicode (first, 'utf-8')
                 else:
