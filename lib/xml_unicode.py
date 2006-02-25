@@ -138,7 +138,7 @@ def xml_cdatas (e, encoding='ASCII'):
 
 def xml_unprefixed (e, xml_attributes='', encoding='ASCII'):
         if e.xml_name.find (' ') < 0:
-                tag = e.xml_name.xml_name.encode (encoding)
+                tag = e.xml_name.encode (encoding)
         else:
                 tag = e.xml_name.split (u' ')[1].xml_name.encode (encoding)
         if e.xml_attributes:
