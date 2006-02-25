@@ -255,7 +255,7 @@ def xml_string (root, prefixes, encoding='ASCII', delimiter=''):
 
 def xml_document (
         dom, encoding='ASCII', delimiter='', 
-        head='<?xml version="1.0" encoding="%s"?>'
+        head='<?xml version="1.0" encoding="%s"?>\r\n'
         ):
         if dom.xml_pi:
                 head = delimiter.join ((
