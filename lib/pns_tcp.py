@@ -89,7 +89,7 @@ class PNS_session (async_net.Async_net):
 	def pns_error (self, encoded, error):
 		encoded = '%s%d:.%s,' % (encoded, len (error)+1, error)
 		self.log (encoded, 'pns-error')
-		self.async_net_push ((encode,))
+		self.async_net_push ((encoded,))
 		#
 		# self.close_when_done ()
 		# PNS/TCP does tolerate non-compliant articulator that
