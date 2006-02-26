@@ -42,7 +42,7 @@ def xml_utf8_articulate (e):
         if e.xml_children:
                 yield netstring.encode ((
                         netstring.encode ((
-                                child.xml_name, child.pns_name
+                                child.pns_name, child.xml_name
                                 ))
                         for child in e.xml_children
                         ))
@@ -76,6 +76,24 @@ def xml_utf8_articulate (e):
         # required (unless of course you just want to index it all,
         # not store it all ;-)
         
+def xml_utf8_sat (element, dom):
+        if element.xml_children:
+                element.pns_sat_articulated = []
+                return pns_sat.articulate_re (
+                        ' '.join (xml_utf8.xml_cdatas (element)),
+                        element.pns_sat_articulated.append,
+                        element.pns_sat_language or dom.pns_sat_language
+                        )
+                        
+        elif element.xml_first:
+                element.pns_sat_articulated = []
+                return pns_sat.articulate_re (
+                        element.xml_first, 
+                        element.pns_sat_articulated.append,
+                        element.pns_sat_language or dom.pns_sat_language
+                        )
+                        
+        
 def xml_utf8_chunk (element, dom):
         if element.xml_children:
                 element.pns_sat_articulated = []
@@ -93,63 +111,39 @@ def xml_utf8_chunk (element, dom):
                         element.pns_sat_language or dom.pns_sat_language,
                         element.PNS_SAT_CHUNK
                         )
-        else:
-                return
 
 
 def xml_utf8_name (element, dom):
-        if element.xml_children:
-                element.pns_sat_articulated = []
-                element.pns_name = pns_sat.articulate_re (
-                        ' '.join (xml_utf8.xml_cdatas (element)),
-                        element.pns_sat_articulated.append,
-                        element.pns_sat_language or dom.pns_sat_language
-                        )
-        elif element.xml_first:
-                element.pns_sat_articulated = []
-                element.pns_name = pns_sat.articulate_re (
-                        element.xml_first, 
-                        element.pns_sat_articulated.append,
-                        element.pns_sat_language or dom.pns_sat_language
-                        )
-        else:
-                return
-        
+        # articulate a context's name one from its children's name(s)
+        field = set ()
+        return pns_model.pns_name (
+                netstring.encode ((
+                        child.pns_name 
+                        for child in element.xml_children 
+                        if child.pns_name
+                        )), field
+                )
+                
 
 def xml_utf8_context (element, dom):
         if not element.xml_children:
                 return
         
-        # articulate a context from the child's name(s)
-        #
-        field = set ()
-        name = element.pns_name = pns_model.pns_name (netstring.encode ((
-                child.pns_name for child in element.xml_children 
-                if child.pns_name
-                )), field)
-        if not name:
-                return
-
+        name = element.pns_name or dom.pns_name
         for child in element.xml_children:
-                # articulate XML
-                if child.pns_name:
-                        dom.pns_statement ((
-                                child.pns_name,
-                                child.xml_name,
-                                netstring.encode (
-                                        xml_utf8_articulate (child)
-                                        ),
-                                dom.pns_name
-                                ))
-                else:
-                        dom.pns_statement ((
-                                name,
-                                child.xml_name,
-                                netstring.encode (
-                                        xml_utf8_articulate (child)
-                                        ),
-                                dom.pns_name
-                                ))
+                # A PNS/XML statement with the same context and subject is a
+                # leaf. All other are branches, that have their parent's name
+                # has contexts but not as subject.
+                #
+                dom.pns_statement ((
+                        child.pns_name or name,
+                        child.xml_name,
+                        netstring.encode (
+                                xml_utf8_articulate (child)
+                                ),
+                        name
+                        ))
+                child.xml_children = None # drop articulated children now!
                 # articulate the child SATs in this element's context
                 for articulated in child.pns_sat_articulated:
                         if not dom.pns_statement ((
@@ -164,12 +158,25 @@ def xml_utf8_context (element, dom):
                                 # names are sorted by length, bigger last!
 
 
+def xml_utf8_root (element, dom):
+        xml_utf8_context (element, dom)
+        dom.pns_statement ((
+                element.pns_name or dom.pns_name,
+                element.xml_name,
+                netstring.encode (
+                        xml_utf8_articulate (element)
+                        ),
+                dom.pns_name
+                ))
+
+
 class Articulate (xml_dom.XML_element):
                 
-        pns_name = None
+        pns_name = ''
         pns_sat_language = None
         pns_sat_articulated = ()
         PNS_SAT_CHUNK = 504
+        # pns_xml_articulated = None
         
         def xml_valid (self, dom):
                 if self.xml_children:
@@ -188,7 +195,7 @@ class Articulate (xml_dom.XML_element):
 
 class Inarticulate (xml_dom.XML_element):
         
-        pns_name = None
+        pns_name = ''
         pns_sat_articulated = ()
 
 
@@ -275,7 +282,7 @@ def xml_utf8_to_pns (e):
         if e.xml_children:
                 yield netstring.encode ((
                         netstring.encode ((
-                                child.xml_name, child.pns_name
+                                child.pns_name, child.xml_name
                                 ))
                         for child in e.xml_children
                         ))
@@ -305,8 +312,8 @@ def xml_unicode_to_pns (e):
         if e.xml_children:
                 yield netstring.encode ((
                         netstring.encode ((
-                                child.xml_name.encode ('utf-8'), 
-                                child.pns_name
+                                child.pns_name, 
+                                child.xml_name.encode ('utf-8')
                                 ))
                         for child in e.xml_children
                         ))
@@ -335,7 +342,6 @@ def xml_to_pns (element, context, statement):
         return False
 
 
-
 class PNS_XML_continuation (finalization.Finalization):
         
         # this instance is finalized as soon as its pns_response bound
@@ -359,6 +365,10 @@ class PNS_XML_continuation (finalization.Finalization):
                         )
                 child = finalized.xml_parsed
                 sibblings = self.xml_parsed.xml_children
+                if child == None:
+                        sibblings.remove (finalized.pns_question)
+                        return
+
                 sibblings[sibblings.index (finalized.pns_question)] = child
                 child.xml_parent = weakref.ref (self.xml_parsed)
                 if child.xml_valid != None:
@@ -384,9 +394,12 @@ class PNS_XML_continuation (finalization.Finalization):
                                 tuple (netstring.decode (item))
                                 for item in netstring.decode (attr)
                                 ))
-                        attr['pns'] = model[0]
-                else:
+                        if model[0] != model[3]:
+                                attr['pns'] = model[0]
+                elif model[0] != model[3]:
                         attr = {'pns': model[0]}
+                else:
+                        attr = None
                 # instanciate a named XML element type
                 self.xml_parsed = e = self.pns_dom.xml_types.get (
                         model[1], self.pns_dom.xml_type
@@ -401,15 +414,18 @@ class PNS_XML_continuation (finalization.Finalization):
                 if children:
                         e.xml_children = list (netstring.decode (children))
                         for child in e.xml_children:
-                                name, subject = tuple (
+                                subject, name = tuple (
                                         netstring.decode (child)
                                         )
+                                if subject:
+                                        context = model[0]
+                                else:
+                                        context = subject = model[0]
                                 joined = PNS_XML_continuation (
                                         self.pns_dom, child
                                         )
                                 self.pns_dom.pns_statement (
-                                        (subject or model[0], name, ''), 
-                                        self.pns_dom.pns_name, 
+                                        (subject, name, ''), context,
                                         joined.pns_to_xml_unicode
                                         )
                                 joined.finalization = self
@@ -438,9 +454,12 @@ class PNS_XML_continuation (finalization.Finalization):
                                         ))
                                 for item in netstring.decode (attr)
                                 ))
-                        attr[u'pns'] = unicode (model[0], 'utf-8')
-                else:
+                        if model[0] != model[3]:
+                                attr[u'pns'] = unicode (model[0], 'utf-8')
+                elif model[0] != model[3]:
                         attr = {u'pns': unicode (model[0], 'utf-8')}
+                else:
+                        attr = None
                 # decode the name and instanciate an XML element
                 name = unicode (model[1], 'utf-8')
                 self.xml_parsed = e = self.pns_dom.xml_types.get (
@@ -456,15 +475,18 @@ class PNS_XML_continuation (finalization.Finalization):
                 if children:
                         e.xml_children = list (netstring.decode (children))
                         for child in e.xml_children:
-                                name, subject = tuple (
+                                subject, name = tuple (
                                         netstring.decode (child)
                                         )
+                                if subject:
+                                        context = model[0]
+                                else:
+                                        context = subject = model[0]
                                 joined = PNS_XML_continuation (
                                         self.pns_dom, child
                                         )
                                 self.pns_dom.pns_statement (
-                                        (subject or model[0], name, ''), 
-                                        self.pns_dom.pns_name, 
+                                        (subject, name, ''), context,
                                         joined.pns_to_xml_unicode
                                         )
                                 joined.finalization = self
@@ -532,21 +554,31 @@ class PNS_DOM (object):
         
 # Note about this implementation
 #
-# <rss>
+# <rss> inherit the document name
 #   <channel>            
-#     <title>...</title> # articulate and name
+#     <title>...</title> # articulate and name the channel
 #     <item>               
-#       <title>...</title> # articulate and names
+#       <title>...</title> # articulate and name the item
 #       <description>...</description> # articulate, maybe name
 #     </item> # makes statements about its title, description
 #   </channel> # make statements about its title, item(s)
 # </rss>
 #
 #
-# <html>
-#   <head><title>...</title></head> # articulate and name
+# <html> # inherit the document name
+#   <head>
+#      <title>...</title> # articulate and name the head
+#   </head>
 #   <body>
-#     <h1>...</h1> # articulate and name
-#     <p>...</p> # articulate, maybe name
+#     <h1>...</h1> # articulate and name the body
+#     <p>...</p> # articulate maybe name itself if there are children
 #   </body>
 # </html>
+#
+# The best part of it is that there is no need to declare DTD or worse
+# to get the actual structure of the XML strings in a semantically
+# undispersed graph, providing an interropperable namespace to application
+# developpers. You can throw any XML at it, forget about database design
+# headeaches: test the relevance of your existing information articulation,
+# let it then evolve.
+

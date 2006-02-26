@@ -19,47 +19,8 @@
 
 import re
 
-from allegra import xml_dom, pns_xml
+from allegra import xml_dom, pns_sat, pns_xml, http_client, xml_reactor
 
-
-class RSS_channel (pns_xml.Articulate):
-        
-        xml_valid = pns_xml.xml_utf8_context
-
-
-class RSS_title (pns_xml.Articulate):
-        
-        xml_valid = pns_xml.xml_utf8_name
-        
-
-class RSS_item (pns_xml.Articulate):
-        
-        xml_valid = pns_xml.xml_utf8_context
-        
-        def xml_valid (self, dom):
-                pns_xml.xml_utf8_context (self, dom)
-                xml_children = None
-                #
-                # remove articulated items from the parse tree
-
-
-class RSS_pubDate (pns_xml.Articulate):
-        
-        pns_sat_language = (re.compile (
-                '^(?:'
-                '(?:([A-z]+?)[,]?\\s+)?' # day of the week Mon, Tue, ..., Sun. 
-                '([0-3][0-9])\\s+([A-z]+)\\s+([0-9]{4})'# date 01 Jan 2001
-                ')|' 
-                '(?:'
-                '\\s+([0-2][0-9]:[0-5][0-9]:[0-5][0-9])' # time 23:59:59
-                '\\s+((?:GMT)|(?:[+\\-][0-9]{4}))' # and zone GMT or +0000
-                ')?' 
-                ),)
-
-        def xml_valid (self, dom):
-                pns_xml.xml_utf8_name (self, dom)
-                self.pns_name = None        
-                
 
 markup = re.compile ('<.+?>')
 
@@ -73,9 +34,74 @@ class RSS_description (pns_xml.Articulate):
                 # TODO: escape &#... to UTF-8 ?
 
                 
+class RSS_pubDate (pns_xml.Articulate):
+        
+        pns_sat_language = (re.compile (
+                '^(?:'
+                '(?:([A-z]+?)[,]?\\s+)?' # day of the week Mon, Tue, ..., Sun. 
+                '([0-3][0-9])\\s+([A-z]+)\\s+([0-9]{4})'# date 01 Jan 2001
+                ')|' 
+                '(?:'
+                '\\s+([0-2][0-9]:[0-5][0-9]:[0-5][0-9])' # time 23:59:59
+                '\\s+((?:GMT)|(?:[+\\-][0-9]{4}))' # and zone GMT or +0000
+                ')?' 
+                ),)
+
+        xml_valid = pns_xml.xml_utf8_sat
+
+
+class RSS_language (pns_xml.Inarticulate):
+        
+        def xml_valid (self, dom):
+                parent = self.xml_parent ()
+                if parent.xml_name == 'channel':
+                        dom.pns_sat_language = pns_sat.language (
+                                self.xml_first
+                                )
+
+        #
+        # the fact is that the <language/> element is stupidly placed, not
+        # only *in* the item and channel but also *after* the title and 
+        # description: errare humanum est, etc ...
+        #
+        # I mean there *is* a xml:lang attribute designed expressedly to
+        # indicate the language for the content that follows!
+        #
+        # so here is the compromise: the <language/> effectively applies 
+        # to the "default" language for the document articulated and
+        # the item's language is ignored. 
+
+        
+class RSS_title (pns_xml.Articulate):
+        
+        def xml_valid (self, dom):
+                # a <title/> names its parent, item or channel
+                self.xml_parent ().pns_name = \
+                        pns_xml.xml_utf8_sat (self, dom)
+        
+
+class RSS_item (pns_xml.Articulate):
+        
+        xml_valid = pns_xml.xml_utf8_context
+
+
+class RSS_channel (pns_xml.Articulate):
+        
+        def xml_valid (self, dom):
+                # name the <rss/> root, at last and articulate the channel
+                self.xml_parent ().pns_name = self.pns_name
+                pns_xml.xml_utf8_context (self, dom)
+
+
+class RSS_rss (pns_xml.Inarticulate):
+        
+        xml_valid = pns_xml.xml_utf8_root
+        
+
 RSS_TYPES = {
         # RSS 2.0 is real cool, simple *and* well articulated
         #
+        'rss': RSS_rss,
         'channel': RSS_channel,
         'title': RSS_title,
         'item': RSS_item,
@@ -119,43 +145,36 @@ RSS_TYPES = {
         }
 
 
-def rss_articulator (name, statement, dom=None):
-        if dom == None:
+def feed (url, statement, benchmark=True):
+        host, port, urlpath = re.compile (
+                'http://([^/:]+)[:]?([0-9]+)?(/.+)'
+                ).match (url).groups ()
+        if benchmark:
+                dom = xml_reactor.XML_benchmark (unicoding=0)
+        else:
                 dom = xml_reactor.XML_collector (unicoding=0)
-        dom.xml_type = xml_dom.XML_delete
-        dom.xml_types = RSS_TYPES
-        dom.pns_name = name
-        dom.pns_statement = statement
+        pns_xml.articulate (
+                dom, url, 'en', RSS_TYPES, xml_dom.XML_delete, statement
+                )
+        http_client.GET (http_client.HTTP_client (
+                ) (host, int (port or '80')), urlpath) (dom)
         return dom
 
-# The best part of it is that there is no need to declare DTD or worse
-# to get the actual structure of the XML strings in a semantically
-# undispersed graph, providing an interropperable namespace to application
-# developpers. You can throw any XML at it, forget about database design
-# headeaches: test the relevance of your existing information articulation,
-# let it then evolve.
 
 if __name__ == '__main__':
         import sys, time
-        from allegra import async_loop, loginfo, http_client, xml_reactor
+        from allegra import async_loop, loginfo
         assert None == loginfo.log (
                 'Allegra PNS/RSS'
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0\n', 'info'
                 )
-        host, port, urlpath = re.compile (
-                'http://([^/:]+)[:]?([0-9]+)?(/.+)'
-                ).match (sys.argv[1]).groups ()
         t = time.clock ()
-        if __debug__ or '-d' in sys.argv:
-                dom = xml_reactor.XML_benchmark (unicoding=0)
-        else:
-                dom = xml_reactor.XML_collector (unicoding=0)
-        pns_xml.articulate (
-                dom, sys.argv[1], 'en', RSS_TYPES, xml_dom.XML_delete
+        dom = feed (
+                sys.argv[1], 
+                pns_xml.log_statement, 
+                __debug__ or '-d' in sys.argv
                 )
-        http_client.GET (http_client.HTTP_client (
-                ) (host, int (port or '80')), urlpath) (dom)
         async_loop.loop ()
         t = time.clock () - t
         if __debug__ or '-d' in sys.argv:
@@ -166,4 +185,4 @@ if __name__ == '__main__':
                                 dom.xml_benchmark_time
                                 ), 'info'
                         )
-        async_loop.dispatch ()
+                async_loop.dispatch ()
