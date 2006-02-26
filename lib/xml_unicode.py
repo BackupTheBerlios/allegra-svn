@@ -160,7 +160,7 @@ def xml_unprefixed (e, xml_attributes='', encoding='ASCII'):
                         
                 for child in e.xml_children:
                         if hasattr (child, 'xml_name'):
-                                for s in xml_unprefixed (child, encoding):
+                                for s in xml_unprefixed (child, '', encoding):
                                         yield s
                         
                                 if child.xml_follow:
