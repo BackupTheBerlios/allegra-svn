@@ -41,17 +41,16 @@ class PNS_resolution (thread_loop.Thread_loop):
 		return 'pns_resolution'
 		
 	def thread_loop_init (self):
-		if __debug__:
-                	if glob.glob (self.pns_root + '/statements.log'):
-                		self.pns_log_file = open (
-                			self.pns_root + '/statements.log', 
-                			'a'
-                			)
-           		else:
-           			self.pns_log_file = open (
-                			self.pns_root + '/statements.log', 
-                			'w'
-                			)
+        	if glob.glob (self.pns_root + '/statements.log'):
+        		self.pns_log_file = open (
+        			self.pns_root + '/statements.log', 
+        			'a'
+        			)
+   		else:
+   			self.pns_log_file = open (
+        			self.pns_root + '/statements.log', 
+        			'w'
+        			)
                 try:
                         self.pns_statements = bsddb.db.DB ()
                         if glob.glob (self.pns_root + '/statements.db'):
