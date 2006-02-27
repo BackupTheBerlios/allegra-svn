@@ -176,22 +176,29 @@ class Articulate (xml_dom.XML_element):
         pns_sat_language = None
         pns_sat_articulated = ()
         PNS_SAT_CHUNK = 504
-        # pns_xml_articulated = None
         
         def xml_valid (self, dom):
+                # articulate a named context, a nameless context, name a
+                # context and articulate SAT or just articulate SAT, maybe
+                # chunk it if the first CDATA is too big.
+                #
                 if self.xml_children:
-                        if self.xml_attributes.has_key ('pns'):
-                                xml_utf8_context (self, dom)
-                        else:
-                                xml_dom.xml_sparse (self, dom)
+                        if (
+                                self.xml_attributes and 
+                                self.xml_attributes.has_key ('pns')
+                                ):
+                                self.pns_name = xml_utf8_name (self, dom)
+                        xml_utf8_context (self, dom)
                 if (
                         self.xml_attributes and 
                         self.xml_attributes.has_key ('pns')
                         ):
-                        xml_utf8_name (self, dom)
+                        self.pns_name = xml_utf8_sat (self, dom)
+                elif len (self.xml_first) < self.PNS_SAT_CHUNK:
+                        xml_utf8_sat (self, dom)
                 else:
                         xml_utf8_chunk (self, dom)
-
+                
 
 class Inarticulate (xml_dom.XML_element):
         
