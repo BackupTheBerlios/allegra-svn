@@ -31,7 +31,7 @@
   <xsl:template match="presto:form">
     <div class="presto-top">
       <h1><span style="font-weight: bold;">PRESTo</span>
-        POST URL encoded form</h1>
+        POST form data</h1>
       <div style="font-size: small;">Copyright 2005 Laurent A.V.
         Szyster | Copyleft GPL 2.0</div>
     </div>
