@@ -63,6 +63,7 @@ class PNS_client_channel (
                 del self.async_net_continue
 
         def async_net_continue (self, encoded):
+                "handle the first PNS/TCP peer statement"
                 model = list (netstring.decode (encoded))
                 if len (model) < 5:
                         assert None == self.log (
@@ -78,15 +79,18 @@ class PNS_client_channel (
         pns_close_when_done = False
         
         def pns_peer (self, ip):
+                "handle PNS/TCP opening and closing"
                 assert None == self.log (
                         'peer ip="%s"' % ip, 'debug'
                         )
                         
         def pns_send (self, encoded):
+                "send a single encoded Public RDF statement"
                 self.async_net_push ((encoded,))
                 self.pns_sent += 1
 
         def pns_join (self, context, ip, handler):
+                "join a context at ip and subscribe the handler to its log"
                 if self.pns_subscribed.has_key (context):
                         self.pns_subscribed[context].append (handler)
                 else:
@@ -96,6 +100,7 @@ class PNS_client_channel (
                         )))
 
         def pns_subscribe (self, context, handler):
+                "subscribe to a context and log its statements"
                 if self.pns_subscribed.has_key (context):
                         self.pns_subscribed[context].append (handler)
                 else:
@@ -105,6 +110,7 @@ class PNS_client_channel (
                                 )))
 
         def pns_quit (self, context, handler):
+                "quit a context, unsubscribe to its log"
                 if self.pns_subscribed.has_key (context):
                         self.pns_subscribed[context].remove (handler)
                         if len (self.pns_subscribed[context]) == 0:
@@ -113,24 +119,8 @@ class PNS_client_channel (
                                         '', '', '', context
                                         )))
 
-        def pns_command (self, model, handler=None):
-                return self.pns_resolve (
-                        model, '', handler, 
-                        self.pns_commands.setdefault (model, [])
-                        )
-                        
-        def pns_statement (self, model, context='', handler=None):
-                assert context == '' or not (
-                        model[1] == '' and model[0] == context
-                        )
-                return self.pns_resolve (
-                        model, context, handler, 
-                        self.pns_contexts.setdefault (
-                                context, {}
-                                ).setdefault (model, [])
-                        )
-
         def pns_resolve (self, model, context, handler, handlers):
+                "resolve a command or statement"
                 handlers.append (handler or self.pns_signal)
                 if len (handlers) == 1:
                         # send the statement if it is not redundant
@@ -143,8 +133,29 @@ class PNS_client_channel (
                         return True
                         
                 return False
+                
+        def pns_command (self, model, handler=None):
+                "resolve a PNS inference command: index, context and route"
+                assert model[0] == ''
+                return self.pns_resolve (
+                        model, '', handler, 
+                        self.pns_commands.setdefault (model, [])
+                        )
+                        
+        def pns_statement (self, model, context='', handler=None):
+                "resolve a Public RDF statement, question or answer"
+                assert context == '' or not (
+                        model[1] == '' and model[0] == context
+                        )
+                return self.pns_resolve (
+                        model, context, handler, 
+                        self.pns_contexts.setdefault (
+                                context, {}
+                                ).setdefault (model, [])
+                        )
 
         def pns_continue (self, encoded):
+                "handle the following PNS/TCP peer statement"
                 # Note that there is no validation of the PNS statements
                 # because they are trusted to be valid. A client *may*
                 # validate, the peer *must* anyway.
@@ -162,7 +173,7 @@ class PNS_client_channel (
                 resolved = tuple (model[:3])
                 if '' == model[0]:
                         if '' == model[1] == model[2]:
-                                # protocol command: unsubscribed
+                                # TODO: protocol response to quit
                                 return
                                 
                         # index, context and route
@@ -181,7 +192,7 @@ class PNS_client_channel (
                         if len (self.pns_commands[resolved]) == 0:
                                 del self.pns_commands[resolved]
                 elif '' == model[1] and model[0] == model[3]:
-                        # protocol
+                        # TODO: protocol response to join/subscribe
                         pass
                 else:
                         # statements
@@ -217,12 +228,14 @@ class PNS_client_channel (
                         self.handle_close ()
                         
         def pns_multiplex (self, model):
+                "multiplex the context logs to the subscribed handlers"
                 handlers = self.pns_subscribed.get (model[3])
                 if handlers:
                         for handler in handlers:
                                 handler (model)
                         
         def pns_signal (self, resolved, model):
+                "the default resolution handler"
                 assert None == self.log (netstring.encode (model))
                 if model[4] == '_' or model[4].startswith ('.'):
                         return False
@@ -230,6 +243,7 @@ class PNS_client_channel (
                 return True
                 
         def pns_noise (self, model):
+                "the default noise handler"
                 assert None == self.log (
                         netstring.encode (model), 'noise'
                         )
