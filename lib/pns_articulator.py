@@ -203,7 +203,7 @@ class PNS_articulate (finalization.Finalization):
                 for name in finalized.pns_contexts.union (
                         set (finalized.pns_indexes)
                         ):
-                        if len (netstring.decode (name)) > 0:
+                        if len (tuple (netstring.decode (name))) > 0:
                                 finalized.pns_articulator.pns_statement (
                                         (name, 'sat', ''), '', 
                                         self.pns_resolve_sat
@@ -237,11 +237,6 @@ class PNS_articulate (finalization.Finalization):
                                 resolved[0], resolved[1], o, c, '_'
                                 ))
                                 
-
-        def finalization (self, finalized):
-                if self.pns_articulator:
-                        self.pns_articulator = None
-
 
 class PNS_articulate_names (finalization.Finalization):
         
@@ -287,7 +282,7 @@ class PNS_articulate_names (finalization.Finalization):
                         return # stop.
 
                 # no context available, articulate the name resolved
-                names =list (netstring.decode (resolved[1]))
+                names = list (netstring.decode (resolved[1]))
                 if len (names) == 0:
                         # nothing to articulate, if there are no contexts
                         # available yet, walk up
@@ -310,10 +305,6 @@ class PNS_articulate_names (finalization.Finalization):
                                 self.pns_resolve_context
                                 )
                                 
-        def finalization (self, finalized):
-                if self.pns_articulator:
-                        self.pns_articulator = None
-
 
 class PNS_articulate_subject (finalization.Finalization):
         
@@ -362,10 +353,6 @@ class PNS_articulate_subject (finalization.Finalization):
                                         resolved[0], resolved[1], o, c, '_'
                                         ))
                                 
-        def finalization (self, finalized):
-                if self.pns_articulator:
-                        self.pns_articulator = None
-
 
 if __name__ == '__main__':
         import sys, time
