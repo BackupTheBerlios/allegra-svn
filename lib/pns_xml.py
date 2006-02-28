@@ -25,9 +25,7 @@ from allegra import (
         )
 
 
-# XML to PNS/SAT articulation (UTF-8 encoding only!)
-
-def xml_utf8_articulate (e):
+def xml_utf8_to_pns (e):
         "XML/PNS - articulate an UTF-8 XML element as 8-bit byte strings"
         if e.xml_attributes:
                 yield netstring.encode ((
@@ -75,6 +73,9 @@ def xml_utf8_articulate (e):
         # XHTML or DocBook, 4KB or bigger datagrams are probably
         # required (unless of course you just want to index it all,
         # not store it all ;-)
+
+
+# XML to PNS/SAT articulation (UTF-8 encoding only!)
         
 def xml_utf8_sat (element, dom):
         if element.xml_children:
@@ -139,7 +140,7 @@ def xml_utf8_context (element, dom):
                         child.pns_name or name,
                         child.xml_name,
                         netstring.encode (
-                                xml_utf8_articulate (child)
+                                xml_utf8_to_pns (child)
                                 ),
                         name
                         ))
@@ -164,7 +165,7 @@ def xml_utf8_root (element, dom):
                 element.pns_name or dom.pns_name,
                 element.xml_name,
                 netstring.encode (
-                        xml_utf8_articulate (element)
+                        xml_utf8_to_pns (element)
                         ),
                 dom.pns_name
                 ))
@@ -258,47 +259,13 @@ def articulate (
         #
         # Synopsis:
         #
-        # xml_utf8_articulate (
+        # xml_utf8_to_pns (
         #    xml_reactor.XML_collector (), 
         #    'http://...', 'en', pns_rss.RSS_20, log_statement
         #    )
 
 
 # PNS/XML proper, store and retrieve XML documents from a PNS metabase
-
-def xml_utf8_pns_name (attributes):
-        try:
-                return attributes['pns']
-        
-        except:
-                return ''
-        
-
-def xml_utf8_to_pns (e):
-        "XML/PNS - serialize an UTF-8 XML element as 8-bit byte strings"
-        if e.xml_attributes:
-                yield netstring.encode ((
-                        netstring.encode (item) 
-                        for item in e.xml_attributes.items ()
-                        ))
-        else:
-                yield ''
-                        
-        yield e.xml_first
-
-        if e.xml_children:
-                yield netstring.encode ((
-                        netstring.encode ((
-                                child.pns_name, child.xml_name
-                                ))
-                        for child in e.xml_children
-                        ))
-        
-        else:
-                yield ''
-                        
-        yield e.xml_follow or ''
-
 
 def xml_unicode_to_pns (e):
         "XML/PNS - serialize a UNICODEd XML element as 8-bit byte strings"
@@ -308,7 +275,6 @@ def xml_unicode_to_pns (e):
                                 key.encode ('utf-8'), val.encode ('utf-8')
                                 ))
                         for key, val in e.xml_attributes.items ()
-                        if key != u'pns'
                         ))
         
         else:
@@ -327,26 +293,12 @@ def xml_unicode_to_pns (e):
         
         else:
                 yield ''
-                        
-        yield e.xml_follow.encode ('utf-8') or ''
-
-
-def xml_to_pns (element, context, statement):
-        subject = element.xml_attributes.get (u'pns', u'').encode (
-                'utf-8'
-                ) or context
-        if statement ((
-                subject, 
-                element.xml_name,
-                netstring.encode (xml_unicode_to_pns (element)),
-                context
-                )):
-                for child in element.xml_children:
-                        if not xml_to_pns (child, context, statement):
-                                child.pns_name = None
-                return True
-
-        return False
+                   
+        if e.xml_follow:
+                yield e.xml_follow.encode ('utf-8')
+        
+        else:
+                yield ''
 
 
 class PNS_XML_continuation (finalization.Finalization):
@@ -514,6 +466,7 @@ class PNS_DOM (object):
                 self.xml_pi = pi or {}
                 
         def pns_to_xml (self, name, subject, context, statement):
+                "rollback XML from PNS"
                 self.pns_name = context
                 self.pns_statement = statement
                 finalized = PNS_XML_continuation (self, None)
@@ -530,6 +483,7 @@ class PNS_DOM (object):
                 finalized.finalization = self.pns_to_xml_continue
                         
         def pns_to_xml_continue (self, finalized):
+                "PNS/XML rolledback"
                 assert None == loginfo.log (
                         '%r' % finalized.xml_parsed, 'debug'
                         )
@@ -538,54 +492,70 @@ class PNS_DOM (object):
                         e.xml_valid (self)
                 self.xml_root = e
 
-        def xml_to_pns (self, name, subject, context, statement):
+        def xml_to_pns (self, name, context, statement):
+                "commit XML to PNS"
                 self.pns_name = context
                 self.pns_statement = statement
-                statement ((
-                        subject, xml_root.xml_name, 
-                        xml_unicode_to_pns (self.xml_root)
-                        ), context, self.xml_unicode_to_pns)
-                        
-        def xml_unicode_to_pns (self, resolved, model):
-                if model[4] == '_':
-                        pass
-                elif model[4] == '.':
-                        pass
-                elif model[4] == '?':
-                        pass
-                elif model[4] == '!':
-                        pass
+                if self.xml_unicoding:
+                        self.xml_unicode_to_pns (self.xml_root, context)
                 else:
-                        pass
+                        self.xml_utf8_to_pns (self.xml_root, context)                        
+                        
+        def xml_unicode_to_pns (self, element, context):
+                try:
+                        pns = element.xml_attributes.pop (u'pns')
+                except:
+                        element.pns_name = ''
+                        subject = context
+                else:
+                        element.pns_name = subject = pns.encode ('utf-8')
+                if element.xml_children:
+                        for child in element.xml_children:
+                                xml_unicode_to_pns (child, subject)
+                self.pns_statement ((
+                        subject, element.xml_name,
+                        netstring.encode (xml_unicode_to_pns (element))
+                        ), context, )
+                if subject != context:
+                        element.xml_attributes[u'pns'] = pns
+                        
+        def xml_utf8_to_pns (self, element, context):
+                try:
+                        element.pns_name = subject = \
+                                element.xml_attributes.pop ('pns')
+                except:
+                        element.pns_name = ''
+                        subject = context
+                if element.xml_children:
+                        for child in element.xml_children:
+                                self.xml_utf8_to_pns (child, subject)
+                self.pns_statement ((
+                        subject, element.xml_name,
+                        netstring.encode (xml_utf8_to_pns (element)),
+                        ), context, )
+                if subject != context:
+                        element.xml_attributes['pns'] = subject
+                        
 
-        
 # Note about this implementation
 #
-# <rss> inherit the document name
-#   <channel>            
-#     <title>...</title> # articulate and name the channel
-#     <item>               
-#       <title>...</title> # articulate and name the item
-#       <description>...</description> # articulate, maybe name
-#     </item> # makes statements about its title, description
-#   </channel> # make statements about its title, item(s)
-# </rss>
+# Well, this is definitively not your mother's XML!
 #
+# PNS/XML is a both a demonstration of the ability of the PNS metabase
+# to cope with XML document round-trip, but also an evidence of the
+# simplicity of Greg Stein's unorthodox element tree structure and
+# finally it is an amazing application of finalizations.
 #
-# <html> # inherit the document name
-#   <head>
-#      <title>...</title> # articulate and name the head
-#   </head>
-#   <body>
-#     <h1>...</h1> # articulate and name the body
-#     <p>...</p> # articulate maybe name itself if there are children
-#   </body>
-# </html>
+# I mean, doing this entirely asynchronously over a multiplexed protocol
+# like PNS/TCP and possibly with an articulator cache in between (that 
+# pns_statement may be the one of a PNS_articulator ;-), well it would
+# be impractical with the combination of anything else in Python.
 #
-# The best part of it is that there is no need to declare DTD or worse
-# to get the actual structure of the XML strings in a semantically
-# undispersed graph, providing an interropperable namespace to application
-# developpers. You can throw any XML at it, forget about database design
-# headeaches: test the relevance of your existing information articulation,
-# let it then evolve.
-
+# The icing is of course on the cake, and this implementation is
+# feature-complete. You can serialize and instanciate XML documents
+# back and forth from PNS to XML, via the DOM. 
+#
+# Note that a rolling-back PNS/XML DOM can still be serialized asynchronously
+# passed to a generator that produces an XML string. Because the root is
+# attached to the DOM and the previous one dropped only once the tree has
+# been completed. Also, note that   
