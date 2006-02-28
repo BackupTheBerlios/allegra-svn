@@ -158,7 +158,7 @@ class Python_prompt (Sync_prompt):
 		if method == 'excp':
 			self.loginfo_traceback (result)
 		elif result != None:
-			self.async_stderr ('%r\n' % result)
+			self.async_stderr ('%r\n' % (result,))
 		self.thread_loop_queue ((self.sync_stdin, ()))
 
 	def async_stdio_stop (self):
