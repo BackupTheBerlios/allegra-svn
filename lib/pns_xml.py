@@ -76,7 +76,7 @@ def xml_utf8_to_pns (e):
 
 
 # XML to PNS/SAT articulation (UTF-8 encoding only!)
-        
+
 def xml_utf8_sat (element, dom):
         if element.xml_children:
                 element.pns_sat_articulated = []
@@ -216,38 +216,21 @@ PNS_LENGTH = 1024
 
 def log_statement (model):
         "Log valid statement to STDOUT, errors to STDERR"
-        #
-        # Length validation, extracted from PNS/Model (there is no need
-        # to valide the subject and context as Public Names, this should
-        # have been allready done!)
-        #
-        if model[0]:
-                sp_len = len (model[0]) + len (model[1]) + len (
-                        '%d%d' % (len (model[0]), len (model[1]))
-                        )
-                if sp_len > PNS_LENGTH/2:
-                        assert None == loginfo.log (
-                                netstring.encode (model), 
-                                '3 invalid statement length %d' % sp_len
-                                )
-                        return False
-
-                if model[2]:
-                        model = (model[0], model[1], model[2][:(
-                                PNS_LENGTH - sp_len - len (
-                                        '%d' % (PNS_LENGTH - sp_len)
-                                        )
-                                )], model[3])
+        model, error = pns_model.pns_triple (model)
+        if error:
+                loginfo.log (netstring.encode (model), error)
+                return False
+        
         loginfo.log (netstring.encode (model))
         return True
 
 
 def articulate (
-        dom, name, lang, types, 
+        dom, name, types, 
         type=Articulate, statement=log_statement
         ):
         dom.pns_name = name
-        dom.pns_sat_language = pns_sat.language (lang)
+        dom.pns_sat_language = pns_sat.language ()
         dom.xml_types = types
         dom.xml_type = type
         dom.xml_unicoding = 0
@@ -537,6 +520,43 @@ class PNS_DOM (object):
                         element.xml_attributes['pns'] = subject
                         
 
+# map a PNS name and its SAT to XML: 
+#
+# <public names="5:Names,6:Public," sat="Public Names">
+#   <public>Names</public>
+#   <public>Public</public>
+# </public>
+#
+# something easy to transform with XSLT, present with CSS or manipulate
+# with JavaScript.
+
+def public_utf8 (name, sats):
+        names = tuple (decode (name)) or (encoded,)
+        if len (names) > 1:
+                return '<public names="%s" sat="%s">%s</public>' % (
+                        xml_utf8.xml_attr (name), 
+                        xml_utf8.xml_attr (sats.get (name, '')), 
+                        ''.join ([public_utf8 (n, sats) for n in names])
+                        )
+
+        return '<public name="%s" />' % xml_utf8.xml_attr (name)
+
+
+def public_unicode (name, sats, encoding='ASCII'):
+        names = tuple (decode (name)) or (encoded,)
+        if len (names) > 1:
+                return '<public names="%s" sat="%s">%s</public>' % (
+                        xml_unicode.xml_attr (unicode (name, 'UTF-8')), 
+                        xml_unicode.xml_attr (unicode (
+                                sats.get (name, ''), 'UTF-8'
+                                )), 
+                        ''.join ([public_unicode (n, sats) for n in names])
+                        )
+
+        return '<public name="%s" />' % xml_unicode.xml_attr (
+                unicode (name, 'UTF-8')
+                )
+
 # Note about this implementation
 #
 # Well, this is definitively not your mother's XML!
@@ -555,7 +575,8 @@ class PNS_DOM (object):
 # feature-complete. You can serialize and instanciate XML documents
 # back and forth from PNS to XML, via the DOM. 
 #
-# Note that a rolling-back PNS/XML DOM can still be serialized asynchronously
-# passed to a generator that produces an XML string. Because the root is
-# attached to the DOM and the previous one dropped only once the tree has
-# been completed. Also, note that   
+# Note that a rolling-back PNS/XML DOM can still be and passed to a generator
+# that produces an XML string. Because the root is attached to the DOM and
+# the previous one dropped only once the tree has been completed.
+#
+#

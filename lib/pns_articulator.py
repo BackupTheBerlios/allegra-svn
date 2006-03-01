@@ -165,9 +165,11 @@ class PNS_articulate (finalization.Finalization):
                         
         def pns_articulate_names (self, finalized):
                 if len (finalized.pns_indexes) > 1:
-                        self.pns_index = pns_model.pns_name (netstring.encode (
-                                list (finalized.pns_indexes)
-                                ), set ())
+                        self.pns_index = pns_model.pns_name (
+                                netstring.encode (list (
+                                        finalized.pns_indexes
+                                        )), set ()
+                                )
                 elif len (finalized.pns_indexes) > 0:
                         self.pns_index = tuple (finalized.pns_indexes)[0]
                 if len (finalized.pns_contexts) > 1:

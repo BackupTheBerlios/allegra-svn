@@ -154,7 +154,7 @@ def feed (url, statement, benchmark=True):
         else:
                 dom = xml_reactor.XML_collector (unicoding=0)
         pns_xml.articulate (
-                dom, url, 'en', RSS_TYPES, xml_dom.XML_delete, statement
+                dom, url, RSS_TYPES, xml_dom.XML_delete, statement
                 )
         http_client.GET (http_client.HTTP_client (
                 ) (host, int (port or '80')), urlpath) (dom)

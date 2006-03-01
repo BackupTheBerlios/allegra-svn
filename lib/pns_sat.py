@@ -29,7 +29,7 @@ SAT_STRIP_UTF8 = ' \t\r\n'
 
 LANGUAGES = {}
 
-def language (name):
+def language (name=None):
         "load a language module on demand and return its ARTICULATE stack"
         try:
                 return LANGUAGES[name]
@@ -136,3 +136,16 @@ def articulate_languages (text, languages):
         articulated_languages.sort ()
         return articulated_languages[-1]
 
+
+# Let's get a pure PNS/SAT dialog. Just this:
+#
+#  context\n
+#  simple articulated text\n\n
+#
+# two fields, one for an articulated or inarticulated context (supposed to
+# be a URI or any other computer reference ;-) and one for the simple
+# articulated text of the PNS/SAT statement's subject(s).
+#
+# if no subject is provided, the context is searched for.
+#
+# It is a delicious blogpad.

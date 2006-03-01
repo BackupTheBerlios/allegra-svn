@@ -80,6 +80,24 @@ def pns_name (encoded, horizon, HORIZON=126):
         return '' # nothing valid to articulate in this horizon
 
 
+def pns_triple (model, PNS_LENGTH=1024):
+        "validate the length of a triple as fitting a PNS/UDP datagram"
+        assert model[0]
+        sp_len = len (model[0]) + len (model[1]) + len (
+                '%d%d' % (len (model[0]), len (model[1]))
+                )
+        if sp_len > PNS_LENGTH/2:
+                return None, '3 invalid statement length %d' % sp_len
+
+        if model[2]:
+                model = (model[0], model[1], model[2][:(
+                        PNS_LENGTH - sp_len - len (
+                                '%d' % (PNS_LENGTH - sp_len)
+                                )
+                        )], model[3])
+        return model, ''
+
+
 def pns_quatuor (encoded, pns_names, PNS_LENGTH=1024):
         # a valid quatuor must have subject, predicate, object and context
         #
