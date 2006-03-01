@@ -17,72 +17,87 @@
 
 ""
 
-import time
+import re, time, quopri
 
 from allegra import \
-        loginfo, finalization, async_chat, tcp_client, \
+        loginfo, async_chat, tcp_client, \
         dns_client, mime_headers, mime_reactor
 
 
 class NNRP_client_channel (
-        tcp_client.Pipeline, mime_reactor.MIME_collector,
-        tcp_client.TCP_client, async_chat.Async_chat
+        tcp_client.Pipeline,
+        mime_reactor.MIME_collector,
+        tcp_client.TCP_client_channel, 
+        async_chat.Async_chat
         ):
                 
         def __init__ (self):
-                tcp_client.Pipeline.__init__ (self)
                 async_chat.Async_chat.__init__ (self)
                 self.set_terminator ('\r\n')
                 
         def mime_collector_continue (self):
                 nnrp_response = self.mime_collector_lines[0][:3]
                 if nnrp_response in ('205', '400'):
-                        handle_close ()
-                        return
+                        self.handle_close ()
+                        return True
                         
                 if nnrp_response in  ('200', '201'):
                         self.pipeline_wake_up ()
-                        return
-                        
-                if nnrp_response == '':
-                        pass
+                        return False                        
+                
+        def mime_collector_finalize (self):
+                return False
                         
         def nnrp_user (self, name, password):
                 pass
                 
         def nnrp_group (self, name):
-                pass
+                self.push ('GROUP %s\n' % name)
+                
+        def nnrp_stat (self, id, collector=None):
+                self.push ('STAT %s\n' % name)
                 
         def nnrp_article (self, id, collector=None):
                 pass
-                
-        def nnrp_stat (self, id, collector=None):
-                pass
-                
+
         def nnrp_head (self, id, collector=None):
                 pass
                 
         def nnrp_body (self, id, collector=None):
                 pass
-    
-        
-# A simple NNRP client channel
+
+# Note about this implementation
 #
-#        news = NNRP_client_channel ('use.net')
+# Just enough of an USENET client to retrieve one or all articles from
+# a given newsgroup, decode Quoted Printable headers and collect it 
 #
-# four interfaces
+# Synopsis
 #
-#        list = news.nnrp_list ()
-#        group = news.nnrp_group ()
-#        group.nnrp_next ()
+# >>> from allegra import collector, nnrp_client
+# >>> usenet = nnrp_client.NNRP_client ('news.chello.be')
+# >>> usenet.articles ('comp.lang.python', collect, 0)
+# >>> usenet.article ('comp.lang.python', collect)
 #
-#        stat = news.nnrp_stat (nnn)
-#        article = news.nnrp_article ('id')
-#        head = news.nnrp_head ('id')
-#        body = news.nnrp_body ('id')
+# The Right Way
 #
-# that return the appropriate reactor, and one newsfeed articulator
+# What should a USENET reader do? 
 #
-#        group.feed ('comp.lang.python', pipe)
+#  1. get new groups since (date)
 #
-# that pipelines everything
+#  2. for each subscribed (group)
+#
+#         get all new articles headers since (id)
+#
+#  4. read (id) that are relevant
+#
+#  3. walk references (id) up and down?
+#
+# from allegra import collector, nnrp_client
+#
+# usenet = nnrp_client.NNRP_client ('news.chello.be')
+# usenet.LIST (collector.File_collector ('newsgroups.txt'))
+# Continue ((
+#     usenet.GROUP ('comp.lang.python', ),
+#     usenet.GROUP ('comp.lang.python-announce')
+#     ))
+#

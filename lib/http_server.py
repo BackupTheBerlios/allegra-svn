@@ -506,6 +506,11 @@ def http_hosts (root, host, port):
 
 
 def cli (argv):
+        # TODO: move up to tcp_server.py, this is a usefull interface
+        #       for other services than HTTP/1.1 (for instance a netstring
+        #       PRESTo peer not having to suffer from CRLF delimited
+        #       troubles, MIME headers parsing and HTTP's overhead).
+        #
         root, ip, port, host = ('.', '127.0.0.1', 80, None)
         if len (argv) > 1:
                 root = argv[1]

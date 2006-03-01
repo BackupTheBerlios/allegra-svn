@@ -77,7 +77,7 @@ class Escaping_producer (object):
 class MIME_collector (object):
 	
 	"""A collector implementation for all MIME collectors protocols,
-	like MULTIPART but also SMTP, HTTP, etc ..."""
+	like MULTIPART but also POP, HTTP, etc ..."""
 	
 	collector_is_simple = False
 	
@@ -126,8 +126,9 @@ class MULTIPART_collector (object):
 
 	collector_is_simple = False
 
-        def __init__ (self, mime_collector):
+        def __init__ (self, mime_collector, multipart_factory):
         	self.mime_collector = mime_collector
+                self.multipart_factory = multipart_factory
                 self.multipart_buffer = ''
                 self.multipart_part = None
                 self.multipart_parts = {}
@@ -162,7 +163,7 @@ class MULTIPART_collector (object):
 		headers = mime_headers.map (
 			mime_headers.split (self.multipart_buffer)
 			)
-                collector = self.multipart_collector ()
+                collector = self.multipart_factory (headers)
 		if not collector.collector_is_simple:
 			collector = Simple_collector (collector)
 		self.multipart_parts.append (collector)

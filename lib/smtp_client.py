@@ -112,16 +112,10 @@ class SMTP_client_channel (
         tcp_client.Pipeline, tcp_client.TCP_client, async_chat.Async_chat, 
         ):
 
-        "an SMTP client pipeline channel"
-        
-        # a simple implementation of an SMTP client pipeline.
-        #
         # This SMTP client waits for 220 to wake up the pipeline, then uses 
         # the RSET command after each request is completed, in effect leaving
         # up to the SMTP server to "pull" reactors from the client's requests 
         # queue. Waking up the pipeline is simply done by sending NOOP.
-        #
-        # this is enough to support access to an outgoing SMTP relay
 
         def __init__ (self):
                 self.smtp_response = ''
@@ -286,7 +280,7 @@ if __name__ == '__main__':
 #
 # The purpose of this implementation is to provide a simple SMTP client 
 # interface to send mail directly from a peer to the recipient's relay,
-# bypassing the any forward queue and concurrently delivering mail to
+# bypassing any forward queue and concurrently delivering mail to
 # distinct mail exchanges.
 #
 # In effect Allegra's SMTP client will deliver much higher performance
@@ -341,5 +335,6 @@ if __name__ == '__main__':
 # a central queue. And since what matters is the instant nature of messaging
 # for a peer, the absence of fail-over retry made possible by that queue is
 # not a missing function. Instead, the peer's user can immediately have an
-# acknoledgement of delivery or a failure notice from which to respond.
+# acknowledgement of delivery or a failure notice from which to react.
+#
 # It is an ideal SMTP mail client for a personal network peer
