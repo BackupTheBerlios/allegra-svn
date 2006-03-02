@@ -19,8 +19,10 @@ import time
 
 from xml.parsers import expat
 
-from allegra import \
-        producer, collector, xml_dom, xml_unicode, xml_utf8
+from allegra import (
+        finalization, producer, collector, 
+        xml_dom, xml_unicode, xml_utf8
+        )
 
 
 def xml_producer_unprefixed_utf8 (root, pi=None, globbing=512):
@@ -68,7 +70,7 @@ def xml_producer_unicode (
                 )
 
 
-class XML_collector (xml_dom.XML_dom):
+class XML_collector (xml_dom.XML_dom, finalization.Finalization):
         
         collector_is_simple = True
         
