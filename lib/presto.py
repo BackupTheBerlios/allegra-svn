@@ -33,20 +33,18 @@ from allegra import \
 
 # TODO: move away ...
 
-class PRESTo_reactor (reactor.Buffer_reactor):
+class PRESTo_reactor (producer.Stalled_generator):
         
         def __init__ (
                 self, react, response='<presto xmlns="http://presto/" />'
                 ):
-                reactor.Buffer_reactor.__init__ (self)
                 self.presto_react = react
                 self.presto_response = response
-        
+
         def __call__ (self, *args):
                 self.presto_react (*args)
+                self.generator = iter ((self.presto_response,))
                 self.presto_react = None
-                self.buffer (self.presto_response)
-                self.buffer ('') # ... buffer_react ()
 
 
 class PRESTo_async (
@@ -726,7 +724,7 @@ def presto_route (component, reactor):
         method = component.presto_methods.get (unicode (route, 'UTF-8'))
         if method != None:
                 return method (component, reactor)
-
+        
 
 def presto_route_set (element, dom):
         "instanciate or update the component's REST routing table"
