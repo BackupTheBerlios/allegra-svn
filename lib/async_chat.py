@@ -178,15 +178,19 @@ class Async_chat (async_core.Async_dispatcher):
 
         def writable (self):
                 "predicate for inclusion in the poll loop for output"
-                if self.producer_fifo:
-                        p = self.producer_fifo[0]
+                try:
+                        return not (
+                                self.producer_fifo[
+                                        0
+                                        ].producer_stalled () and
+                                self.connected
+                                )
+                
+                except:
                         return not (
                                 (self.ac_out_buffer == '') and 
-                                p != None and type (p) != str and
-                                p.producer_stalled () and self.connected
+                                self.connected
                                 )
-                        
-                return not ((self.ac_out_buffer == '') and self.connected)
 
         def handle_read (self):
                 "try to refill the input buffer and consume it"
