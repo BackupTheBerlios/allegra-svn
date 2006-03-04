@@ -294,9 +294,9 @@ class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
 if os.name == 'posix':
         import fcntl
 
-        class Async_file_wrapper:
+        class Async_file_wrapper (object):
 
-                "wrap a file to with enough of a socket like interface"
+                "wrap a file with enough of a socket like interface"
 
                 def __init__ (self, fd):
                         self.fd = fd
