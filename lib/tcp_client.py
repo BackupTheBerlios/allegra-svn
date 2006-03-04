@@ -123,9 +123,7 @@ class TCP_client (loginfo.Loginfo):
                                 self.tcp_client_defer
                                 ) # continue to defer
                 
-                assert None == self.log ('defer-stop', 'debug')
-                if self.tcp_client_shutdown:
-                	self.tcp_client_stop ()
+        	self.tcp_client_stop ()
                 return None
 
 	def tcp_client_inactive (self, channel, when):
@@ -137,10 +135,6 @@ class TCP_client (loginfo.Loginfo):
 			assert None == channel.log ('inactive', 'debug')
 			channel.handle_close ()
 
-	def tcp_client_shutdown (self, channel):
-		for channel in self.tcp_client_channels.values ():
-			channel.close_when_done ()	
-                        
         def tcp_client_close (self, channel):
                 assert None == channel.log (
                         'in="%d" out="%d"' % (
@@ -151,7 +145,11 @@ class TCP_client (loginfo.Loginfo):
                 channel.close ()
                 del channel.recv, channel.send, channel.handle_close
                 del self.tcp_client_channels[channel.tcp_client_key]
-		
+
+        def tcp_client_shutdown (self):
+                for channel in self.tcp_client_channels.values ():
+                        channel.close_when_done ()        
+                        		
 	def tcp_client_stop (self):
 		assert None == self.log ('stop', 'debug')
 
