@@ -80,6 +80,12 @@ class RSS_title (pns_xml.Articulate):
                         pns_xml.xml_utf8_sat (self, dom)
         
 
+class RSS_category (pns_xml.Articulate):
+        
+        def xml_valid (self, dom):
+                self.pns_name = pns_xml.xml_utf8_sat (self, dom)
+        
+
 class RSS_item (pns_xml.Articulate):
         
         xml_valid = pns_xml.xml_utf8_context
@@ -99,16 +105,24 @@ class RSS_rss (pns_xml.Inarticulate):
         
 
 RSS_TYPES = {
-        # RSS 2.0 is real cool, simple *and* well articulated
+        # RDF's understanding of RSS is, after all, the less problematic 
+        # protocol. At least it is flat and uses the xml:lang attribute.
+        # The <channel/> element is obviously well placed but the sequence
+        # of <items/> it contains is a clear redundancy (schmarkup to drop).
         #
-        'rss': RSS_rss,
-        'channel': RSS_channel,
-        'title': RSS_title,
-        'item': RSS_item,
-        'pubDate': RSS_pubDate,
-        'description': RSS_description,
+        #'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
+        #
+        # Yet the most common is RSS 0.92 to 2.0
+        #
         'link': pns_xml.Inarticulate,
         'guid': pns_xml.Inarticulate,
+        'category': RSS_category,
+        'pubDate': RSS_pubDate,
+        'description': RSS_description,
+        'title': RSS_title,
+        'item': RSS_item,
+        'channel': RSS_channel,
+        'rss': RSS_rss,
         #
         # http://purl.org/rss/1.0/ 
         #
@@ -122,8 +136,11 @@ RSS_TYPES = {
         # http://purl.org/dc/elements/1.1/
         #
         #'http://purl.org/dc/elements/1.1/ date': DC_date,
+        #'http://purl.org/dc/elements/1.1/ subject': RSS_category,
         #
-        # ATOM
+        # ATOM is a big piece of s**t, much worse than RSS, verbose and
+        # ill-articulated, with too many options bells and whistles, 
+        # producing fat and deep document. Don't implement it. Please.
         #
         #'http://purl.org/atom/ns# feed'
         #'http://purl.org/atom/ns# entry'
@@ -137,11 +154,6 @@ RSS_TYPES = {
         #'http://purl.org/atom/ns# created'
         #'http://purl.org/atom/ns# issued'
         #'http://purl.org/atom/ns# id'
-        #
-        # RDF's RSS
-        #
-        #'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
-        #
         }
 
 
@@ -156,9 +168,9 @@ def feed (url, statement, benchmark=True):
         pns_xml.articulate (
                 dom, url, RSS_TYPES, xml_dom.XML_delete, statement
                 )
-        http_client.GET (http_client.HTTP_client (
+        request = http_client.GET (http_client.HTTP_client (
                 ) (host, int (port or '80')), urlpath) (dom)
-        return dom
+        return dom, request
 
 
 if __name__ == '__main__':
@@ -170,7 +182,7 @@ if __name__ == '__main__':
                 ' | Copyleft GPL 2.0\n', 'info'
                 )
         t = time.clock ()
-        dom = feed (
+        dom, request = feed (
                 sys.argv[1], 
                 pns_xml.log_statement, 
                 __debug__ or '-d' in sys.argv
