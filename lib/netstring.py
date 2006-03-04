@@ -50,6 +50,45 @@ def decode (buffer):
 		prev = next + 1
 
 
+def validate (buffer, length):
+        "decode the netstrings, but keep garbage and fit to size"
+        size = len (buffer)
+        prev = 0
+        while prev < size and length:
+                pos = buffer.find (':', prev)
+                if pos < 1:
+                        if prev == 0:
+                                raise StopIteration # not a netstring!
+                        
+                        break
+                        
+                try:
+                        next = pos + int (buffer[prev:pos]) + 1
+                except:
+                        break
+        
+                if next >= size:
+                        break
+                
+                if buffer[next] == ',':
+                        length -= 1
+                        yield buffer[pos+1:next]
+
+                else:
+                        break
+                        
+                prev = next + 1
+
+        if length:
+                length -= 1
+                yield buffer[max (prev, pos+1):]
+        
+                while length:
+                        length -= 1
+                        yield ''
+                        
+
+
 def outline (encoded, format, indent):
 	"recursively format nested netstrings as a CRLF outline"
 	n = tuple (decode (encoded))
