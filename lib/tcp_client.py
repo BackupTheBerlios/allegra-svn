@@ -94,7 +94,10 @@ class TCP_client (loginfo.Loginfo):
 			
 		except KeyError:
 			channel = self.tcp_client_channel (addr)
-			channel.tcp_client_key = addr
+                        if channel.tcp_connect (addr, timeout):
+                                return channel
+                                
+                        return
 	
 	def tcp_client_channel (self, addr):
                 now = time.time ()
