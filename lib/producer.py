@@ -61,9 +61,31 @@ class Simple_producer (object):
 		return False
 
 
+class Stalled_generator (object):
+        
+        # the simplest stallable generator, a usefull construct for any
+        # generator based producer that is set as a finalization or a 
+        # handler of diverse asynchronous or synchronized callback ...
+        
+        def __call__ (self, *args):
+                self.generator = iter ((
+                        'Stalled_generator.__call__ not implemented', 
+                        ))
+        
+        generator = None
+        
+        def more (self):
+                try:
+                        return self.generator.next ()
+                
+                except StopIteration:
+                        return ''
+        
+        def producer_stalled (self):
+                return self.generator == None
+        
+
 class Composite_producer (object):
-	
-	# TODO: fix a bug in this producer, and make it work again!
 	
 	# This is a more "modern" composite producer than the original
 	# one, with support for stalled producers and generators. it is the
