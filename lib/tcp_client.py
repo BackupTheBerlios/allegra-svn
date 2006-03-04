@@ -19,8 +19,9 @@
 
 import sys, socket, time, collections
 
-from allegra import \
+from allegra import (
 	loginfo, async_loop, async_limits, async_net, async_chat
+        )
 
 
 class TCP_client_channel (object):
