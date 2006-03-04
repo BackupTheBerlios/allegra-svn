@@ -250,13 +250,13 @@ class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
                 self.handle_write ()
 
         def handle_error (self):
-                "log a traceback and send a close event to the dispatcher"
+                "log a traceback or raise SystemExit again"
                 t, v = sys.exc_info ()[:2]
                 if t is SystemExit:
                         raise t, v
 
                 self.loginfo_traceback ()
-                self.handle_close ()
+                # self.handle_close () # .close () or nothing?
 
         def handle_close (self):
                 "assert debug log and close the dispatcher"
