@@ -350,8 +350,9 @@ def pns_to_xml_unicode (dom, model):
         name = unicode (model[1], 'utf-8')
         # try to decode the PNS/XML element 
         try:
-                attr, first, children, follow = \
-                        netstring.decode (model[2])
+                attr, first, children, follow = netstring.validate (
+                        model[2], 4
+                        )
         except:
                 # if no PNS/XML element is encoded in the statement object,
                 # consider the predicate as the element name, the object as 
@@ -376,7 +377,7 @@ def pns_to_xml_unicode (dom, model):
         if attr:
                 attr = dict ((
                         tuple ((
-                                unicode (s, 'utf-8') 
+                                unicode (s, 'utf-8')
                                 for s in netstring.decode (item)
                                 ))
                         for item in netstring.decode (attr)
