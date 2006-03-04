@@ -88,7 +88,7 @@ class TCP_client (loginfo.Loginfo):
 		self.tcp_client_precision = precision
 		self.tcp_client_channels = {}
 		
-	def tcp_client (self, addr):
+	def tcp_client (self, addr, timeout=3):
 		try:
 			return self.tcp_client_channels[addr]
 			
