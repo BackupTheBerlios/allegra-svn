@@ -261,6 +261,22 @@ class PNS_client_channel (
         # For a simple client, it's a nice one ;-)
 
 
+class PNS_client (tcp_client.TCP_client):
+        
+        "a PNS/TCP client channel manager"
+        
+        TCP_CLIENT_CHANNEL = PNS_client_channel
+
+        __call__ = tcp_client.TCP_client.tcp_client
+
+        def tcp_client_inactive (self, channel, when):
+                "close inactive channels without subscriptions"
+                if not channel.pns_subscribed:
+                        tcp_client.TCP_client.tcp_client_inactive (
+                                self, channel, when
+                                )
+
+
 if __name__ == '__main__':
         import sys, time, exceptions
         from allegra import loginfo, async_loop
