@@ -25,6 +25,8 @@ from allegra import (
         )
 
 
+# PNS/XML definition
+
 def xml_utf8_to_pns (e):
         "XML/PNS - articulate an UTF-8 XML element as 8-bit byte strings"
         if e.xml_attributes:
@@ -73,6 +75,39 @@ def xml_utf8_to_pns (e):
         # XHTML or DocBook, 4KB or bigger datagrams are probably
         # required (unless of course you just want to index it all,
         # not store it all ;-)
+
+def xml_unicode_to_pns (e):
+        "XML/PNS - serialize a UNICODEd XML element as 8-bit byte strings"
+        if e.xml_attributes:
+                yield netstring.encode ((
+                        netstring.encode ((
+                                key.encode ('utf-8'), val.encode ('utf-8')
+                                ))
+                        for key, val in e.xml_attributes.items ()
+                        ))
+        
+        else:
+                yield ''
+                        
+        yield e.xml_first.encode ('utf-8')
+
+        if e.xml_children:
+                yield netstring.encode ((
+                        netstring.encode ((
+                                child.pns_name, 
+                                child.xml_name.encode ('utf-8')
+                                ))
+                        for child in e.xml_children
+                        ))
+        
+        else:
+                yield ''
+                   
+        if e.xml_follow:
+                yield e.xml_follow.encode ('utf-8')
+        
+        else:
+                yield ''
 
 
 # XML to PNS/SAT articulation (UTF-8 encoding only!)
@@ -230,11 +265,11 @@ def articulate (
         type=Articulate, statement=log_statement
         ):
         dom.pns_name = name
-        dom.pns_sat_language = pns_sat.language ()
         dom.xml_types = types
         dom.xml_type = type
         dom.xml_unicoding = 0
         dom.pns_statement = statement
+        dom.pns_sat_language = pns_sat.language ()
         return dom
         #
         # XML/PNS articulators are "sparse" XML tree parsers, named and 
@@ -242,46 +277,146 @@ def articulate (
         #
         # Synopsis:
         #
-        # xml_utf8_to_pns (
+        # from allegra impor xml_reactor, pns_xml
+        # pns_xml.articulate (
         #    xml_reactor.XML_collector (), 
-        #    'http://...', 'en', pns_rss.RSS_20, log_statement
+        #    'http://...', pns_rss.RSS_20, log_statement
         #    )
 
 
 # PNS/XML proper, store and retrieve XML documents from a PNS metabase
+#
+# TODO: find out a better validation process, something that supports trunked
+#       PNS/XML statement like RSS <description/> etc ...
 
-def xml_unicode_to_pns (e):
-        "XML/PNS - serialize a UNICODEd XML element as 8-bit byte strings"
-        if e.xml_attributes:
-                yield netstring.encode ((
-                        netstring.encode ((
-                                key.encode ('utf-8'), val.encode ('utf-8')
-                                ))
-                        for key, val in e.xml_attributes.items ()
+def pns_to_xml_utf8 (dom, model):
+        # try to decode the PNS/XML element 
+        try:
+                attr, first, children, follow = netstring.validate (
+                        model[2], 4
+                        )
+        except:
+                if model[0] != model[3]:
+                        attr = {'pns': model[0]}
+                else:
+                        attr = None
+                e = dom.xml_types.get (
+                        model[1], dom.xml_type
+                        ) (model[1], attr)
+                e.xml_first = model[2]
+                return e, None
+                
+        # decode the attributes and set the pns attribute
+        if attr:
+                attr = dict ((
+                        tuple (netstring.decode (item))
+                        for item in netstring.decode (attr)
                         ))
-        
+                if model[0] != model[3]:
+                        attr['pns'] = model[0]
+        elif model[0] != model[3]:
+                attr = {'pns': model[0]}
         else:
-                yield ''
-                        
-        yield e.xml_first.encode ('utf-8')
+                attr = None
+        e = dom.xml_types.get (model[1], dom.xml_type) (model[1], attr)
+        if first:
+                e.xml_first = first
+        else:
+                e.xml_first = ''
+        if follow:
+                e.xml_follow = follow
+        return e, children
 
-        if e.xml_children:
-                yield netstring.encode ((
-                        netstring.encode ((
-                                child.pns_name, 
-                                child.xml_name.encode ('utf-8')
+
+def pns_to_xml_utf8_strings (dom, model):
+        e, children = pns_to_xml_unicode (dom, model)
+        if children:
+                e.xml_children = []
+                for child in netstring.decode (children):
+                        name, subject = netstring.decode (child)
+                        if subject:
+                                e.xml_children.append ('<%s pns="%s"/>' % (
+                                        name, xml_utf8.xml_attr (subject)
+                                        ))
+                        else:
+                                e.xml_children.append ('<%s/>' % name)
+        return xml_utf8.xml_prefixed (
+                e, dom.xml_prefixes, 
+                ' context="%s"' % xml_utf8.xml_attr (model[3])
+                )
+
+
+def pns_to_xml_unicode (dom, model):
+        name = unicode (model[1], 'utf-8')
+        # try to decode the PNS/XML element 
+        try:
+                attr, first, children, follow = \
+                        netstring.decode (model[2])
+        except:
+                # if no PNS/XML element is encoded in the statement object,
+                # consider the predicate as the element name, the object as 
+                # first CDATA and the subject as only attribute if it is
+                # distinct from the statement's context. in effect, translate
+                # *any* PNS statement to an XML element:
+                #
+                # <predicate pns="subject">object</predicate>
+                #
+                if model[0] != model[3]:
+                        attr = {u'pns': unicode (model[0], 'utf-8')}
+                else:
+                        attr = None
+                e = dom.xml_types.get (name, dom.xml_type) (name, attr)
+                if model[2]:
+                        e.xml_first = unicode (model[2], 'utf-8')
+                else:
+                        e.xml_first = u''
+                return e, None
+                
+        # decode the attributes and set the pns attribute
+        if attr:
+                attr = dict ((
+                        tuple ((
+                                unicode (s, 'utf-8') 
+                                for s in netstring.decode (item)
                                 ))
-                        for child in e.xml_children
+                        for item in netstring.decode (attr)
                         ))
-        
+                if model[0] != model[3]:
+                        attr[u'pns'] = unicode (model[0], 'utf-8')
+        elif model[0] != model[3]:
+                attr = {u'pns': unicode (model[0], 'utf-8')}
         else:
-                yield ''
-                   
-        if e.xml_follow:
-                yield e.xml_follow.encode ('utf-8')
-        
+                attr = None
+        # decode the name and instanciate an XML element
+        e = dom.xml_types.get (name, dom.xml_type) (name, attr)
+        if first:
+                e.xml_first = unicode (first, 'utf-8')
         else:
-                yield ''
+                e.xml_first = u''
+        if follow:
+                e.xml_follow = unicode (follow, 'utf-8')
+        return e, children
+
+
+def pns_to_xml_unicode_strings (dom, model, encoding='ASCII'):
+        e, children = pns_to_xml_unicode (dom, model)
+        if children:
+                e.xml_children = []
+                for child in netstring.decode (children):
+                        name, subject = netstring.decode (child)
+                        if subject:
+                                e.xml_children.append ('<%s pns="%s"/>' % (
+                                        name, 'utf-8', xml_unicode.xml_attr (
+                                                subject, encoding
+                                                )
+                                        ))
+                        else:
+                                e.xml_children.append ('<%s/>' % name)
+        return xml_unicode.xml_prefixed (
+                e, dom.xml_prefixes, ' context="%s"' % xml_unicode.xml_attr (
+                        unicode (model[3], 'utf-8'), encoding
+                        ), encoding
+                )
 
 
 class PNS_XML_continuation (finalization.Finalization):
@@ -302,9 +437,6 @@ class PNS_XML_continuation (finalization.Finalization):
         
         def __call__ (self, finalized):
                 # join a child element response continuation
-                assert None == loginfo.log (
-                        finalized.pns_question, 'join'
-                        )
                 child = finalized.xml_parsed
                 sibblings = self.xml_parsed.xml_children
                 if child == None:
@@ -317,45 +449,18 @@ class PNS_XML_continuation (finalization.Finalization):
                         child.xml_valid (self.pns_dom)
 
         def pns_to_xml_utf8 (self, resolved, model):
-                assert None == loginfo.log (
-                        netstring.encode (model), 'resolved'
-                        )
                 if model[4][0] in ('.', '?'):
                         return False
                 
-                # try to decode the PNS/XML element 
-                try:
-                        attr, first, children, follow = \
-                                netstring.decode (model[2])
-                except:
-                        return False
-                        
-                # decode the attributes and set the pns attribute
-                if attr:
-                        attr = dict ((
-                                tuple (netstring.decode (item))
-                                for item in netstring.decode (attr)
-                                ))
-                        if model[0] != model[3]:
-                                attr['pns'] = model[0]
-                elif model[0] != model[3]:
-                        attr = {'pns': model[0]}
-                else:
-                        attr = None
-                # instanciate a named XML element type
-                self.xml_parsed = e = self.pns_dom.xml_types.get (
-                        model[1], self.pns_dom.xml_type
-                        ) (model[1], attr)
-                if first:
-                        e.xml_first = first
-                else:
-                        e.xml_first = ''
-                if follow:
-                        e.xml_follow = follow
+                self.xml_parsed, children = pns_to_xml_utf8 (
+                        self.pns_dom, model
+                        )
                 # decode the children's name and subject,
                 if children:
-                        e.xml_children = list (netstring.decode (children))
-                        for child in e.xml_children:
+                        self.xml_parsed.xml_children = children = list (
+                                netstring.decode (children)
+                                )
+                        for child in children:
                                 subject, name = tuple (
                                         netstring.decode (child)
                                         )
@@ -374,49 +479,17 @@ class PNS_XML_continuation (finalization.Finalization):
                 return False
 
         def pns_to_xml_unicode (self, resolved, model):
-                assert None == loginfo.log (
-                        netstring.encode (model), 'resolved'
-                        )
                 if model[4][0] in ('.', '?'):
                         return False
                 
-                # try to decode the PNS/XML element 
-                try:
-                        attr, first, children, follow = \
-                                netstring.decode (model[2])
-                except:
-                        return False
-                        
-                # decode the attributes and set the pns attribute
-                if attr:
-                        attr = dict ((
-                                tuple ((
-                                        unicode (s, 'utf-8') 
-                                        for s in netstring.decode (item)
-                                        ))
-                                for item in netstring.decode (attr)
-                                ))
-                        if model[0] != model[3]:
-                                attr[u'pns'] = unicode (model[0], 'utf-8')
-                elif model[0] != model[3]:
-                        attr = {u'pns': unicode (model[0], 'utf-8')}
-                else:
-                        attr = None
-                # decode the name and instanciate an XML element
-                name = unicode (model[1], 'utf-8')
-                self.xml_parsed = e = self.pns_dom.xml_types.get (
-                        name, self.pns_dom.xml_type
-                        ) (name, attr)
-                if first:
-                        e.xml_first = unicode (first, 'utf-8')
-                else:
-                        e.xml_first = u''
-                if follow:
-                        e.xml_follow = unicode (follow, 'utf-8')
-                # decode the children's name and subject,
+                self.xml_parsed, children = pns_to_xml_unicode (
+                        self.pns_dom, model
+                        )
                 if children:
-                        e.xml_children = list (netstring.decode (children))
-                        for child in e.xml_children:
+                        self.xml_parsed.xml_children = children = list (
+                                netstring.decode (children)
+                                )
+                        for child in children:
                                 subject, name = tuple (
                                         netstring.decode (child)
                                         )
@@ -435,7 +508,7 @@ class PNS_XML_continuation (finalization.Finalization):
                 return False
 
 
-class PNS_DOM (object):
+class PNS_XML (finalization.Finalization):
         
         xml_type = xml_dom.XML_element
         xml_types = {}
@@ -452,15 +525,16 @@ class PNS_DOM (object):
                 "rollback XML from PNS"
                 self.pns_name = context
                 self.pns_statement = statement
+                self.pns_resolved = (subject, name, '')
                 finalized = PNS_XML_continuation (self, None)
                 if self.xml_unicoding:
                         statement (
-                                (subject, name, ''), context,
+                                self.pns_resolved, context,
                                 finalized.pns_to_xml_unicode 
                                 )
                 else:
                         statement (
-                                (subject, name, ''), context, 
+                                self.pns_resolved, context, 
                                 finalized.pns_to_xml_utf8 
                                 )
                 finalized.finalization = self.pns_to_xml_continue
@@ -474,15 +548,17 @@ class PNS_DOM (object):
                 if e and e.xml_valid != None:
                         e.xml_valid (self)
                 self.xml_root = e
+                self.pns_statement = None
 
-        def xml_to_pns (self, name, context, statement):
+        def xml_to_pns (self, context, statement):
                 "commit XML to PNS"
                 self.pns_name = context
                 self.pns_statement = statement
                 if self.xml_unicoding:
                         self.xml_unicode_to_pns (self.xml_root, context)
                 else:
-                        self.xml_utf8_to_pns (self.xml_root, context)                        
+                        self.xml_utf8_to_pns (self.xml_root, context)
+                self.pns_statement = None
                         
         def xml_unicode_to_pns (self, element, context):
                 try:
@@ -494,11 +570,11 @@ class PNS_DOM (object):
                         element.pns_name = subject = pns.encode ('utf-8')
                 if element.xml_children:
                         for child in element.xml_children:
-                                xml_unicode_to_pns (child, subject)
+                                self.xml_unicode_to_pns (child, subject)
                 self.pns_statement ((
-                        subject, element.xml_name,
+                        subject, element.xml_name.encode ('utf-8'),
                         netstring.encode (xml_unicode_to_pns (element))
-                        ), context, )
+                        ), context, self.xml_to_pns_continue)
                 if subject != context:
                         element.xml_attributes[u'pns'] = pns
                         
@@ -515,47 +591,79 @@ class PNS_DOM (object):
                 self.pns_statement ((
                         subject, element.xml_name,
                         netstring.encode (xml_utf8_to_pns (element)),
-                        ), context, )
+                        ), context, self.xml_to_pns_continue)
                 if subject != context:
                         element.xml_attributes['pns'] = subject
                         
+        def xml_to_pns_continue (self, resolved, model):
+                # handle all XML to PNS responses, 
+                assert None == loginfo.log (netstring.encode (model))
+                if self.pns_resolved == resolved:
+                        pass 
+                        # this is the end, at least if the PNS peer does
+                        # handle each of the statement in sequence, not
+                        # answering the last one before the others.
+                return False
+        
+        # note that it makes absolutely no sense to use a PNS_articulator
+        # to commit or rollback a PNS/XML document object level: that DOM
+        # allready a cache in itself (and the articulator is a cache too).
+        #
+        # note also that an PNS_XML instance is a finalization, so that
+        # you may parse an XML tree with PNS names transfert its root to
+        # a PNS_XML instance, articulate that DOM to the metabase and drop
+        # its reference. when the PNS/TCP client releases its last reference
+        # to the xml_to_pns_continue method of that DOM, the instance is
+        # finalization ... with whatever finalization attached.
+        #
+        # so, practically, you don't need to subclass PNS_XML setting its
+        # finalization is enough to program the continuations of commit
+        # and rollback (it works pretty much the same, but with the support
+        # of PNS_XML_continuations, which is even longer to explain so I
+        # don't bother, sorry ;-)
 
-# map a PNS name and its SAT to XML: 
+
+# Two helper functions to map a PNS name and its SAT to XML: 
 #
-# <public names="5:Names,6:Public," sat="Public Names">
+# <public names="5:Names,6:Public,">
 #   <public>Names</public>
 #   <public>Public</public>
 # </public>
 #
 # something easy to transform with XSLT, present with CSS or manipulate
-# with JavaScript.
+# with JavaScript (although a JavaScript netstring decoder should be 
+# simple enough and JS programmers may better support Public Names 
+# directly for advanced interactive applications of context graphs).
 
-def public_utf8 (name, sats):
+def public_utf8 (name, tag='public'):
         names = tuple (decode (name)) or (encoded,)
         if len (names) > 1:
-                return '<public names="%s" sat="%s">%s</public>' % (
+                return '<%s names="%s">%s</%s>' % (
+                        tag,
                         xml_utf8.xml_attr (name), 
-                        xml_utf8.xml_attr (sats.get (name, '')), 
-                        ''.join ([public_utf8 (n, sats) for n in names])
+                        ''.join ([public_utf8 (n, tag) for n in names]),
+                        tag
                         )
 
-        return '<public name="%s" />' % xml_utf8.xml_attr (name)
+        return '<%s>%s</%s>' % (tag, xml_tf8.xml_cdata (name), tag)
 
 
-def public_unicode (name, sats, encoding='ASCII'):
+def public_unicode (name, tag='public', encoding='ASCII'):
         names = tuple (decode (name)) or (encoded,)
         if len (names) > 1:
-                return '<public names="%s" sat="%s">%s</public>' % (
+                return '<%s names="%s">%s</%s>' % (
+                        tag,
                         xml_unicode.xml_attr (unicode (name, 'UTF-8')), 
-                        xml_unicode.xml_attr (unicode (
-                                sats.get (name, ''), 'UTF-8'
-                                )), 
-                        ''.join ([public_unicode (n, sats) for n in names])
+                        ''.join ([public_unicode (
+                                n, tag, encoding
+                                ) for n in names]),
+                        tag
                         )
 
-        return '<public name="%s" />' % xml_unicode.xml_attr (
-                unicode (name, 'UTF-8')
+        return '<%s>%s</%s>' % (
+                tag, xml_unicode.xml_cdata (unicode (name, 'UTF-8')), tag
                 )
+                
 
 # Note about this implementation
 #
