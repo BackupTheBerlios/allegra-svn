@@ -245,7 +245,7 @@ def xml_pi (processing_instructions, encoding='ASCII', delimiter=''):
 
 
 def xml_string (root, prefixes, encoding='ASCII', delimiter=''):
-        if not prefixes:
+        if prefixes == None:
                 return delimiter.join (xml_unprefixed (root, encoding))
                 
         return delimiter.join (xml_prefixed (

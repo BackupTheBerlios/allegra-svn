@@ -206,7 +206,7 @@ def xml_pi (processing_instructions, delimiter=''):
                 
 
 def xml_string (root, prefixes, delimiter=''):
-        if not prefixes:
+        if prefixes == None:
                 return delimiter.join (list (xml_unprefixed (root)))
                 
         return delimiter.join (xml_prefixed (
