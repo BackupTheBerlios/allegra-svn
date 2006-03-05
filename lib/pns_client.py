@@ -36,12 +36,10 @@ class PNS_client_channel (
                 return 'pns-client id="%x"' % id (self)
 
         def handle_close (self):
-                # callback all pending statement handlers with echo, command
-                # or peer ip handlers with void responses, then callback
-                #
                 for context, handlers in self.pns_subscribed.items ():
                         for handler in handlers:
                                 handler (None)
+                self.pns_subscribed = {}
                 for context, statements in self.pns_contexts.items ():
                         for resolved, handlers in statements.items ():
                                 model = list (resolved)
@@ -49,6 +47,7 @@ class PNS_client_channel (
                                 model.append ('.')
                                 for handler in handlers:
                                         handler (resolved, model)
+                self.pns_contexts = {}
                 for resolved, handlers in self.pns_commands.items ():
                         model = list (resolved)
                         model.append ('')
@@ -56,34 +55,12 @@ class PNS_client_channel (
                         for handler in handlers:
                                 handler (resolved, model)
                 self.pns_commands = {}
-                self.pns_contexts = {}
-                self.pns_subscribed = {}
-                self.pns_peer ('')
                 self.close ()
                 del self.async_net_continue
 
-        def async_net_continue (self, encoded):
-                "handle the first PNS/TCP peer statement"
-                model = list (netstring.decode (encoded))
-                if len (model) < 5:
-                        assert None == self.log (
-                                encoded, 'invalid-peer-statement'
-                                )
-                        self.handle_close ()
-                        return
-                        
-                self.pns_peer (model[0])
-                self.async_net_continue = self.pns_continue
-                
         pns_sent = pns_received = 0
         pns_close_when_done = False
         
-        def pns_peer (self, ip):
-                "handle PNS/TCP opening and closing"
-                assert None == self.log (
-                        'peer ip="%s"' % ip, 'debug'
-                        )
-                        
         def pns_send (self, encoded):
                 "send a single encoded Public RDF statement"
                 self.async_net_push ((encoded,))
@@ -154,7 +131,7 @@ class PNS_client_channel (
                                 ).setdefault (model, [])
                         )
 
-        def pns_continue (self, encoded):
+        def async_net_continue (self, encoded):
                 "handle the following PNS/TCP peer statement"
                 # Note that there is no validation of the PNS statements
                 # because they are trusted to be valid. A client *may*
@@ -172,11 +149,7 @@ class PNS_client_channel (
                 self.pns_multiplex (model)
                 resolved = tuple (model[:3])
                 if '' == model[0]:
-                        if '' == model[1] == model[2]:
-                                # TODO: protocol response to quit
-                                return
-                                
-                        # index, context and route
+                        # close, index, context and route
                         handlers = self.pns_commands.get (resolved)
                         if handlers == None:
                                 assert None == self.log (
@@ -267,7 +240,19 @@ class PNS_client (tcp_client.TCP_client):
         
         TCP_CLIENT_CHANNEL = PNS_client_channel
 
-        __call__ = tcp_client.TCP_client.tcp_client
+        def __call__ (self, addr, handler=None):
+                channel = tcp_client.TCP_client.tcp_client (self, addr)
+                if channel:
+                        if handler:
+                                try:
+                                        channel.pns_commands[(
+                                                '', '', ''
+                                                )].append (handler)
+                                except KeyError:
+                                         channel.pns_commands[(
+                                                 '', '', ''
+                                                 )] = [handler]
+                        return channel
 
         def tcp_client_inactive (self, channel, when):
                 "close inactive channels without subscriptions"
@@ -285,7 +270,7 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
                 'info'
                 ) 
-
+                        
         class PNS_pipe (PNS_client_channel):
                 
                 def __init__ (self, addr, pipe):
@@ -293,13 +278,15 @@ if __name__ == '__main__':
                         self.pns_pipe = pipe
                         PNS_client_channel.__init__ (self)
                         self.tcp_connect (addr)
+                        self.pns_commands[('', '', '')] = [self.pns_peer]
                         
-                def pns_peer (self, ip):
+                def pns_peer (self, resolved, model):
+                        ip = model[3]
                         if ip:
                                 encoded = '%d:%s,0:,0:,0:,' % (len (ip), ip)
                                 loginfo.log (encoded)
                                 self.pns_articulate ()
-                                return
+                                return True
                                 
                         assert None == self.log (
                                 'close'
@@ -308,6 +295,7 @@ if __name__ == '__main__':
                                         time.time () - self.pns_start
                                         ), 'debug'
                                 )
+                        return False
                         
                 def pns_articulate (self):
                         try:

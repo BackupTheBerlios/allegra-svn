@@ -118,9 +118,9 @@ def pns_tcp_accept (server, channel):
 	#
 	channel.pns_peer = server.pns_peer
 	server.pns_peer.pns_sessions['%s:%d' % channel.addr] = channel
-	channel.pns_tcp_continue (
-		(server.pns_peer.pns_name, '', '', ''), '_'
-		)
+        channel.pns_tcp_continue (
+                ('', '', '', server.pns_peer.pns_name), '_'
+                )
 
 
 def pns_tcp_close (channel):
