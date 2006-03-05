@@ -111,14 +111,18 @@ class XML_dom (object):
                 else:
                         self.xml_first = ''
                 self.xml_root = self.xml_error = self.xml_parsed = None
-                self.xml_expat = expat.ParserCreate (None, ' ')
-                self.xml_expat.returns_unicode = self.xml_unicoding
-                self.xml_expat.buffer_text = 1
-                self.xml_expat.ProcessingInstructionHandler = self.xml_expat_PI
-                self.xml_expat.StartNamespaceDeclHandler = self.xml_expat_STARTNS
-                self.xml_expat.StartElementHandler = self.xml_expat_START
-                self.xml_expat.EndElementHandler = self.xml_expat_END
-                self.xml_expat.CharacterDataHandler = self.xml_expat_CDATA
+                self.xml_expat = parser = expat.ParserCreate (None, ' ')
+                parser.returns_unicode = self.xml_unicoding
+                parser.buffer_text = 1
+                parser.StartElementHandler = self.xml_expat_START
+                parser.EndElementHandler = self.xml_expat_END
+                parser.CharacterDataHandler = self.xml_expat_CDATA
+                if self.xml_pi != None:
+                        parser.ProcessingInstructionHandler = \
+                                self.xml_expat_PI
+                if self.xml_prefixes != None:
+                        parser.StartNamespaceDeclHandler = \
+                                self.xml_expat_STARTNS
 
         def xml_expat_PI (self, target, cdata):
                 self.xml_pi.setdefault (target, []).append (cdata)
