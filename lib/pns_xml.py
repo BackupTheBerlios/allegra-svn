@@ -329,7 +329,7 @@ def pns_to_xml_utf8 (dom, model):
 
 
 def pns_to_xml_utf8_strings (dom, model):
-        e, children = pns_to_xml_unicode (dom, model)
+        e, children = pns_to_xml_utf8 (dom, model)
         if children:
                 e.xml_children = []
                 for child in netstring.decode (children):
