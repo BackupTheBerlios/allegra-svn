@@ -295,6 +295,12 @@ class XML_static (object):
                 
                 parent = self.xml_parent ()
                 prefixes = dom.xml_prefixes
+                if prefixes == None:
+                        parent.xml_children[-1] = ''.join (
+                                xml_unprefixed (self, '', self.xml_encoding)
+                                )
+                        return
+                
                 if type (parent) == XML_static:
                         parent.xml_children[-1] = ''.join (xml_prefixed (
                                 self, prefixes, '', self.xml_encoding
