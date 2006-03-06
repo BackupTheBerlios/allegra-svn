@@ -145,8 +145,8 @@ class TCP_client (loginfo.Loginfo):
                                 channel.async_bytes_out
                                 ),  'debug'
                         )
-                channel.close ()
                 del channel.recv, channel.send, channel.handle_close
+                channel.handle_close ()
                 del self.tcp_client_channels[channel.tcp_client_key]
 
         def tcp_client_shutdown (self):
