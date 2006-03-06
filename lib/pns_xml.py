@@ -298,7 +298,9 @@ def pns_to_xml_utf8 (model, xml_types={}, xml_type=xml_dom.XML_element):
                         attr = {'pns': model[0]}
                 else:
                         attr = None
-                e = xml_types.get (model[1], xml_type) (model[1], attr)
+                e = xml_types.get (model[1], xml_type) (
+                        model[1] or 'http://presto/ pns-xml-error', attr
+                        )
                 e.xml_first = model[2]
                 return e, None
                 
@@ -362,7 +364,9 @@ def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.XML_element):
                         attr = {u'pns': unicode (model[0], 'utf-8')}
                 else:
                         attr = None
-                e = xml_types.get (name, xml_type) (name, attr)
+                e = xml_types.get (name, xml_type) (
+                        name or u'http://presto/ pns-xml-error', attr
+                        )
                 if model[2]:
                         e.xml_first = unicode (model[2], 'utf-8')
                 else:
