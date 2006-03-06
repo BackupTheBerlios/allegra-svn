@@ -19,10 +19,10 @@
 
 import os, stat, glob, urllib
 
-from allegra import \
-        netstring, loginfo, async_loop, \
-        finalization, synchronizer, collector, producer, \
-        mime_headers, http_server, presto
+from allegra import (
+        netstring, loginfo, async_loop, finalization, synchronizer, 
+        collector, producer, mime_headers, http_server, presto
+        )
 
 
 class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
@@ -411,11 +411,5 @@ if __name__ == '__main__':
                 'startup seconds="%f"' % (time.clock () - t), 'PRESTo/HTTP'
                 )
         async_loop.dispatch ()
-        if __debug__:
-                import gc
-                collected = gc.collect ()
-                if collected >0:
-                        loginfo.log ('collected: %d, garbage: %r' % (
-                                collected, gc.garbage
-                                ), 'debug')
+        assert None == finalization.collect ()
                         

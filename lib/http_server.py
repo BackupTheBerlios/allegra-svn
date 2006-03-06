@@ -552,7 +552,8 @@ if __name__ == '__main__':
                 ])
         server.async_catch = async_loop.async_catch
         async_loop.async_catch = server.tcp_server_catch
-        async_loop.loop ()
+        async_loop.dispatch ()
+        assert None == finalization.collect ()
         
         
 # Note about this implementation

@@ -17,7 +17,7 @@
 
 "a Finalization implementation for async_loop's asynchronous network peers"
 
-from allegra import async_loop
+from allegra import loginfo, async_loop
 
 
 # Finalize
@@ -32,6 +32,21 @@ class Finalization (object):
                 if self.finalization != None:
                          self.async_finalized.append (self)
 
+
+def collect ():
+        import gc
+        collected = gc.collect ()
+        if collected == 0:
+                return
+        
+        assert None == loginfo.log ('%d' % collected, 'collected')
+        for cycle in gc.garbage:
+                try:
+                        cylce.finalization = None
+                except:
+                        pass
+                assert None == loginfo.log ('%r' % cycle, 'garbage')
+        
 
 # Branch
 

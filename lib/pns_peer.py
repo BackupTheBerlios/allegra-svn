@@ -17,9 +17,10 @@
 
 "PNS Reference Implementation"
 
-from allegra import \
-	netstring, loginfo, async_loop, \
+from allegra import (
+	netstring, loginfo, async_loop, finalization,
 	pns_resolution, pns_inference, pns_tcp, pns_udp
+        )
 
 
 class PNS_peer (loginfo.Loginfo):
@@ -271,4 +272,5 @@ if __name__ == '__main__':
 			socket.gethostbyname (socket.gethostname ()),
 			'127.0.0.1', './pns'
 			)
-	async_loop.loop ()
+	async_loop.dispatch ()
+        assert None == finalization.collect ()
