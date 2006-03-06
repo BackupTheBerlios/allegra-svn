@@ -287,7 +287,7 @@ def articulate (
 
 # PNS/XML proper, store and retrieve XML documents from a PNS metabase
 
-def pns_to_xml_utf8 (dom, model):
+def pns_to_xml_utf8 (model, xml_types={}, xml_type=xml_dom.XML_element):
         # try to decode the PNS/XML element 
         try:
                 attr, first, children, follow = netstring.validate (
@@ -298,9 +298,7 @@ def pns_to_xml_utf8 (dom, model):
                         attr = {'pns': model[0]}
                 else:
                         attr = None
-                e = dom.xml_types.get (
-                        model[1], dom.xml_type
-                        ) (model[1], attr)
+                e = xml_types.get (model[1], xml_type) (model[1], attr)
                 e.xml_first = model[2]
                 return e, None
                 
@@ -316,7 +314,7 @@ def pns_to_xml_utf8 (dom, model):
                 attr = {'pns': model[0]}
         else:
                 attr = None
-        e = dom.xml_types.get (model[1], dom.xml_type) (model[1], attr)
+        e = xml_types.get (model[1], xml_type) (model[1], attr)
         if first:
                 e.xml_first = first
         else:
@@ -327,7 +325,7 @@ def pns_to_xml_utf8 (dom, model):
 
 
 def pns_to_xml_utf8_strings (dom, model):
-        e, children = pns_to_xml_utf8 (dom, model)
+        e, children = pns_to_xml_utf8 (model)
         if children:
                 e.xml_children = []
                 for child in netstring.decode (children):
@@ -344,7 +342,7 @@ def pns_to_xml_utf8_strings (dom, model):
                 )
 
 
-def pns_to_xml_unicode (dom, model):
+def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.XML_element):
         name = unicode (model[1], 'utf-8')
         # try to decode the PNS/XML element 
         try:
@@ -364,7 +362,7 @@ def pns_to_xml_unicode (dom, model):
                         attr = {u'pns': unicode (model[0], 'utf-8')}
                 else:
                         attr = None
-                e = dom.xml_types.get (name, dom.xml_type) (name, attr)
+                e = xml_types.get (name, xml_type) (name, attr)
                 if model[2]:
                         e.xml_first = unicode (model[2], 'utf-8')
                 else:
@@ -387,7 +385,7 @@ def pns_to_xml_unicode (dom, model):
         else:
                 attr = None
         # decode the name and instanciate an XML element
-        e = dom.xml_types.get (name, dom.xml_type) (name, attr)
+        e = xml_types.get (name, xml_type) (name, attr)
         if first:
                 e.xml_first = unicode (first, 'utf-8')
         else:
@@ -398,7 +396,7 @@ def pns_to_xml_unicode (dom, model):
 
 
 def pns_to_xml_unicode_strings (dom, model, encoding='ASCII'):
-        e, children = pns_to_xml_unicode (dom, model)
+        e, children = pns_to_xml_unicode (DOM, model)
         if children:
                 e.xml_children = []
                 for child in netstring.decode (children):
@@ -414,7 +412,8 @@ def pns_to_xml_unicode_strings (dom, model, encoding='ASCII'):
                         else:
                                 e.xml_children.append ('<%s/>' % name)
         return xml_unicode.xml_prefixed (
-                e, dom.xml_prefixes, ' context="%s"' % xml_unicode.xml_attr (
+                e, dom.xml_prefixes, 
+                ' context="%s"' % xml_unicode.xml_attr (
                         unicode (model[3], 'utf-8'), encoding
                         ), encoding
                 )
@@ -454,7 +453,7 @@ class PNS_XML_continuation (finalization.Finalization):
                         return False
                 
                 self.xml_parsed, children = pns_to_xml_utf8 (
-                        self.pns_dom, model
+                        model, self.pns_dom.xml_types, self.pns_dom.xml_type
                         )
                 # decode the children's name and subject,
                 if children:
@@ -484,7 +483,7 @@ class PNS_XML_continuation (finalization.Finalization):
                         return False
                 
                 self.xml_parsed, children = pns_to_xml_unicode (
-                        self.pns_dom, model
+                        model, self.pns_dom.xml_types, self.pns_dom.xml_type
                         )
                 if children:
                         self.xml_parsed.xml_children = children = list (
