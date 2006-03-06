@@ -20,7 +20,8 @@
 import weakref
 
 from allegra import (
-        netstring, loginfo, finalization, xml_dom, 
+        netstring, loginfo, finalization, 
+        xml_dom, xml_utf8, xml_unicode, 
         pns_model, pns_sat, pns_client, pns_articulator
         )
 
@@ -634,7 +635,7 @@ class PNS_XML (finalization.Finalization):
 # directly for advanced interactive applications of context graphs).
 
 def public_utf8 (name, tag='public'):
-        names = tuple (decode (name)) or (encoded,)
+        names = tuple (netstring.decode (name)) or (name,)
         if len (names) > 1:
                 return '<%s names="%s">%s</%s>' % (
                         tag,
@@ -647,7 +648,7 @@ def public_utf8 (name, tag='public'):
 
 
 def public_unicode (name, tag='public', encoding='ASCII'):
-        names = tuple (decode (name)) or (encoded,)
+        names = tuple (netstring.decode (name)) or (name,)
         if len (names) > 1:
                 return '<%s names="%s">%s</%s>' % (
                         tag,
