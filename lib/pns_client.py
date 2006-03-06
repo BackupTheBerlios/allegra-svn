@@ -42,21 +42,16 @@ class PNS_client_channel (
                 self.pns_subscribed = {}
                 for context, statements in self.pns_contexts.items ():
                         for resolved, handlers in statements.items ():
-                                model = list (resolved)
-                                model.append (context)
-                                model.append ('.')
                                 for handler in handlers:
-                                        handler (resolved, model)
+                                        handler (resolved, resolved + (
+                                                context, '.'
+                                                ))
                 self.pns_contexts = {}
                 for resolved, handlers in self.pns_commands.items ():
-                        model = list (resolved)
-                        model.append ('')
-                        model.append ('_')
                         for handler in handlers:
-                                handler (resolved, model)
+                                handler (resolved, resolved + ('', '_'))
                 self.pns_commands = {}
                 self.close ()
-                del self.async_net_continue
 
         pns_sent = pns_received = 0
         pns_close_when_done = False
