@@ -396,7 +396,7 @@ def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.XML_element):
 
 
 def pns_to_xml_unicode_strings (dom, model, encoding='ASCII'):
-        e, children = pns_to_xml_unicode (DOM, model)
+        e, children = pns_to_xml_unicode (model)
         if children:
                 e.xml_children = []
                 for child in netstring.decode (children):
