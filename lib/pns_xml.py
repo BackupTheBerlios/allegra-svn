@@ -331,7 +331,7 @@ def pns_to_xml_utf8_strings (dom, model):
         if children:
                 e.xml_children = []
                 for child in netstring.decode (children):
-                        name, subject = netstring.decode (child)
+                        subject, name = netstring.decode (child)
                         if subject:
                                 e.xml_children.append ('<%s pns="%s"/>' % (
                                         name, xml_utf8.xml_attr (subject)
@@ -402,11 +402,13 @@ def pns_to_xml_unicode_strings (dom, model, encoding='ASCII'):
         if children:
                 e.xml_children = []
                 for child in netstring.decode (children):
-                        name, subject = netstring.decode (child)
+                        subject, name = netstring.decode (child)
                         if subject:
                                 e.xml_children.append ('<%s pns="%s"/>' % (
-                                        name, 'utf-8', xml_unicode.xml_attr (
-                                                subject, encoding
+                                        name, 
+                                        xml_unicode.xml_attr (
+                                                unicode (subject, 'utf-8'), 
+                                                encoding
                                                 )
                                         ))
                         else:
