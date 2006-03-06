@@ -334,10 +334,17 @@ def pns_to_xml_utf8_strings (dom, model):
                         subject, name = netstring.decode (child)
                         if subject:
                                 e.xml_children.append ('<%s pns="%s"/>' % (
-                                        name, xml_utf8.xml_attr (subject)
+                                        ''.join (xml_utf8.xml_prefix_FQN (
+                                                name, dom.xml_prefixes
+                                                )),
+                                        xml_utf8.xml_attr (subject)
                                         ))
                         else:
-                                e.xml_children.append ('<%s/>' % name)
+                                e.xml_children.append (
+                                        '<%s />' % xml_utf8.xml_prefix_FQN (
+                                                name, dom.xml_prefixes
+                                                )
+                                        )
         return xml_utf8.xml_prefixed (
                 e, dom.xml_prefixes, 
                 ' context="%s"' % xml_utf8.xml_attr (model[3])
@@ -407,14 +414,25 @@ def pns_to_xml_unicode_strings (dom, model, encoding='ASCII'):
                         subject, name = netstring.decode (child)
                         if subject:
                                 e.xml_children.append ('<%s pns="%s"/>' % (
-                                        name, 
+                                        ''.join (xml_unicode.xml_prefix_FQN (
+                                                unicode (name, 'utf-8'), 
+                                                dom.xml_prefixes, 
+                                                encoding
+                                                )),
                                         xml_unicode.xml_attr (
                                                 unicode (subject, 'utf-8'), 
                                                 encoding
                                                 )
                                         ))
                         else:
-                                e.xml_children.append ('<%s/>' % name)
+                                e.xml_children.append (
+                                        '<%s%s'
+                                        ' />' % xml_unicode.xml_prefix_FQN (
+                                                unicode (name, 'utf-8'), 
+                                                dom.xml_prefixes, 
+                                                encoding
+                                                )
+                                        )
         return xml_unicode.xml_prefixed (
                 e, dom.xml_prefixes, 
                 ' context="%s"' % xml_unicode.xml_attr (
