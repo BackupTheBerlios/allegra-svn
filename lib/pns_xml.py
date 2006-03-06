@@ -285,9 +285,6 @@ def articulate (
 
 
 # PNS/XML proper, store and retrieve XML documents from a PNS metabase
-#
-# TODO: find out a better validation process, something that supports trunked
-#       PNS/XML statement like RSS <description/> etc ...
 
 def pns_to_xml_utf8 (dom, model):
         # try to decode the PNS/XML element 
@@ -665,27 +662,3 @@ def public_unicode (name, tag='public', encoding='ASCII'):
                 tag, xml_unicode.xml_cdata (unicode (name, 'UTF-8')), tag
                 )
                 
-
-# Note about this implementation
-#
-# Well, this is definitively not your mother's XML!
-#
-# PNS/XML is a both a demonstration of the ability of the PNS metabase
-# to cope with XML document round-trip, but also an evidence of the
-# simplicity of Greg Stein's unorthodox element tree structure and
-# finally it is an amazing application of finalizations.
-#
-# I mean, doing this entirely asynchronously over a multiplexed protocol
-# like PNS/TCP and possibly with an articulator cache in between (that 
-# pns_statement may be the one of a PNS_articulator ;-), well it would
-# be impractical with the combination of anything else in Python.
-#
-# The icing is of course on the cake, and this implementation is
-# feature-complete. You can serialize and instanciate XML documents
-# back and forth from PNS to XML, via the DOM. 
-#
-# Note that a rolling-back PNS/XML DOM can still be and passed to a generator
-# that produces an XML string. Because the root is attached to the DOM and
-# the previous one dropped only once the tree has been completed.
-#
-#
