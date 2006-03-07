@@ -189,6 +189,7 @@ class Async_chat (async_core.Async_dispatcher):
                 except:
                         return not (
                                 (self.ac_out_buffer == '') and 
+                                not self.producer_fifo and 
                                 self.connected
                                 )
 

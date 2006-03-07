@@ -115,7 +115,9 @@ class HTTP_client_pipeline (
 		else:
 			reactor.mime_producer_headers['connection'] = 'close'
 		self.http_client_continue (reactor)
-		self.handle_write ()
+		# self.handle_write ()
+                #
+                # do not iniate send, wait for the write event instead
 
 	def pipeline_wake_up_11 (self):
 		# HTTP/1.1 pipeline, send all at once and maybe close when
@@ -138,7 +140,8 @@ class HTTP_client_pipeline (
                         # close when done and not kept alive
                         reactor.mime_producer_headers['connection'] = 'close'
 		self.http_client_continue (reactor)
-		self.handle_write ()
+                # 
+		# self.handle_write ()
 		
 	# MIME collector
 
