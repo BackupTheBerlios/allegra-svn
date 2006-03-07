@@ -299,7 +299,7 @@ def pns_to_xml_utf8 (model, xml_types={}, xml_type=xml_dom.XML_element):
                 else:
                         attr = None
                 e = xml_types.get (model[1], xml_type) (
-                        model[1] or 'http://presto/ pns-xml-error', attr
+                        model[1] or 'http://allegra/ pns-xml-error', attr
                         )
                 e.xml_first = model[2]
                 return e, None
@@ -326,31 +326,6 @@ def pns_to_xml_utf8 (model, xml_types={}, xml_type=xml_dom.XML_element):
         return e, children
 
 
-def pns_to_xml_utf8_strings (dom, model):
-        e, children = pns_to_xml_utf8 (model)
-        if children:
-                e.xml_children = []
-                for child in netstring.decode (children):
-                        subject, name = netstring.decode (child)
-                        if subject:
-                                e.xml_children.append ('<%s pns="%s"/>' % (
-                                        ''.join (xml_utf8.xml_prefix_FQN (
-                                                name, dom.xml_prefixes
-                                                )),
-                                        xml_utf8.xml_attr (subject)
-                                        ))
-                        else:
-                                e.xml_children.append (
-                                        '<%s />' % xml_utf8.xml_prefix_FQN (
-                                                name, dom.xml_prefixes
-                                                )
-                                        )
-        return xml_utf8.xml_prefixed (
-                e, dom.xml_prefixes, 
-                ' context="%s"' % xml_utf8.xml_attr (model[3])
-                )
-
-
 def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.XML_element):
         name = unicode (model[1], 'utf-8')
         # try to decode the PNS/XML element 
@@ -372,7 +347,7 @@ def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.XML_element):
                 else:
                         attr = None
                 e = xml_types.get (name, xml_type) (
-                        name or u'http://presto/ pns-xml-error', attr
+                        name or u'http://allegra/ pns-xml-error', attr
                         )
                 if model[2]:
                         e.xml_first = unicode (model[2], 'utf-8')
@@ -404,41 +379,6 @@ def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.XML_element):
         if follow:
                 e.xml_follow = unicode (follow, 'utf-8')
         return e, children
-
-
-def pns_to_xml_unicode_strings (dom, model, encoding='ASCII'):
-        e, children = pns_to_xml_unicode (model)
-        if children:
-                e.xml_children = []
-                for child in netstring.decode (children):
-                        subject, name = netstring.decode (child)
-                        if subject:
-                                e.xml_children.append ('<%s pns="%s"/>' % (
-                                        ''.join (xml_unicode.xml_prefix_FQN (
-                                                unicode (name, 'utf-8'), 
-                                                dom.xml_prefixes, 
-                                                encoding
-                                                )),
-                                        xml_unicode.xml_attr (
-                                                unicode (subject, 'utf-8'), 
-                                                encoding
-                                                )
-                                        ))
-                        else:
-                                e.xml_children.append (
-                                        '<%s%s'
-                                        ' />' % xml_unicode.xml_prefix_FQN (
-                                                unicode (name, 'utf-8'), 
-                                                dom.xml_prefixes, 
-                                                encoding
-                                                )
-                                        )
-        return xml_unicode.xml_prefixed (
-                e, dom.xml_prefixes, 
-                ' context="%s"' % xml_unicode.xml_attr (
-                        unicode (model[3], 'utf-8'), encoding
-                        ), encoding
-                )
 
 
 class PNS_XML_continuation (finalization.Finalization):
@@ -645,6 +585,79 @@ class PNS_XML (finalization.Finalization):
         # don't bother, sorry ;-)
 
 
+def statement_utf8 (model, prefixes):
+        e, children = pns_to_xml_utf8 (model)
+        if children:
+                e.xml_children = []
+                for child in netstring.decode (children):
+                        subject, name = netstring.decode (child)
+                        if subject:
+                                e.xml_children.append ('<%s pns="%s"/>' % (
+                                        ''.join (xml_utf8.xml_prefix_FQN (
+                                                name, prefixes
+                                                )),
+                                        xml_utf8.xml_attr (subject)
+                                        ))
+                        else:
+                                e.xml_children.append (
+                                        '<%s />' % xml_utf8.xml_prefix_FQN (
+                                                name, prefixes
+                                                )
+                                        )
+        return xml_utf8.xml_prefixed (
+                e, prefixes, 
+                ' context="%s"' % xml_utf8.xml_attr (model[3])
+                )
+
+def statements_utf8 (model, prefixes):
+        for co in netstring.decode (model[2]):
+                c, o = netstring.decode (co)
+                for more in statement_utf8 (
+                        (model[0], model[1], o, c, '_'), prefixes, encoding
+                        ):
+                        yield more
+
+
+def statement_unicode (model, prefixes, encoding='ASCII'):
+        e, children = pns_to_xml_unicode (model)
+        if children:
+                e.xml_children = []
+                for child in netstring.decode (children):
+                        subject, name = netstring.decode (child)
+                        if subject:
+                                e.xml_children.append ('<%s pns="%s"/>' % (
+                                        ''.join (xml_unicode.xml_prefix_FQN (
+                                                unicode (name, 'utf-8'), 
+                                                prefixes, encoding
+                                                )),
+                                        xml_unicode.xml_attr (
+                                                unicode (subject, 'utf-8'), 
+                                                encoding
+                                                )
+                                        ))
+                        else:
+                                e.xml_children.append (
+                                        '<%s%s'
+                                        ' />' % xml_unicode.xml_prefix_FQN (
+                                                unicode (name, 'utf-8'), 
+                                                prefixes, encoding
+                                                )
+                                        )
+        return xml_unicode.xml_prefixed (
+                e, prefixes, 
+                ' context="%s"' % xml_unicode.xml_attr (
+                        unicode (model[3], 'utf-8'), encoding
+                        ), encoding
+                )
+
+def statements_unicode (model, prefixes, encoding='ASCII'):
+        for co in netstring.decode (model[2]):
+                c, o = netstring.decode (co)
+                for more in statement_unicode (
+                        (model[0], model[1], o, c, '_'), prefixes, encoding
+                        ):
+                        yield more        
+
 # Two helper functions to map a PNS name and its SAT to XML: 
 #
 # <public names="5:Names,6:Public,">
@@ -652,12 +665,9 @@ class PNS_XML (finalization.Finalization):
 #   <public>Public</public>
 # </public>
 #
-# something easy to transform with XSLT, present with CSS or manipulate
-# with JavaScript (although a JavaScript netstring decoder should be 
-# simple enough and JS programmers may better support Public Names 
-# directly for advanced interactive applications of context graphs).
+# Something easy to transform with XSLT and present with CSS.
 
-def public_utf8 (name, tag='public'):
+def name_utf8 (name, tag='public'):
         names = tuple (netstring.decode (name)) or (name,)
         if len (names) > 1:
                 return '<%s names="%s">%s</%s>' % (
@@ -670,7 +680,7 @@ def public_utf8 (name, tag='public'):
         return '<%s>%s</%s>' % (tag, xml_tf8.xml_cdata (name), tag)
 
 
-def public_unicode (name, tag='public', encoding='ASCII'):
+def name_unicode (name, tag='public', encoding='ASCII'):
         names = tuple (netstring.decode (name)) or (name,)
         if len (names) > 1:
                 return '<%s names="%s">%s</%s>' % (
@@ -685,4 +695,24 @@ def public_unicode (name, tag='public', encoding='ASCII'):
         return '<%s>%s</%s>' % (
                 tag, xml_unicode.xml_cdata (unicode (name, 'UTF-8')), tag
                 )
-                
+
+
+# Note about this implementation 
+#
+# it may be possible to get rid of the last level of PNS/XML articulation
+# and make articulation sparser, by allowing un-named child element to
+# be completely encoded in their parent. Yet this practically makes encoding
+# from XML to PNS also more complex to support sensible trunking.
+#
+# Most XML leaf elements do not require a PNS/XML statement but the
+# presence of one too large in their midst suppose a more elaborated
+# algorithm for sparse articulation, counting every bytes in the parent's
+# PNS/XML statement to decide which elements to "inline" as:
+#
+#         :subject,:name,::attributes,:first,:follow,,
+#
+# and which to reference only:
+#
+#         :subject,:name,:,
+#
+# it just might not be worth the trouble.
