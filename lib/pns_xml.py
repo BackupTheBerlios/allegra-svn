@@ -673,7 +673,7 @@ def name_utf8 (name, tag='public'):
                 return '<%s names="%s">%s</%s>' % (
                         tag,
                         xml_utf8.xml_attr (name), 
-                        ''.join ([public_utf8 (n, tag) for n in names]),
+                        ''.join ([name_utf8 (n, tag) for n in names]),
                         tag
                         )
 
@@ -686,7 +686,7 @@ def name_unicode (name, tag='public', encoding='ASCII'):
                 return '<%s names="%s">%s</%s>' % (
                         tag,
                         xml_unicode.xml_attr (unicode (name, 'UTF-8')), 
-                        ''.join ([public_unicode (
+                        ''.join ([name_unicode (
                                 n, tag, encoding
                                 ) for n in names]),
                         tag
