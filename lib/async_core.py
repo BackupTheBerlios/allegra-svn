@@ -73,9 +73,6 @@ class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
                 else:
                         self.socket = None
 
-        def __repr__ (self):
-                'async-dispatcher id="%x"' % id (self)
-
         def finalization (self, finalized):
                 assert None == self.log ('finalized', 'debug')
 
