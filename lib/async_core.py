@@ -255,7 +255,6 @@ class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def handle_expt_event (self):
                 self.loginfo_traceback ()
-                self.close ()
 
         def handle_error (self):
                 "log a traceback or raise SystemExit again"
