@@ -42,7 +42,7 @@ and scheduled events. Cheap asynchronous continuations are provided by a
 piggy-back of the CPython GC and the simplest event scheduler possible is
 implemented as a heap queue."""
 
-import errno, time, collections, heapq
+import select, errno, time, collections, heapq
 
 from allegra import loginfo
 
@@ -54,32 +54,41 @@ async_Exception = KeyboardInterrupt
 
 async_map = {}
 
-# The original asyncore functions to poll this socket map for I/O
+
+# The original Medusa/asyncore.py functions to poll this socket map for I/O
 
 def poll1 (map, timeout=0.0):
         r = []; w = []; e = []
         for fd, obj in map.items ():
-                if obj.readable ():
+                is_r = obj.readable ()
+                is_w = obj.writable ()
+                if is_r:
                         r.append (fd)
-                if obj.writable ():
+                if is_w:
                         w.append (fd)
-        if [] == r == w == e:
+                if is_r or is_w:
+                        e.append (fd)
+                if len (e) > 511:
+                        # Default limit set to 512 in _select.pyd, no upper
+                        # bound for NT, something in the many thousands for
+                        # Linux. Anyway, this will not prevent a peer to
+                        # handle many more sockets, provided no more than
+                        # 512 of them are readable or writable concurrently.
+                        #
+                        # the nice thing is that we can "trunk", handle what
+                        # can and hopefully have less to poll next ...
+                        #
+                        assert None == loginfo.log (
+                                'select read="%d" write="%d"' % (
+                                        len (r), len (w)
+                                        ), 'warning')
+                        break
+                
+        if len (e) == 0:
                 time.sleep (timeout)
         else:
                 try:
                         r, w, e = select.select (r, w, e, timeout)
-                except ValueError:
-                	# Default limit set to 512 in _select.pyd, no upper
-                	# bound for NT, something in the many thousands for
-                	# Linux. Anyway, this will not prevent a peer to
-                	# handle many more sockets, provided no more than
-                	# 512 of them are readable or writable concurrently.
-                	#
-                	loginfo.log ('select read="%d" write="%d"' % (
-                		len (r), len (w)
-                		), 'fatal')
-                	raise async_Exception, 'select-fatal'
-                	
                 except select.error, err:
                         if err[0] != errno.EINTR:
                             raise
@@ -115,31 +124,14 @@ def poll1 (map, timeout=0.0):
                 except:
                         obj.handle_error ()
 
-
-def poll2 (map, timeout=0.0):
-        # import poll
-        timeout = int (timeout*1000) # timeout is in milliseconds
-        l = []
-        for fd, obj in map.items ():
-                flags = 0
-                if obj.readable ():
-                        flags = poll.POLLIN
-                if obj.writable ():
-                        flags = flags | poll.POLLOUT
-                if flags:
-                        l.append ((fd, flags))
-        r = poll.poll (l, timeout)
-        for fd, flags in r:
+        for fd in e:
                 try:
                         obj = map[fd]
                 except KeyError:
                         continue
 
                 try:
-                        if (flags  & poll.POLLIN):
-                                obj.handle_read_event()
-                        if (flags & poll.POLLOUT):
-                                obj.handle_write_event()
+                        obj.handle_expt_event ()
                 except async_Exception:
                         raise async_Exception 
                         
@@ -148,16 +140,20 @@ def poll2 (map, timeout=0.0):
 
 
 def poll3 (map, timeout=0.0):
-        # Use the poll() support added to the select module in Python 2.0
         timeout = int (timeout*1000)
         pollster = select.poll ()
         for fd, obj in map.items():
                 flags = 0
                 if obj.readable ():
-                        flags = select.POLLIN
+                        flags |= select.POLLIN | select.POLLPRI
                 if obj.writable ():
-                        flags = flags | select.POLLOUT
+                        flags |= select.POLLOUT
                 if flags:
+                        flags |= (
+                                select.POLLERR | 
+                                select.POLLHUP | 
+                                select.POLLNVAL
+                                )
                         pollster.register (fd, flags)
         try:
                 r = pollster.poll (timeout)
@@ -173,10 +169,16 @@ def poll3 (map, timeout=0.0):
                         continue
 
                 try:
-                        if (flags  & select.POLLIN):
+                        if flags & (select.POLLIN | select.POLLPRI):
                                 obj.handle_read_event()
-                        if (flags & select.POLLOUT):
+                        if flags & select.POLLOUT:
                                 obj.handle_write_event()
+                        if flags & (
+                                select.POLLERR | 
+                                select.POLLHUP | 
+                                select.POLLNVAL
+                                ):
+                                obj.handle_expt_event()
                 except async_Exception:
                         raise async_Exception 
                         
@@ -186,16 +188,10 @@ def poll3 (map, timeout=0.0):
 
 # Select the best poll function available for this system
 
-try:
-	import poll
-except:
-	import select
-	if hasattr (select, 'poll'):
-		async_poll = poll3
-	else:
-		async_poll = poll1
+if hasattr (select, 'poll'):
+	async_poll = poll3
 else:
-	async_poll = poll2
+	async_poll = poll1
 
 async_timeout = 0.1 # default to a much smaller interval (300) than asyncore
 
