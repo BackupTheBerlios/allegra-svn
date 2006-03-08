@@ -18,8 +18,11 @@
 # OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
 # NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 # CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-
+#
+#
+# ... and, for the little added, also ...
+#
+#
 # Copyright (C) 2005 Laurent A.V. Szyster
 #
 # This library is free software; you can redistribute it and/or modify
@@ -40,9 +43,10 @@
 
 import exceptions, socket, sys, time, os
 
-from errno import \
-        EALREADY, EINPROGRESS, EWOULDBLOCK, ECONNRESET, \
+from errno import (
+        EALREADY, EINPROGRESS, EWOULDBLOCK, ECONNRESET, 
         ENOTCONN, ESHUTDOWN, EINTR, EISCONN
+        )
 
 from allegra import loginfo, async_loop, finalization
 
@@ -330,7 +334,7 @@ if os.name == 'posix':
                         self.connected = 1
                         # set it to non-blocking mode
                         flags = fcntl.fcntl (fd, fcntl.F_GETFL, 0)
-                        flags = flags | os.O_NONBLOCK
+                        flags |= os.O_NONBLOCK
                         fcntl.fcntl (fd, fcntl.F_SETFL, flags)
                         self.set_file (fd)
         
