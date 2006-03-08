@@ -87,7 +87,7 @@ def pns_triple (model, PNS_LENGTH=1024):
                 '%d%d' % (len (model[0]), len (model[1]))
                 )
         if sp_len > PNS_LENGTH/2:
-                return None, '3 invalid statement length %d' % sp_len
+                return model, '3 invalid statement length %d' % sp_len
 
         if model[2]:
                 model = (model[0], model[1], model[2][:(
