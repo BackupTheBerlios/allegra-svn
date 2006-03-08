@@ -256,7 +256,7 @@ class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
                         raise t, v
 
                 self.loginfo_traceback ()
-                # self.handle_close () # .close () or nothing?
+                self.close # self.handle_close () ... or nothing?
 
         def handle_close (self):
                 "assert debug log and close the dispatcher"

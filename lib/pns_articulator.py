@@ -17,7 +17,7 @@
 
 ""
 
-from allegra import netstring, finalization, pns_model
+from allegra import netstring, loginfo, finalization, pns_model
 
 
 def pns_articulate_route (encoded):
@@ -120,11 +120,11 @@ class PNS_articulator:
 # The Semantic Walk: get articulated indexes and contexts, and for each
 # context considered as a subject get a set of statement.
 #
-# 1. Walk up the index as much as possible, until no index is
+# 1. Walk "up" the graph as much as possible, until no index is
 #    available for the current articulation. In effect, read as
 #    much as possible of a unique articulation.
 #
-# 2. Then start to walk the index down for one or more contexts
+# 2. Then start to walk the graph "down" for one or more contexts
 #    articulating the indexes when no context is available. In effect
 #    get a set of possible contexts for the original articulation.
 #
@@ -144,217 +144,83 @@ class PNS_articulator:
 # everywhere and PNS agents don't actually require them to articulate
 # a usefull search processes.
 
+class Walk (finalization.Finalization):
 
-class PNS_articulate (finalization.Finalization):
-
-        pns_index = None
+        PNS_HORIZON = 126
+        pns_predicate = 'sat'
         
-        def __init__ (
-                self, articulator, articulated, 
-                predicates=None, context='', HORIZON=15
-                ):
-                self.pns_predicates = predicates
-                self.pns_context = context
-                self.pns_contexts = set ()
-                self.pns_subjects = []
-                self.pns_sat = []
-                self.PNS_HORIZON = HORIZON
-                PNS_articulate_names (
-                        articulator, articulated
-                        ).finalization = self.pns_articulate_names
-                        
-        def pns_articulate_names (self, finalized):
-                if len (finalized.pns_indexes) > 1:
-                        self.pns_index = pns_model.pns_name (
-                                netstring.encode (list (
-                                        finalized.pns_indexes
-                                        )), set ()
-                                )
-                elif len (finalized.pns_indexes) > 0:
-                        self.pns_index = tuple (finalized.pns_indexes)[0]
-                if len (finalized.pns_contexts) > 1:
-                        # TODO: add PNS route here
-                        #
-                        # finalized.pns_articulator.pns_command ((
-                        #        '', finalized.pns_articulated, 
-                        #        netrstrings_encode (pns_contexts)
-                        #        ), self.pns_resolve_routes)
-                        #
-                        if self.pns_predicates and (
-                                self.PNS_HORIZON > len (
-                                        finalized.pns_contexts
-                                        )
-                                ):
-                                for subject in finalized.pns_contexts:
-                                        PNS_articulate_subject (
-                                                finalized.pns_articulator,
-                                                subject,
-                                                self.pns_predicates,
-                                                self.pns_context
-                                                ).finalization = \
-                                                self.pns_articulate_subject
-                elif len (finalized.pns_contexts) > 0:
-                        # one single context: use it as subject
-                        PNS_articulate_subject (
-                                finalized.pns_articulator,
-                                list (finalized.pns_contexts)[0],
-                                self.pns_predicates,
-                                self.pns_context
-                                ).finalization = self.pns_articulate_subject
-                # get all SAT available for articulated names
-                for name in finalized.pns_contexts.union (
-                        set (finalized.pns_indexes)
-                        ):
-                        if len (tuple (netstring.decode (name))) > 0:
-                                finalized.pns_articulator.pns_statement (
-                                        (name, 'sat', ''), '', 
-                                        self.pns_resolve_sat
-                                        )
-                finalized.pns_articulator = None
-                
-        def pns_articulate_subject (self, finalized):
-                if finalized.pns_objects:
-                        self.pns_subjects.append ((
-                                finalized.pns_subject,
-                                finalized.pns_objects
-                                ))
-                        self.pns_contexts.update (finalized.pns_contexts)
-                finalized.pns_articulator = None
-                
-        def pns_resolve_sat (self, resolved, model):
-                if model[2] == '':
-                        return
-                        
-                statements = list (netstring.decode (model[2]))
-                if len (statements) > 0:
-                        for co in statements:
-                                c, o = netstring.decode (co)
-                                self.pns_sat.append ((
-                                        resolved[0], resolved[1], 
-                                        o, c, '_'
-                                        ))
-                else:
-                        c, o = netstring.decode (model[2])
-                        self.pns_sat.append ((
-                                resolved[0], resolved[1], o, c, '_'
-                                ))
-                                
-
-class PNS_articulate_names (finalization.Finalization):
-        
-        # The real search.
-        #
-        # Walks the semantic graph up and down for 
-        
-        def __init__ (
-                self, articulator, articulated, HORIZON=126
-                ):
+        def __init__ (self, articulator, articulated):
                 self.pns_articulator = articulator
                 self.pns_articulated = articulated
-                self.pns_indexes = set ()
-                self.pns_contexts = set ((articulated, ))
-                self.PNS_HORIZON = HORIZON
-                # walk up the indexes ...
+                self.pns_names = set ()
+                # self.pns_contexts = set ((articulated, ))
                 self.pns_articulator.pns_command (
                         ('', '', articulated), self.pns_resolve_index
-                        )
+                        ) # walk up the indexes ...
                                 
         def pns_resolve_index (self, resolved, model):
-                self.pns_indexes.add (resolved[2])
+                self.pns_names.add (resolved[2])
                 if model == None:
-                        # unique or unknown articulation, walk down ...
+                        # unique or unknown articulation
                         self.pns_articulator.pns_command (
                                 ('', resolved[2], ''), 
                                 self.pns_resolve_context
-                                )
+                                ) # walk down ...
                         return
 
-                # continue to walk up the indexes ...
-                self.pns_contexts.add (model[0])
-                if len (self.pns_contexts) < self.PNS_HORIZON:
+                if len (self.pns_names) < self.PNS_HORIZON:
+                        # below the horizon
                         self.pns_articulator.pns_command (
                                 ('', '', model[0]), 
                                 self.pns_resolve_index
-                                )
+                                ) # walk up the indexes ...
                                 
         def pns_resolve_context (self, resolved, model):
                 if model != None:
-                        # Context found for an articulation
-                        self.pns_contexts.update (model[1])
-                        return # stop.
+                        # Context(s) found for an articulation
+                        if len (tuple (netstring.decode (resolved[1]))) > 0:
+                                question = (
+                                        resolved[1], self.pns_predicate, ''
+                                        )
+                                contexts = self.pns_names.difference(
+                                        model[1]
+                                        )
+                                for context in iter (contexts):
+                                        self.pns_articulator.pns_statement (
+                                                question, context,
+                                                self.pns_resolve_statement
+                                                ) # ask statements ...
+                        return # stop walking.
 
                 # no context available, articulate the name resolved
-                names = list (netstring.decode (resolved[1]))
+                names = tuple (netstring.decode (resolved[1]))
                 if len (names) == 0:
                         # nothing to articulate, if there are no contexts
                         # available yet, walk up
-                        if not (
-                                resolved[1] in self.pns_indexes
-                                ) and len (self.pns_contexts) == 0:
-                                self.pns_articulator.pns_command (
-                                        ('', '', resolved[1]), 
-                                        self.pns_resolve_index
-                                        )
+                        #if not (
+                        #        resolved[1] in self.pns_names
+                        #        ) and len (self.pns_names) == 0:
+                        #        self.pns_articulator.pns_command (
+                        #                ('', '', resolved[1]), 
+                        #                self.pns_resolve_index
+                        #                )
                         return
                         
                 # get the contexts for each newly articulated name
                 for name in names:
-                        if name in self.pns_indexes:
+                        if name in self.pns_names:
                                 continue
                                 
                         self.pns_articulator.pns_command (
                                 ('', name, ''), 
                                 self.pns_resolve_context
                                 )
-                                
 
-class PNS_articulate_subject (finalization.Finalization):
-        
-        # get all objects and contexts for a given subject, then finalize
-        
-        def __init__ (
-                self, articulator, subject, predicates=('sat', ), context=''
-                ):
-                self.pns_articulator = articulator
-                self.pns_subject = subject
-                self.pns_predicates = predicates
-                self.pns_objects = []
-                self.pns_contexts = set ()
-                self.pns_articulator.pns_command (
-                        ('', subject, ''), self.pns_resolve_contexts
+        def pns_resolve_statement (self, resolved, model):
+                assert None == loginfo.log (
+                        netstring.encode (model), 'Walk'
                         )
 
-        def pns_resolve_contexts (self, resolved, model):
-                if model == None:
-                        return
-                        
-                self.pns_contexts.update (model[1])
-                for predicate in self.pns_predicates:
-                        self.pns_articulator.pns_statement (
-                                (resolved[1], predicate, ''), '',
-                                self.pns_resolve_predicate
-                                )
-
-        def pns_resolve_predicate (self, resolved, model):
-                if model[3]:
-                        # single contextual statement
-                        self.pns_objects.append (model)
-                elif model[2]:
-                        # multiple contextual statements
-                        statements = list (netstring.decode (model[2]))
-                        if len (statements) > 0:
-                                for co in statements:
-                                        c, o = netstring.decode (co)
-                                        self.pns_objects.append ((
-                                                resolved[0], resolved[1], 
-                                                o, c, '_'
-                                                ))
-                        else:
-                                c, o = netstring.decode (model[2])
-                                self.pns_objects.append ((
-                                        resolved[0], resolved[1], o, c, '_'
-                                        ))
-                                
 
 if __name__ == '__main__':
         import sys, time
@@ -363,37 +229,10 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster\n'
                 )
                 
-        from exceptions import StopIteration
-        from allegra import pns_client
+        from allegra import async_loop, pns_client
         
-        class PNS_pipe (pns_client.PNS_client_channel):
+        class PNS_pipe (pns_client.PNS_pipe):
                 
-                def __init__ (self, ip, pipe):
-                        self.pns_start = time.time ()
-                        self.pns_pipe = pipe
-                        pns_client.PNS_client_channel.__init__ (self, ip)
-                        self.tcp_connect ()
-                        
-                def pns_peer (self, ip):
-                        if ip:
-                                encoded = '%d:%s,0:,0:,0:,' % (len (ip), ip)
-                                sys.stdout.write ('%d:%s,' % (
-                                        len (encoded), encoded
-                                        ))
-                                self.pns_articulator = PNS_articulator (self)
-                                self.pns_articulate ()
-                                return
-                                
-                        assert None == self.log (
-                                '<close sent="%d" received="%d" seconds="%f"'
-                                '/>' % (
-                                        self.pns_sent, self.pns_received,
-                                        time.time () - self.pns_start
-                                        ), ''
-                                )
-                        self.pns_articulator.pns_client = None
-                        del self.pns_articulator
-                        
                 def pns_articulate (self):
                         try:
                                 encoded = self.pns_pipe.next ()
@@ -410,7 +249,7 @@ if __name__ == '__main__':
                                 return
                         
                         if model[1] == model[2] == model[3] == '':
-                                PNS_walk (self.pns_articulator, model[0])
+                                Walk (self.pns_articulator, model[0])
                         elif model[2] != '' or model[3] != '':
                                 self.pns_articulator.pns_articulate (
                                         tuple (model[:3]), model[3]
@@ -423,11 +262,8 @@ if __name__ == '__main__':
         else:
                 ip = '127.0.0.1'
         PNS_pipe (ip, netstring.netpipe (lambda: sys.stdin.read (4096)))
-        from allegra import async_loop
-        try:
-                async_loop.loop ()
-        except:
-                async_loop.loginfo.loginfo_traceback ()
+        async_loop.dispatch ()
+        assert None == finalization.collect ()
         #
         # Allegra PNS/TCP Articulator
         #

@@ -17,7 +17,7 @@
 
 ""
 
-from allegra import netstring, async_net, tcp_client
+from allegra import netstring, loginfo, async_net, tcp_client
 
 
 class PNS_client_channel (
@@ -228,6 +228,14 @@ class PNS_client_channel (
         #
         # For a simple client, it's a nice one ;-)
 
+def pns_peer (resolved, model):
+        if model[3]:
+                assert None == loginfo.log (model[3], 'pns-tcp-open')
+                return True
+
+        assert None == loginfo.log (model[3], 'pns-tcp-close')
+        return False
+
 
 class PNS_client (tcp_client.TCP_client):
         
@@ -235,18 +243,17 @@ class PNS_client (tcp_client.TCP_client):
         
         TCP_CLIENT_CHANNEL = PNS_client_channel
 
-        def __call__ (self, addr, handler=None):
+        def __call__ (self, addr, handler=pns_peer):
                 channel = tcp_client.TCP_client.tcp_client (self, addr)
                 if channel:
-                        if handler:
-                                try:
-                                        channel.pns_commands[(
-                                                '', '', ''
-                                                )].append (handler)
-                                except KeyError:
-                                         channel.pns_commands[(
-                                                 '', '', ''
-                                                 )] = [handler]
+                        try:
+                                channel.pns_commands[(
+                                        '', '', ''
+                                        )].append (handler)
+                        except KeyError:
+                                 channel.pns_commands[(
+                                         '', '', ''
+                                         )] = [handler]
                         return channel
 
         def tcp_client_inactive (self, channel, when):
@@ -257,86 +264,87 @@ class PNS_client (tcp_client.TCP_client):
                                 )
 
 
+class PNS_pipe (PNS_client_channel):
+        
+        def __init__ (self, addr, pipe):
+                self.pns_start = time.time ()
+                self.pns_pipe = pipe
+                PNS_client_channel.__init__ (self)
+                self.tcp_connect (addr)
+                self.pns_commands[('', '', '')] = [self.pns_peer]
+                
+        def pns_peer (self, resolved, model):
+                ip = model[3]
+                if ip:
+                        encoded = '%d:%s,0:,0:,0:,' % (len (ip), ip)
+                        loginfo.log (encoded)
+                        self.pns_articulate ()
+                        return True
+                        
+                assert None == self.log (
+                        'close'
+                        ' sent="%d" received="%d" seconds="%f"' % (
+                                self.pns_sent, self.pns_received,
+                                time.time () - self.pns_start
+                                ), 'debug'
+                        )
+                return False
+                
+        def pns_articulate (self):
+                try:
+                        encoded = self.pns_pipe.next ()
+                        
+                except StopIteration:
+                        # no more statements to handle, close
+                        self.async_net_push (('0:,0:,0:,0:,',))
+                        # self.close_when_done ()
+                        return
+
+                model = list (netstring.decode (encoded))
+                if '' == model[0]:
+                        if '' == model[1] == model[2]:
+                                self.pns_quit (model[3])
+                        else:
+                                self.pns_command (tuple (model[:3]))
+                elif '' == model[1] and model[0] == model[3]:
+                        if model[2]:
+                                self.pns_join (model[3], model[2])
+                        else:
+                                self.pns_subscribe (model[3])
+                else:
+                        self.pns_statement (
+                                tuple (model[:3]), model[3]
+                                )
+                        
+        def pns_signal (self, resolved, model):
+                # dump a netstring to STDOUT
+                encoded = netstring.encode (model)
+                loginfo.log (encoded)
+                # waits for the echo to finalize and articulate the
+                # next statement, nicely as the peer sends its echo
+                if model[4].startswith ('.'):
+                        self.pns_articulate ()
+                        return False
+        
+                # _, ! or ? are simply dropped unless they occur
+                # before ., ...
+                return True
+
+        def pns_noise (self, model):
+                # dump a netstring to STDERR
+                loginfo.log (
+                        netstring.encode (model), 'noise'
+                        )
+                
+
 if __name__ == '__main__':
-        import sys, time, exceptions
-        from allegra import loginfo, async_loop
+        import sys, time
+        from allegra import async_loop, finalization
         loginfo.log (
                 'Allegra PNS/TCP Client'
                 ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
                 'info'
                 ) 
-                        
-        class PNS_pipe (PNS_client_channel):
-                
-                def __init__ (self, addr, pipe):
-                        self.pns_start = time.time ()
-                        self.pns_pipe = pipe
-                        PNS_client_channel.__init__ (self)
-                        self.tcp_connect (addr)
-                        self.pns_commands[('', '', '')] = [self.pns_peer]
-                        
-                def pns_peer (self, resolved, model):
-                        ip = model[3]
-                        if ip:
-                                encoded = '%d:%s,0:,0:,0:,' % (len (ip), ip)
-                                loginfo.log (encoded)
-                                self.pns_articulate ()
-                                return True
-                                
-                        assert None == self.log (
-                                'close'
-                                ' sent="%d" received="%d" seconds="%f"' % (
-                                        self.pns_sent, self.pns_received,
-                                        time.time () - self.pns_start
-                                        ), 'debug'
-                                )
-                        return False
-                        
-                def pns_articulate (self):
-                        try:
-                                encoded = self.pns_pipe.next ()
-                                
-                        except exceptions.StopIteration:
-                                # no more statements to handle, close
-                                self.async_net_push (('0:,0:,0:,0:,',))
-                                # self.close_when_done ()
-                                return
-
-                        model = list (netstring.decode (encoded))
-                        if '' == model[0]:
-                                if '' == model[1] == model[2]:
-                                        self.pns_quit (model[3])
-                                else:
-                                        self.pns_command (tuple (model[:3]))
-                        elif '' == model[1] and model[0] == model[3]:
-                                if model[2]:
-                                        self.pns_join (model[3], model[2])
-                                else:
-                                        self.pns_subscribe (model[3])
-                        else:
-                                self.pns_statement (
-                                        tuple (model[:3]), model[3]
-                                        )
-                                
-                def pns_signal (self, resolved, model):
-                        # dump a netstring to STDOUT
-                        encoded = netstring.encode (model)
-                        loginfo.log (encoded)
-                        # waits for the echo to finalize and articulate the
-                        # next statement, nicely as the peer sends its echo
-                        if model[4].startswith ('.'):
-                                self.pns_articulate ()
-                                return False
-                
-                        # _, ! or ? are simply dropped unless they occur
-                        # before ., ...
-                        return True
-
-                def pns_noise (self, model):
-                        # dump a netstring to STDERR
-                        loginfo.log (
-                                netstring.encode (model), 'noise'
-                                )
                         
         if len (sys.argv) > 1:
                 if len (sys.argv) > 2:
@@ -349,6 +357,7 @@ if __name__ == '__main__':
                 lambda: sys.stdin.read (4096)
                 ))
         async_loop.loop ()
+        assert None == finalization.collect ()
         #
         # Allegra PNS/TCP Client
         #

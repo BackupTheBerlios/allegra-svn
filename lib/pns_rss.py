@@ -181,15 +181,33 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster'
                 ' | Copyleft GPL 2.0\n', 'info'
                 )
+        if '-d' in sys.argv:
+                sys.argv.remove ('-d')
+                benchmark = True
+        else:
+                benchmark = __debug__
         t = time.clock ()
-        dom, request = feed (
-                sys.argv[1], 
-                pns_xml.log_statement, 
-                __debug__ or '-d' in sys.argv
-                )
+        if len (sys.argv) > 2:
+                from allegra import netstring, pns_model, pns_client
+                pns = pns_client.PNS_client ()
+                channel = pns ((sys.argv[2], int (sys.argv[3])))
+                def pns_statement (model):
+                        model, error = pns_model.pns_triple (model)
+                        if error:
+                                loginfo.log (netstring.encode (model), error)
+                                return False
+                        
+                        channel.pns_statement (
+                                tuple (model[:3]), model[3]
+                                )
+                        return True
+                
+        else:
+                pns_statement = pns_xml.log_statement
+        dom, request = feed (sys.argv[1], pns_statement, benchmark)
         async_loop.loop ()
         t = time.clock () - t
-        if __debug__ or '-d' in sys.argv:
+        if benchmark:
                 loginfo.log (
                         'fetched in %f seconds, '
                         'as %d chunks parsed in %f seconds' % (

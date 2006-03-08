@@ -19,8 +19,8 @@
 
 from allegra import (
         netstring, loginfo, finalization, producer, 
-        pns_model, pns_sat, pns_xml, pns_client, pns_articulator, 
-        presto, presto_http
+        pns_model, pns_xml, pns_client, 
+        presto 
         )
 
 
@@ -85,14 +85,19 @@ class PRESTo_dom (
 
 class PNS_statement (producer.Stalled_generator):
         
-        def __init__ (self, dom, encoding='ASCII'):
-                self.xml_dom = dom
+        def __init__ (self, prefixes, encoding='ASCII'):
+                self.xml_prefixes = prefixes
                 self.encoding = encoding
         
         def __call__ (self, resolved, model):
-                self.generator = pns_xml.pns_to_xml_unicode_strings (
-                        self.xml_dom, model, self.encoding
-                        )
+                if not model[3] and model[2]:
+                        self.generator = pns_xml.statements_unicode (
+                                model, self.xml_prefixes, self.encoding
+                                )
+                else:
+                        self.generator = pns_xml.statement_unicode (
+                                model, self.xml_prefixes, self.encoding
+                                )
                 return False
 
         # a fine example of a Stalled_generator application, producing
@@ -102,16 +107,26 @@ class PNS_statement (producer.Stalled_generator):
         #
         # note how the same instance holds state for the stalled HTTP 
         # response *and* serves as a handler for the PNS/TCP question.
-                                
-                        
+                
+                
+def pns_graph_rest (ci):
+        context, index = netstring.decode (ci)
+        return ''.join ((
+                '<presto:graph>',
+                pns_xml.name_unicode (context, 'presto:context'),
+                pns_xml.name_unicode (index, 'presto:index'),
+                '</presto:graph>'
+                ))
+
+
 class PNS_command (producer.Stalled_generator):
         
         def __call__ (self, resolved, model):
                 if resolved[1] == '':
                         if model:
                                 self.generator = iter ((
-                                        pns_xml.public_unicode (
-                                                model[0], 'presto:index'
+                                        pns_xml.name_unicode (
+                                                model[3], 'presto:index'
                                                 ),
                                         ))
                         else:
@@ -121,15 +136,22 @@ class PNS_command (producer.Stalled_generator):
                 elif resolved[2] == '':
                         if model:
                                 self.generator = (
-                                        pns_xml.public_unicode (
+                                        pns_xml.name_unicode (
                                                 context, 'presto:context'
                                                 ) 
-                                        for context in model[1]
+                                        for context in netstring.decode (
+                                                model[3]
+                                                )
                                         )
                         else:
                                 self.generator = iter ((
                                         '<presto:context name=""/>',
                                         ))
+                elif model[3]:
+                        self.generator = (
+                                pns_graph_rest (ci)
+                                for ci in netstring.decode (model[3])
+                                )
                 else:
                         self.generator = iter (('<presto:graph/>',))
                 return False
@@ -138,7 +160,7 @@ class PNS_command (producer.Stalled_generator):
 def pns_statement (component, reactor):
         "pass-through method for PNS/TCP statements"
         if not reactor.presto_vector:
-                return '<presto:presto/>'
+                return '<presto:pns-statement/>'
         
         if component.pns_client == None and not component.pns_open (reactor):
                 return '<presto:pns-tcp-error/>'
@@ -166,7 +188,7 @@ def pns_statement (component, reactor):
                                         )
                         else:
                                 # filter-out PNS/TCP close, of course.
-                                return '<presto:presto/>'
+                                return '<presto:pns-statement/>'
                         
                 else:
                         # PNS/Inference command
@@ -249,94 +271,3 @@ class PNS_session (presto.PRESTo_async):
                 except:
                         self.pns_xml_log = [s]
                 
-        presto_interfaces = set ((
-                u'PRESTo', u'subject', u'predicate', u'object', u'context'
-                ))
-
-        presto = presto_http.get_rest
-                        
-        presto_methods = {None: pns_statement}
-        
-
-# PNS/REST Articulator
-
-def pns_articulate_rest (finalized):
-        "generates the REST for the finalized articulation"
-        yield '<presto:articulate>'
-
-        if finalized.pns_index:
-                yield pns_xml.public_unicode (
-                        finalized.pns_index, 'pns:index'
-                        )
-                        
-        for subject, statements in finalized.pns_subjects:
-                yield '<presto:subject>'
-        
-                yield pns_xml.public_unicode (subject, 'pns:index')
-        
-                for model in statements:
-                        yield pns_xml.pns_xml_unicode (
-                                model, pns_xml.pns_cdata_unicode (model[2])
-                                )
-                                
-                yield '</presto:subject>'
-        
-        if len (finalized.pns_contexts) > 0:
-                for name in finalized.pns_contexts:
-                        yield pns_xml.pns_names_unicode (name, 'pns:context')
-                
-        if len (finalized.pns_sat) > 0:
-                for model in finalized.pns_sat:
-                        yield pns_xml.pns_xml_unicode (
-                                model, pns_xml.pns_cdata_unicode (model[2])
-                                )
-                                
-        yield '</presto:articulate>'
-                        
-                        
-class PNS_articulate (producer.Stalled_generator):
-        
-        "the articulation's finalization"
-        
-        def __call__ (self, finalized):
-                self.generator = pns_articulate_rest (finalized)
-                                
-
-def pns_articulate (component, reactor):
-        "articulate a context"
-        text = reactor.presto_vector.get (u'articulated', u'').encode ('UTF-8')
-        if not text:
-                return '<presto:articulate/>'
-        
-        lang = reactor.presto_vector.get (u'lang')
-        if lang:
-                component.pns_sat_language = pns_sat.language (
-                        lang.encode ('UTF-8')
-                        )
-        articulated = []
-        name = pns_sat.articulate_re (
-                text, articulated.append, component.pns_sat_language
-                )
-        if name:
-                return '<presto:articulate/>'
-
-        react = PNS_articulate ()
-        pns_articulator.PNS_articulate (
-                component.pns_articulator, name, netstring.netlist (
-                        reactor.presto_vector[
-                                u'predicates'
-                                ].encode ('UTF-8') or 'sat'
-                        )
-                ).finalization = react
-        return react
-        
-
-# Note about this implementation
-#
-# <presto:pns 
-#        xmlns:presto="http://presto/"
-#        metabase="127.0.0.1:3534" 
-#        language="en"
-#        >
-#        <presto:subscription pns=""/>
-# </presto:pns>
