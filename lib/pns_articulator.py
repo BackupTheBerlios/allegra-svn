@@ -149,78 +149,94 @@ class Walk (finalization.Finalization):
         PNS_HORIZON = 126
         pns_predicate = 'sat'
         
-        def __init__ (self, articulator, articulated):
+        def __init__ (self, articulator, walked):
                 self.pns_articulator = articulator
-                self.pns_articulated = articulated
-                self.pns_names = set ()
-                # self.pns_contexts = set ((articulated, ))
+                self.pns_walked = walked
+                self.pns_names = set ((walked,))
                 self.pns_articulator.pns_command (
-                        ('', '', articulated), self.pns_resolve_index
+                        ('', '', walked), self.pns_resolve_index
                         ) # walk up the indexes ...
                                 
         def pns_resolve_index (self, resolved, model):
-                self.pns_names.add (resolved[2])
                 if model == None:
                         # unique or unknown articulation
                         self.pns_articulator.pns_command (
                                 ('', resolved[2], ''), 
                                 self.pns_resolve_context
-                                ) # walk down ...
+                                ) # walk up the contexts ...
                         return
 
-                if len (self.pns_names) < self.PNS_HORIZON:
-                        # below the horizon
+                # known name
+                walked = model[0]
+                if not (
+                        walked in self.pns_names
+                        ) and len (self.pns_names) < self.PNS_HORIZON:
+                        # new and below the horizon
+                        self.pns_names.add (walked)
                         self.pns_articulator.pns_command (
-                                ('', '', model[0]), 
+                                ('', '', walked), 
                                 self.pns_resolve_index
                                 ) # walk up the indexes ...
                                 
         def pns_resolve_context (self, resolved, model):
+                walked = resolved[1]
                 if model != None:
-                        # Context(s) found for an articulation
-                        if len (tuple (netstring.decode (resolved[1]))) > 0:
-                                question = (
-                                        resolved[1], self.pns_predicate, ''
-                                        )
-                                contexts = self.pns_names.difference(
-                                        model[1]
-                                        )
-                                for context in iter (contexts):
+                        # Context(s) found
+                        if len (tuple (netstring.decode (walked))) > 0:
+                                # for an articulation
+                                question = (walked, self.pns_predicate, '')
+                                for context in iter (
+                                        model[1].difference(self.pns_names)
+                                        ):
                                         self.pns_articulator.pns_statement (
                                                 question, context,
                                                 self.pns_resolve_statement
                                                 ) # ask statements ...
                         return # stop walking.
 
-                # no context available, articulate the name resolved
-                names = tuple (netstring.decode (resolved[1]))
-                if len (names) == 0:
-                        # nothing to articulate, if there are no contexts
-                        # available yet, walk up
-                        #if not (
-                        #        resolved[1] in self.pns_names
-                        #        ) and len (self.pns_names) == 0:
-                        #        self.pns_articulator.pns_command (
-                        #                ('', '', resolved[1]), 
-                        #                self.pns_resolve_index
-                        #                )
-                        return
-                        
-                # get the contexts for each newly articulated name
-                for name in names:
-                        if name in self.pns_names:
-                                continue
+                # no context available, 
+                names = tuple (netstring.decode (walked))
+                if len (names) > 0:
+                        # get the contexts for each articulated name
+                        for name in names:
+                                if name in self.pns_names:
+                                        continue
+                                        
+                                if len (self.pns_names) >= self.PNS_HORIZON:
+                                        break
                                 
-                        self.pns_articulator.pns_command (
-                                ('', name, ''), 
-                                self.pns_resolve_context
-                                )
+                                self.pns_names.add (name)
+                                self.pns_articulator.pns_command (
+                                        ('', '', name), 
+                                        self.pns_resolve_index
+                                        ) # walk up the indexes ...
+                                #self.pns_articulator.pns_command (
+                                #        ('', name, ''), 
+                                #        self.pns_resolve_context
+                                #        ) # walk up the contexts ...
+                        return
+
+                # inarticulated
+                #if not (
+                #        walked in self.pns_names
+                #        ) and len (self.pns_names) < self.PNS_HORIZON:
+                #        # new and below the horizon
+                #        self.pns_names.add (walked)
+                #        self.pns_articulator.pns_command (
+                #                ('', '', walked), 
+                #                self.pns_resolve_index
+                #                ) # walk up the indexes ...
 
         def pns_resolve_statement (self, resolved, model):
                 assert None == loginfo.log (
                         netstring.encode (model), 'Walk'
                         )
 
+
+def test_walk (walked, pns, horizon=16):
+        Walk.PNS_HORIZON = horizon
+        return Walk (PNS_articulator (pns (('127.0.0.1', 3534))), walked)
+        
 
 if __name__ == '__main__':
         import sys, time
@@ -283,3 +299,5 @@ if __name__ == '__main__':
         #    python pns_client.py 192.168.1.1 < session.pns 1> signal 2> noise
         #
         # but for an interactive prompt, use instead pns_prompt.py.
+        
+        
