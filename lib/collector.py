@@ -100,7 +100,7 @@ class Simple_collector (object):
 		self.terminator = terminator
 
 	def collect_incoming_data (self, data):
-                self.ac_in_buffer = self.ac_in_buffer + data
+                self.ac_in_buffer += data
                 while async_chat.collect (self.collector):
                         pass
 			
