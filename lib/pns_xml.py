@@ -22,7 +22,7 @@ import weakref
 from allegra import (
         netstring, loginfo, finalization, 
         xml_dom, xml_utf8, xml_unicode, 
-        pns_model, pns_sat, pns_client, pns_articulator
+        pns_model, pns_sat, pns_client
         )
 
 
