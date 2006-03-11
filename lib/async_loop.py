@@ -56,19 +56,28 @@ async_map = {}
 
 
 # The original Medusa/asyncore.py functions to poll this socket map for I/O
+#
+# ... plus a few selected improvements ...
+#
+
+ASYNC_SELECT_LIMIT = 511
 
 def poll1 (map, timeout=0.0):
         r = []; w = []; e = []
         for fd, obj in map.items ():
-                is_r = obj.readable ()
-                is_w = obj.writable ()
-                if is_r:
+                if obj.readable ():
                         r.append (fd)
-                if is_w:
+                if obj.writable ():
                         w.append (fd)
-                if is_r or is_w:
-                        e.append (fd)
-                if len (e) > 511:
+                #is_r = obj.readable ()
+                #is_w = obj.writable ()
+                #if is_r:
+                #        r.append (fd)
+                #if is_w:
+                #        w.append (fd)
+                #if is_r or is_w:
+                #        e.append (fd)
+                if max (len (r), len (w)) > ASYNC_SELECT_LIMIT:
                         # Default limit set to 512 in _select.pyd, no upper
                         # bound for NT, something in the many thousands for
                         # Linux. Anyway, this will not prevent a peer to
@@ -84,17 +93,18 @@ def poll1 (map, timeout=0.0):
                                         ), 'warning')
                         break
                 
-        if len (e) == 0:
+        if len (r) + len (w) == 0:
                 time.sleep (timeout)
-        else:
-                try:
-                        r, w, e = select.select (r, w, e, timeout)
-                except select.error, err:
-                        if err[0] != errno.EINTR:
-                            raise
-                            
-                        else:
-                            return
+                return
+        
+        try:
+                r, w, e = select.select (r, w, e, timeout)
+        except select.error, err:
+                if err[0] != errno.EINTR:
+                    raise
+                    
+                else:
+                    return
 
         for fd in r:
                 try:
@@ -124,19 +134,19 @@ def poll1 (map, timeout=0.0):
                 except:
                         obj.handle_error ()
 
-        for fd in e:
-                try:
-                        obj = map[fd]
-                except KeyError:
-                        continue
-
-                try:
-                        obj.handle_expt_event ()
-                except async_Exception:
-                        raise async_Exception 
-                        
-                except:
-                        obj.handle_error ()
+        #for fd in e:
+        #        try:
+        #                obj = map[fd]
+        #        except KeyError:
+        #                continue
+        #
+        #        try:
+        #                obj.handle_expt_event ()
+        #        except async_Exception:
+        #                raise async_Exception 
+        #                
+        #        except:
+        #                obj.handle_error ()
 
 
 def poll3 (map, timeout=0.0):
@@ -148,13 +158,13 @@ def poll3 (map, timeout=0.0):
                         flags |= select.POLLIN | select.POLLPRI
                 if obj.writable ():
                         flags |= select.POLLOUT
-                if flags:
-                        flags |= (
-                                select.POLLERR | 
-                                select.POLLHUP | 
-                                select.POLLNVAL
-                                )
-                        pollster.register (fd, flags)
+                #if flags:
+                #        flags |= (
+                #                select.POLLERR | 
+                #                select.POLLHUP | 
+                #                select.POLLNVAL
+                #                )
+                #        pollster.register (fd, flags)
         try:
                 r = pollster.poll (timeout)
         except select.error, err:
@@ -173,12 +183,12 @@ def poll3 (map, timeout=0.0):
                                 obj.handle_read_event()
                         if flags & select.POLLOUT:
                                 obj.handle_write_event()
-                        if flags & (
-                                select.POLLERR | 
-                                select.POLLHUP | 
-                                select.POLLNVAL
-                                ):
-                                obj.handle_expt_event()
+                        #if flags & (
+                        #        select.POLLERR | 
+                        #        select.POLLHUP | 
+                        #        select.POLLNVAL
+                        #        ):
+                        #        obj.handle_expt_event()
                 except async_Exception:
                         raise async_Exception 
                         
