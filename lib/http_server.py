@@ -50,7 +50,7 @@ class HTTP_server_channel (
         ):
 
         ac_in_buffer_size = 4096 # 4KB input buffer
-        ac_out_buffer_size = 1<<16 # 64KB output buffer
+        ac_out_buffer_size = 1<<14 # 16KB output buffer
 
 	http_version = '1.0'
 
