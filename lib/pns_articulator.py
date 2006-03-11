@@ -27,6 +27,8 @@ def pns_articulate_route (encoded):
         
 
 class PNS_articulator:
+        
+        "a caching PNS/Inference articulator"
 
         def __init__ (self, client=None, commands=None, contexts=None):
                 self.pns_client = client
@@ -117,49 +119,31 @@ class PNS_articulator:
                 return True
 
 
-# The Semantic Walk: get articulated indexes and contexts, and for each
-# context considered as a subject get a set of statement.
-#
-# 1. Walk "up" the graph as much as possible, until no index is
-#    available for the current articulation. In effect, read as
-#    much as possible of a unique articulation.
-#
-# 2. Then start to walk the graph "down" for one or more contexts
-#    articulating the indexes when no context is available. In effect
-#    get a set of possible contexts for the original articulation.
-#
-# 3. If there are more than one contexts available, walk from
-#    the original subject down to those contexts and get the routes
-#    sorted by the peer, and use each context as subject. In effect
-#    weight dissent.
-#
-#    If there is one context found, use it as subject
-#
-#    If no context is available, use the index as subject
-#
-# 4. Retrieve all subjects.
-#
-# Note that a PNS/TCP user agent does not have to actually implement
-# anything else than netstrings and TCP. Set types are not available
-# everywhere and PNS agents don't actually require them to articulate
-# a usefull search processes.
+def pns_walk_out (subject, contexts):
+        assert None == loginfo.log (netstring.encode ((
+                subject, netstring.encode (contexts)
+                )), 'pns-walk-out')
 
-class Walk (finalization.Finalization):
-
-        PNS_HORIZON = 126
-        pns_predicate = 'sat'
+class PNS_walk (finalization.Finalization):
         
-        def __init__ (self, articulator, walked):
+        "walk the PNS graph to find context(s) for a name"
+
+        def __init__ (
+                self, name, articulator, walk_out=pns_walk_out, HORIZON=126
+                ):
+                self.pns_name = name
                 self.pns_articulator = articulator
-                self.pns_walked = walked
-                self.pns_names = set ((walked,))
+                self.pns_walk_out = walk_out
+                self.PNS_HORIZON = HORIZON
+                #
+                self.pns_walked = set ((name,))
                 self.pns_articulator.pns_command (
-                        ('', '', walked), self.pns_resolve_index
+                        ('', '', name), self.pns_resolve_index
                         ) # walk up the indexes ...
                                 
         def pns_resolve_index (self, resolved, model):
                 if model == None:
-                        # unique or unknown articulation
+                        # unknown name
                         self.pns_articulator.pns_command (
                                 ('', resolved[2], ''), 
                                 self.pns_resolve_context
@@ -167,76 +151,53 @@ class Walk (finalization.Finalization):
                         return
 
                 # known name
-                walked = model[0]
-                if not (
-                        walked in self.pns_names
-                        ) and len (self.pns_names) < self.PNS_HORIZON:
-                        # new and below the horizon
-                        self.pns_names.add (walked)
-                        self.pns_articulator.pns_command (
-                                ('', '', walked), 
-                                self.pns_resolve_index
-                                ) # walk up the indexes ...
+                name = model[0]
+                if name in self.pns_walked:
+                        return
+                
+                self.pns_walked.add (name)
+                self.pns_articulator.pns_command (
+                        ('', '', name), 
+                        self.pns_resolve_index
+                        ) # walk up the indexes ...
                                 
         def pns_resolve_context (self, resolved, model):
-                walked = resolved[1]
                 if model != None:
-                        # Context(s) found
-                        if len (tuple (netstring.decode (walked))) > 0:
-                                # for an articulation
-                                question = (walked, self.pns_predicate, '')
-                                for context in iter (
-                                        model[1].difference(self.pns_names)
-                                        ):
-                                        self.pns_articulator.pns_statement (
-                                                question, context,
-                                                self.pns_resolve_statement
-                                                ) # ask statements ...
+                        # context(s) found
+                        self.pns_walk_out (resolved[1], model[1])
                         return # stop walking.
 
-                # no context available, 
-                names = tuple (netstring.decode (walked))
-                if len (names) > 0:
-                        # get the contexts for each articulated name
-                        for name in names:
-                                if name in self.pns_names:
-                                        continue
-                                        
-                                if len (self.pns_names) >= self.PNS_HORIZON:
-                                        break
+                # no context known
+                for name in tuple (netstring.decode (resolved[1])):
+                        if name in self.pns_walked:
+                                continue
                                 
-                                self.pns_names.add (name)
-                                self.pns_articulator.pns_command (
-                                        ('', '', name), 
-                                        self.pns_resolve_index
-                                        ) # walk up the indexes ...
-                                #self.pns_articulator.pns_command (
-                                #        ('', name, ''), 
-                                #        self.pns_resolve_context
-                                #        ) # walk up the contexts ...
-                        return
+                        if len (self.pns_walked) >= self.PNS_HORIZON:
+                                break # beyond the horizon, stop walking.
 
-                # inarticulated
-                #if not (
-                #        walked in self.pns_names
-                #        ) and len (self.pns_names) < self.PNS_HORIZON:
-                #        # new and below the horizon
-                #        self.pns_names.add (walked)
-                #        self.pns_articulator.pns_command (
-                #                ('', '', walked), 
-                #                self.pns_resolve_index
-                #                ) # walk up the indexes ...
-
-        def pns_resolve_statement (self, resolved, model):
-                assert None == loginfo.log (
-                        netstring.encode (model), 'Walk'
-                        )
+                        # new and below the horizon 
+                        self.pns_walked.add (name)
+                        self.pns_articulator.pns_command (
+                                ('', '', name), 
+                                self.pns_resolve_index
+                                ) # walk up the indexes ...
 
 
-def test_walk (walked, pns, horizon=16):
-        Walk.PNS_HORIZON = horizon
-        return Walk (PNS_articulator (pns (('127.0.0.1', 3534))), walked)
-        
+# Note
+#
+# This is a set of fairly non-trivial state-machines that support a cache
+# of PNS/Inference command responses allready parsed and transformed as
+# sets. The purpose is to save CPU at the expense of RAM when the application
+# repeatedly walks over the same part its PNS context graph. Another benefit
+# is of course that using a PNS_articulator reduces the traffic with the
+# metabase and its workload.
+#
+# Last but not least, two articulators can "speak" over the same client.
+#
+# So, Allegra's PNS client implementation is concise and will not pound
+# stupidely at the metabase asking the same questions over and over. The
+# fact that a PNS peer does filter out redundant statement when distributing
+# them does not mean that its user agents should be verbose.
 
 if __name__ == '__main__':
         import sys, time

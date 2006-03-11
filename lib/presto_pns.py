@@ -113,8 +113,8 @@ def pns_graph_rest (ci):
         context, index = netstring.decode (ci)
         return ''.join ((
                 '<presto:graph>',
-                pns_xml.name_unicode (context, 'presto:context'),
-                pns_xml.name_unicode (index, 'presto:index'),
+                pns_xml.name_unicode (context, 'presto:pns-context'),
+                pns_xml.name_unicode (index, 'presto:pns-index'),
                 '</presto:graph>'
                 ))
 
@@ -123,37 +123,27 @@ class PNS_command (producer.Stalled_generator):
         
         def __call__ (self, resolved, model):
                 if resolved[1] == '':
-                        if model:
-                                self.generator = iter ((
-                                        pns_xml.name_unicode (
-                                                model[3], 'presto:index'
-                                                ),
-                                        ))
-                        else:
-                                self.generator = iter ((
-                                        '<presto:index name=""/>',
+                        self.generator = iter ((
+                                pns_xml.name_unicode (
+                                        model[3], 'presto:pns-index'
+                                        ),
                                         ))
                 elif resolved[2] == '':
-                        if model:
-                                self.generator = (
-                                        pns_xml.name_unicode (
-                                                context, 'presto:context'
-                                                ) 
-                                        for context in netstring.decode (
-                                                model[3]
-                                                )
+                        self.generator = (
+                                pns_xml.name_unicode (
+                                        context, 'presto:pns-context'
+                                        ) 
+                                for context in netstring.decode (
+                                        model[3]
                                         )
-                        else:
-                                self.generator = iter ((
-                                        '<presto:context name=""/>',
-                                        ))
+                                )
                 elif model[3]:
                         self.generator = (
                                 pns_graph_rest (ci)
                                 for ci in netstring.decode (model[3])
                                 )
                 else:
-                        self.generator = iter (('<presto:graph/>',))
+                        self.generator = iter (('<presto:pns-graph/>',))
                 return False
                         
 

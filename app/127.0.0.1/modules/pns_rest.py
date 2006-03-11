@@ -16,105 +16,212 @@
 # USA
 
 from allegra import (
-        netstring, loginfo, finalization, producer, 
+        netstring, loginfo, finalization, 
+        producer, xml_dom, xml_unicode,
         pns_sat, pns_xml, pns_articulator,
         presto_pns, presto_http
         )
 
 
-# PNS/REST Articulator
+# PNS/REST interface
 
-def pns_articulate_rest (finalized):
-        "generates the REST for the finalized articulation"
-        yield '<presto:pns-articulate>'
-
-        if finalized.pns_index:
-                yield pns_xml.public_unicode (
-                        finalized.pns_index, 'presto:pns-index'
-                        )
-                        
-        for subject, statements in finalized.pns_subjects:
-                yield '<presto:pns-subject>'
-        
-                yield pns_xml.public_unicode (subject, 'presto:pns-index')
-        
-                for model in statements:
-                        yield pns_xml.pns_xml_unicode (
-                                model, pns_xml.pns_cdata_unicode (model[2])
-                                )
-                                
-                yield '</presto:pns-subject>'
-        
-        if len (finalized.pns_contexts) > 0:
-                for name in finalized.pns_contexts:
-                        yield pns_xml.pns_names_unicode (
-                                name, 'presto:pns-context'
-                                )
-                
-        if len (finalized.pns_sat) > 0:
-                for model in finalized.pns_sat:
-                        yield pns_xml.pns_xml_unicode (
-                                model, pns_xml.pns_cdata_unicode (model[2])
-                                )
-                                
-        yield '</presto:pns-articulate>'
-                        
-                        
-class PNS_articulate (producer.Stalled_generator):
-        
-        "the articulation's finalization"
-        
-        def __call__ (self, finalized):
-                self.generator = pns_articulate_rest (finalized)
-                                
-
-def pns_articulate (component, reactor):
-        "articulate a context"
+def pns_get_rest (component, reactor):
+        "search for context(s)"
         if not reactor.presto_vector:
                 return '<presto:pns-articulate/>'
         
         if component.pns_client == None:
                 if component.pns_open (reactor):
-                        component.pns_articulator = PNS_articulator (
-                                component.pns_client
-                                )
+                        component.pns_articulator = \
+                                pns_articulator.PNS_articulator (
+                                        component.pns_client
+                                        )
                 else:
                         return '<presto:pns-tcp-error/>'
-                
-        text = reactor.presto_vector.get (u'articulated', u'').encode ('UTF-8')
-        if not text:
+                        
+        elif component.pns_articulator == None: 
+                component.pns_articulator = pns_articulator.PNS_articulator (
+                        component.pns_client
+                        )
+        context = reactor.presto_vector.get (u'context', u'').encode ('UTF-8')
+        if not context:
                 return '<presto:pns-articulate/>'
         
+        predicate = reactor.presto_vector.get (
+                u'predicate', u'sat'
+                ).encode ('UTF-8')
         lang = reactor.presto_vector.get (u'lang')
         if lang:
                 component.pns_sat_language = pns_sat.language (
                         lang.encode ('UTF-8')
                         )
+        else:
+                component.pns_sat_language = pns_sat.language ()
         articulated = []
         name = pns_sat.articulate_re (
-                text, articulated.append, component.pns_sat_language
+                context, articulated.append, component.pns_sat_language
                 )
         if not name:
                 return '<presto:pns-articulate/>'
 
-        react = PNS_articulate ()
-        pns_articulator.PNS_articulate (
-                component.pns_articulator, name, netstring.netlist (
-                        reactor.presto_vector[
-                                u'predicates'
-                                ].encode ('UTF-8') or 'sat'
+        return (articulated, name, predicate)
+
+
+# PNS/REST articulate
+
+class PNS_articulate_xml (finalization.Finalization):
+        
+        xml_name = u'http://allegra/ pns-articulate'
+        xml_first = u''
+        xml_parent = xml_attributes = xml_follow = None
+                
+        def __init__ (
+                self, name, articulator, predicate,
+                prefixes={}, types={}, type=xml_dom.XML_element
+                ):
+                self.pns_name = name
+                self.pns_statement = articulator.pns_client.pns_statement
+                self.pns_question = (name, predicate, '')
+                self.xml_prefixes = prefixes
+                self.xml_type = type
+                self.xml_types = types
+                self.xml_children = []
+                articulator.pns_command (
+                        ('', name, ''), self.pns_resolve_context
                         )
+        
+        def pns_resolve_context (self, resolved, model):
+                loginfo.log ('pns_resolve_context %r' % (model,), 'debug')
+                if model == None:
+                        return
+                
+                for context in model[1]:
+                        finalized = pns_xml.PNS_XML_continuation (
+                                self, self.pns_question
+                                )
+                        self.pns_statement (
+                                self.pns_question, context, 
+                                finalized.pns_to_xml_unicode 
+                                )
+                        finalized.finalization = self.pns_xml_continue
+
+        def pns_xml_continue (self, finalized):
+                loginfo.log ('pns_xml_continue %r' % finalized, 'debug')
+                e = finalized.xml_parsed
+                if e:
+                        if e.xml_valid:
+                                e.xml_valid (self)
+                        self.xml_children.append (e)
+
+
+class PNS_articulate_rest (producer.Stalled_generator):
+        
+        "the articulation's finalization"
+        
+        def __call__ (self, finalized):
+                loginfo.log ('PNS_articulate_rest %r' % finalized, 'debug')
+                self.generator = xml_unicode.xml_prefixed (
+                        finalized, finalized.xml_prefixes
+                        )
+                                
+
+def articulate_get (component, reactor):
+        rest = pns_get_rest (component, reactor)
+        try:
+                articulated, name, predicate = rest
+        except:
+                return rest
+        
+        loginfo.log ('articulate_get', 'debug')
+        react = PNS_articulate_rest ()
+        PNS_articulate_xml (
+                name, component.pns_articulator, predicate,
+                prefixes=reactor.presto_dom.xml_prefixes
                 ).finalization = react
         return react
         
 
-def pns_articulate_new (component, reactor):
+def articulate_post (component, reactor):
+        pass
+
+def articulate_new (component, reactor):
         "clear the articulator's cache, if any"
-        articulator = component.pns_articulator
-        if articulator != None:
-                articulator.pns_commands = {}
-                articulator.pns_commands = {}
+        component.pns_articulator = None
         return '<presto:pns-articulate-new/>'
+
+
+# PNS/REST search
+
+class PNS_search_xml (finalization.Finalization):
+        
+        # a PNS_search, XML_element *and* XML_dom implementation
+        
+        xml_name = u'http://allegra/ search'
+        xml_first = u''
+        xml_parent = xml_attributes = xml_follow = None
+        
+        # names *are* interfaces in Python *~)
+        
+        def __init__ (
+                self, name, articulator, predicate, HORIZON=68,
+                prefixes={}, types={}, type=xml_dom.XML_element
+                ):
+                self.pns_contexts = set ()
+                self.pns_name = name
+                self.pns_predicate = predicate
+                self.xml_prefixes = prefixes
+                self.xml_type = type
+                self.xml_types = types
+                self.xml_children = []
+                self.pns_statement = articulator.pns_client.pns_statement
+                pns_articulator.PNS_walk (
+                        name, articulator, self.pns_walk_out, HORIZON
+                        ).finalization = self
+        
+        def pns_walk_out (self, subject, contexts):
+                self.pns_contexts.update (contexts)
+                question = (subject, self.pns_predicate, '')
+                for context in contexts:
+                        finalized = pns_xml.PNS_XML_continuation (
+                                self, question
+                                )
+                        self.pns_statement (
+                                question, context, 
+                                finalized.pns_to_xml_unicode 
+                                )
+                        finalized.finalization = self.pns_xml_continue
+
+        def pns_xml_continue (self, finalized):
+                e = finalized.xml_parsed
+                if e:
+                        if e.xml_valid:
+                                e.xml_valid (self)
+                        self.xml_children.append (e)
+
+
+class PNS_search_rest (producer.Stalled_generator):
+        
+        "the PNS/REST search's finalization"
+        
+        def __call__ (self, finalized):
+                self.generator = xml_unicode.xml_prefixed (
+                        finalized, finalized.xml_prefixes
+                        )
+                                
+        
+def search (component, reactor):
+        rest = pns_get_rest (component, reactor)
+        try:
+                articulated, name, predicate = rest
+        except:
+                return rest
+        
+        react = PNS_search_rest ()
+        PNS_search_xml (
+                name, component.pns_articulator, predicate,
+                prefixes=reactor.presto_dom.xml_prefixes
+                ).finalization = react
+        return react
 
 
 # PRESTo Component Declaration
@@ -123,18 +230,21 @@ class PNS_REST (presto_pns.PNS_session):
 
         xml_name = u'http://allegra/ pns-rest'
         
+        pns_articulator = None
+        
         presto = presto_http.get_rest
                         
         presto_interfaces = set ((
                 u'PRESTo', 
-                u'subject', u'predicate', u'object', u'context',
-                u'context', u'text'
+                u'subject', u'predicate', u'object', u'context', 
+                u'lang',
                 ))
 
         presto_methods = {
-                None: presto_pns.pns_statement,
-                u'articulate': pns_articulate,
-                u'clear': pns_articulate_new,
+                u'pns': presto_pns.pns_statement,
+                u'search': search,
+                u'articulate': articulate_get,
+                u'clear': articulate_new,
                 }
 
 
@@ -143,130 +253,3 @@ presto_components = (PNS_REST, )
 if __debug__:
         from allegra.presto_prompt import presto_debug_async
         presto_debug_async (PNS_REST)
-        
-
-# Roadmap
-#
-# PRESTo/PNS is an application of PNS/XML shrinkwrapped as a multi-purpose
-# component, programmable with XSLT and themable with CSS. It is the same
-# one used for the web test cases of PNS/SAT, PNS/XML and PNS/RSS, only 
-# stylesheets and XML component instances are different.
-#
-# PNS/REST is PNS/REST is PNS/REST.
-#
-#
-# The "default" method is a pass-through interface to a PNS/TCP session
-# managed by the PNS_client instanciated for all PNS_session instances
-#
-#        GET ?subject=&predicate=&object=&context
-#
-# yields a PNS/XML response in a PRESTo envelope.
-#
-# Another RESTfull interface is provided by:
-#
-#        GET ?PRESTo=articulate&context=
-#        GET ?PRESTo=articulate&context=&text=
-#
-# The AJAX-ready counterparts of the interface above:
-#
-#        GET /pns?subject=&predicate=&object=&context
-#        GET /articulate?context=
-#        GET /articulate?context=&text=
-#
-# produce an envelope-less response, just the REST expected by a statefull
-# client that does not need a copy of the instance method state. This may
-# save a significant amount of resources dedicated to the serialization
-# of that state by the peer and the equivalent bandwith used.
-#
-#
-# Synopsis
-#
-# <presto:pns 
-#        xmlns:presto="http://presto/"
-#        metabase="127.0.0.1:3534" 
-#        language="en"
-#        >
-#        <presto:subscription pns=""/>
-# </presto:pns>
-#
-# ?object=
-#
-# <presto:pns-index/>
-#
-# ?predicate=
-#
-# <presto:pns-context/>
-#
-# ?predicate=&object=
-#
-# <presto:pns-route/>
-#   <presto:pns-context/><presto:pns-index/>
-# </presto:pns-route>
-#
-# ?subject&=predicate=&object=&context=
-#
-        
-"""
-
-<allegra:pns-sat xmlns:allegra="http://allegra/"
-  metabase="127.0.0.1:3534" 
-  language="en"
-  />
-
-
-The PNS/SAT textpad is a simple prototype of an articulator:
-        
-        context: 
-        subject: 
-                
-With only the two fields above and a simple dialog:
-        
-        1. if there is an articulated SAT subject, make one or more
-           statements about that subject and articulate the echo of
-           those statements. for practical reasons, a block pad is
-           limited to short messages of 10 lines of 72 characters,
-           big enough for most e-mail, SMS, etc ... and an HTTP GET ;-)
-        
-        2. if there is no subject, search for any subject in the context
-           articulated, display them and let the user articulate their
-           next subject using the names of the subjects and contexts
-           collected.
-           
-        3. if there are no subjects found by the context graph search
-           display the options of posting a new subject.
-
-The same intuitive interface is common to the PNS/XML metapad, the PNS/RSS 
-blogpad and its last sibbling the PNS/XHTML webpad.
-
-Reuse, reuse, reuse.
-
-Because, in effect, it will be the same thing through anyway. Where PNS/XML
-greatly differ is in the ability to articulate long documents with many 
-levels of details, but fundamentally the UI must stay consistent. There is
-a bit of evil in that Allegra enforce a simple user experience that is hard
-to embrace and extend. I don't see any significant improvement over the
-generic semantic walk implemented by pns_articulator.py (whatever the outcome
-on pns_inference.py, the direction of sorting is a reversible decision ;-)
-
-Basically, this is what we do when searching. These are the three states:
-        
-        Statement
-        
-        Question and Answers
-        
-        Continue to articulate ...
-
-Allegra's web application don't (can't and should not) hide the dialog
-that takes places with the PNS metabase. They augment it, they articulate
-it further for the user, so that he does not have to "speak" volumes and
-may "click" his words through when browsing his own information network.
-
-And articulate. Seach "semantically fast" in your own words. 
-
-Naturally and individually.
-
-Use your left brain and let your machine flex its right muscle ;-)
-
-"""
-
-                
