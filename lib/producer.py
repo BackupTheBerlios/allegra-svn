@@ -91,7 +91,7 @@ class Composite_producer (object):
 	# one, with support for stalled producers and generators. it is the
 	# bread & butter of Allegra's PRESTo! with the Buffer_reactor.
 	
-        def __init__ (self, head, body, glob=4096):
+        def __init__ (self, head, body, glob=1<<14): # 16KB globber
         	assert (
         		type (head) == types.StringType and 
         		type (body) == types.GeneratorType
