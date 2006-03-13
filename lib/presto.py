@@ -439,7 +439,7 @@ class PRESTo_root (loginfo.Loginfo):
                 
 
 def presto_producer (
-        dom, attributes, result, encoding, globbing=512
+        dom, attributes, result, encoding, globbing=1<<14 # 16KB glob
         ):
         # return one single Composite_producer with a simplistic PRESTo
         # envelope made of two elements: the accessed DOM root and the 
