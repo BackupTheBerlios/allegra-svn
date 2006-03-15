@@ -24,7 +24,7 @@ from allegra import netstring, select_trigger
 
 class Trunked_deque:
         
-        "a deque implementation to trunk protected FIFO queues safely"
+        "a deque implementation to trunk protected deque safely"
 
         def __len__ (self):
                 "return 1, a trunked deque has allways one item" 
@@ -35,14 +35,14 @@ class Trunked_deque:
                 if index == 0:
                         return None
                         
-                raise IndexError, 'trunked FIFO deque'
+                raise IndexError, 'trunked deque'
                 
         def append (self, item): 
                 "drop any item appended to the deque"
                 pass
 
         def popleft (self): 
-                "return None, the closing item for a FIFO consumer"
+                "return None, the closing item for a deque consumer"
                 return None
         
         pop = popleft
@@ -52,7 +52,7 @@ class Trunked_deque:
 
 class Protected_deque:
 
-        "a thread-safe wrapper for a FIFO deque"
+        "a thread-safe wrapper for a deque"
 
 	def __init__ (self, queue=None):
 		self.deque = collections.deque (queue or [])
@@ -60,7 +60,7 @@ class Protected_deque:
 		self.cv = threading.Condition (self.mon)
 
         def __repr__ (self):
-                "return a safe netstring representation of the FIFO queue"
+                "return a safe netstring representation of the deque"
                 r = []
                 try:
                         self.cv.acquire ()
@@ -98,7 +98,7 @@ class Protected_deque:
                         self.cv.release ()
                 
         def append (self, item):
-                "push an item at the end the queue and notify"
+                "push an item at the end the deque and notify"
                 try:
                         self.cv.acquire ()
                         self.deque.append (item)
@@ -109,7 +109,7 @@ class Protected_deque:
         __call__ = append
                 
         def popleft (self):
-                "wait for a first item in the FIFO queue and pop it"
+                "wait for a first item in the deque and pop it"
                 try:
                         self.cv.acquire ()
                         while len (self.deque) == 0:
@@ -120,7 +120,7 @@ class Protected_deque:
                 return item
 
         def appendleft (self, item):
-                "push an item of items in front of the FIFO queue"
+                "push an item of items in front of the deque"
                 try:
                         self.cv.acquire ()
                         self.deque.appendleft (item)
@@ -129,7 +129,7 @@ class Protected_deque:
                         self.cv.release ()
 
         def pop (self):
-                "wait for a last item in the FIFO queue and pop it"
+                "wait for a last item in the deque and pop it"
                 try:
                         self.cv.acquire ()
                         while len (self.deque) == 0:
@@ -140,7 +140,7 @@ class Protected_deque:
                 return item
 
         def trunk (self):
-                """Replace the FIFO queue with a trunked deque implementation
+                """Replace the deque with a trunked deque implementation
                 and return the replaced deque instance."""
                 try:
                         self.cv.acquire ()
@@ -203,7 +203,7 @@ class Thread_loop (threading.Thread, select_trigger.Select_trigger):
 		if self.thread_loop_delete ():
                         trunked = self.thread_loop_queue.trunk ()
                         if trunked:
-                                self.select_trigger_log (
+                                assert None == self.select_trigger_log (
                                         netstring.encode ([
                                                 '%r' % (i,) for i in trunked
                                                 ]), 'debug'
