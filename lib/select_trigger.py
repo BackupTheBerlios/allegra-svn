@@ -48,7 +48,7 @@ if os.name == 'posix':
 
 	class Trigger (async_core.Async_file):
 
-		"Wake up a call to select() running in the main thread"
+		"Thunk back safely from threads into the asynchronous loop"
 		
 		def __init__ (self):
 			self.select_triggers = 0
@@ -106,6 +106,8 @@ elif os.name == 'nt':
 	# win32-safe version
 
 	class Trigger (async_core.Async_dispatcher):
+                
+                "Thunk back safely from threads into the asynchronous loop"
 
 		address = ('127.9.9.9', 19999)
 
@@ -185,17 +187,17 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 	
 	"""A base class that implements the select_trigger interface
 	
-		select_trigger((function, args))
+		select_trigger ((function, args))
 	
 	to thunk function and method calls from one thread into the main
 	asynchronous loop. Select_trigger implements thread-safe and
 	practical loginfo interfaces:
 		
-		select_trigger_log(data, info=None)
+		select_trigger_log (data, info=None)
 		
 	to log information, and
 		
-		select_trigger_traceback(ctb=None)
+		select_trigger_traceback ()
 		
 	to log traceback asynchronously from a distinct thread."""
 
@@ -209,7 +211,7 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 		self.select_trigger.select_triggers += 1
 		
 	def __repr__ (self):
-		return 'select-trigger id="%x"' % self (id)
+		return 'select-trigger id="%x"' % id (self)
 		
 	def select_trigger_log (self, data, info=None):
 		"thunk a log call to the async loop via the select trigger"
