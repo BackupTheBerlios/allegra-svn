@@ -138,7 +138,8 @@ class HTTP_server_channel (
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
                 if self.http_server.http_continue (reactor):
-                        return reactor.http_request[0] in ('POST', 'PUT')
+                        if reactor.http_request[0] in ('POST', 'PUT'):
+                                return True
                         #
                         # it is up to the reactor's handler to properly
                         # finalize the HTTP response, here one of the the

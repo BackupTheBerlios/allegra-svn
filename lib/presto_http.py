@@ -60,12 +60,12 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                         defered.append ((
                                 self.presto_continue, (reactor, )
                                 ))
-                        return True
+                        return False
                 
                 self.synchronized ((self.sync_stat, (
                         reactor, self.presto_path + reactor.presto_path
                         )))
-                return True
+                return True # sure, True: this will be continued ...
 
         def http_finalize (self, reactor):
                 if reactor.mime_collector_body != None:
@@ -92,8 +92,8 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
         def presto_continue (self, reactor):
                 self.presto_continue_http (reactor)
                 channel = reactor.http_channel
-                channel.http_continue (reactor)
                 if channel.collector_stalled:
+                        channel.http_continue (reactor)
                         channel.async_collect ()
                         #
                         # Resume collection of the async_chat buffer
