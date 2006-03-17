@@ -60,7 +60,7 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                         defered.append ((
                                 self.presto_continue, (reactor, )
                                 ))
-                        return False
+                        return True
                 
                 self.synchronized ((self.sync_stat, (
                         reactor, self.presto_path + reactor.presto_path
