@@ -19,10 +19,10 @@
 
 import threading, collections
 
-from allegra import netstring, select_trigger
+from allegra import netstring, loginfo, finalization, select_trigger
 
 
-class Trunked_deque:
+class Trunked_deque (object):
         
         "a deque implementation to trunk protected deque safely"
 
@@ -50,7 +50,7 @@ class Trunked_deque:
         appendleft = append
 
 
-class Protected_deque:
+class Protected_deque (object):
 
         "a thread-safe wrapper for a deque"
 
@@ -236,3 +236,141 @@ class Thread_loop (threading.Thread, select_trigger.Select_trigger):
                 "return True, assert a debug log of the thread loop start"
                 assert None == self.log ('stop', 'debug')
                 return True
+
+
+class Synchronizer (loginfo.Loginfo):
+
+        def __init__ (self, size=2):
+                self.synchronizer_size = size
+                self.synchronized_thread_loops = []
+                self.synchronized_instance_count = []
+                self.synchronized_count = 0
+
+        def __repr__ (self):
+                return 'synchronizer pid="%x" count="%d"' % (
+                        id (self), self.synchronized_count
+                        )
+
+        def synchronizer_append (self):
+                assert None == self.log (
+                        'append %d' % len (self.synchronized_thread_loops), 
+                        'synchronizer'
+                        )
+                t = Thread_loop ()
+                t.thread_loop_queue.synchronizer_index = len (
+                        self.synchronized_thread_loops
+                        )
+                self.synchronized_thread_loops.append (t)
+                self.synchronized_instance_count.append (0)
+                t.start ()
+                
+        def synchronize (self, instance):
+                assert not hasattr (instance, 'synchronized')
+                if self.synchronized_count == len (
+                        self.synchronized_thread_loops
+                        ) < self.synchronizer_size:
+                        self.synchronizer_append ()
+                index = self.synchronized_instance_count.index (
+                        min (self.synchronized_instance_count)
+                        )
+                t = self.synchronized_thread_loops[index]
+                instance.synchronized = t.thread_loop_queue
+                instance.select_trigger = t.select_trigger 
+                self.synchronized_instance_count[index] += 1
+                self.synchronized_count += 1
+                assert None == self.log ('%r' % instance, 'synchronized')
+
+        def desynchronize (self, instance):
+                assert hasattr (instance, 'synchronized')
+                i = instance.synchronized.synchronizer_index
+                count = self.synchronized_instance_count[i]
+                self.synchronized_count += -1
+                self.synchronized_instance_count[i] += -1
+                instance.select_trigger = instance.synchronized = None
+                if self.synchronized_count == 0:
+                        assert None == self.log ('stop %d threads' % len (
+                                self.synchronized_thread_loops
+                                ), 'synchronizer')
+                        for t in self.synchronized_thread_loops:
+                                t.thread_loop_queue (None)
+                        self.synchronized_thread_loops = []
+                assert None == self.log ('%r' % instance, 'desynchronized')
+
+
+def synchronize (instance):
+        if instance.synchronizer == None:
+                instance.__class__.synchronizer = Synchronizer (
+                        instance.synchronizer_size
+                        )
+        instance.synchronizer.synchronize (instance)
+
+
+def desynchronize (instance):
+        instance.synchronizer.desynchronize (instance)
+
+
+def synchronized (instance):
+        assert isinstance (instance, finalization.Finalization) 
+        if instance.synchronizer == None:
+                instance.__class__.synchronizer = Synchronizer (
+                        instance.synchronizer_size
+                        )
+        instance.synchronizer.synchronize (instance)
+        instance.finalization = instance.synchronizer.desynchronize
+
+        
+# Notes about the Synchronizer
+#
+# The purpose is to but deliver non-blocking interfaces to synchronous API.
+#
+# The synchronizer is an resizable array of thread loop queues. Synchronized
+# instances are attached to one of these queues. When a synchronized instance
+# is finalized, that reference is released and the array is notified. When no
+# more instance is attached to a thread loop queue, its thread exits. If the
+# limit set on the array size is not reached, a new thread loop is created for
+# each new synchronized instance. The default limit is set to 4.
+#
+# This interface is purely asynchronous: methods synchronized should be able
+# to access the select_trigger to manipulate the Synchronizer, or more
+# mundanely to push data to asynchat ...
+#
+#
+# Limits
+#
+# There is no easy way to prevent an instance to stall its thread loop queue
+# and all the other instances methods synchronized to it. The only practical
+# algorithm to detect a stalled method (and "fix" it), is to set a limit on
+# the size of the synchronized queue and when that limit is reached to replace
+# the stalled thread loop by a new one. However, this would leave the stalled
+# thread to hang forever if the stalling method is running amok or blocking
+# forever too. Setting a timeout on each synchronized method is impossible
+# since there is no way to infer reliably a maximum execution time, certainly
+# in such case of concurrent processes.
+#
+# Basicaly, there is no practical and effective way to fix a thread broken by
+# an infinite loop or a stalled-forever wait state. So, this implementation
+# does not even attempt to correct the effects of such bugs on the other
+# synchronized instance methods.
+#
+#
+# Beware!
+#
+# Synchronized methods must be tested separately. Yet it is trivial, because
+# you may either test them asynchronously from within an async_loop host or,
+# since they are synchronous, directly from the Python prompt.
+#
+# My advice is to use synchronized method in two cases. Either you don't want
+# to learn asynchronous programming (don't have time for that). Or you know
+# how, but need to access a blocking API that happens to be thread safe and
+# releases the Python GIL.
+#
+# For instance:
+#
+#         os.open (...).read ()
+#
+# or
+#
+#        bsddb.db.DB ().open (...)
+#
+# may be blocking and should be synchronized.
+        

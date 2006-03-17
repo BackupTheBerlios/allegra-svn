@@ -19,10 +19,11 @@
 
 import types, weakref, time, os, stat, glob, mimetypes, urllib, re
 
-from allegra import \
-        netstring, loginfo, async_loop, finalization, synchronizer, \
-        async_chat, producer, tcp_server, \
+from allegra import (
+        netstring, loginfo, async_loop, finalization, thread_loop, 
+        async_chat, producer, synchronized, tcp_server,
         mime_headers, mime_reactor, http_reactor
+        )
         
 
 if os.name == 'nt':
@@ -341,7 +342,7 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                 self.http_path = path
                 # self.http_host = host
                 self.http_cached = {}
-                synchronizer.synchronized (self)
+                thread_loop.synchronized (self)
                 assert None == self.log (
                         'loaded path="%s"' % path, 'debug'
                         )
@@ -389,7 +390,7 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         reactor.http_channel.http_continue (reactor)
                         return
                 
-                teed = synchronizer.Synchronized_open (filename, 'rb')
+                teed = synchronized.Synchronized_open (filename, 'rb')
                 content_type, content_encoding = \
                         mimetypes.guess_type (filename)
                 teed.mime_headers = {

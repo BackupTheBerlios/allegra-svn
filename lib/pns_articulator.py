@@ -17,7 +17,9 @@
 
 ""
 
-from allegra import netstring, loginfo, finalization, pns_model
+from allegra import (
+        netstring, loginfo, finalization, pns_model, pns_client
+        )
 
 
 def pns_articulate_route (encoded):
@@ -26,14 +28,34 @@ def pns_articulate_route (encoded):
         return (names[0], name)
         
 
-class PNS_articulator:
+class PNS_articulator (finalization.Finalization):
         
-        "a caching PNS/Inference articulator"
+        "a keep-alive caching PNS articulator"
+        
+        PNS_CLIENT = pns_client.PNS_client ()
+        
+        pns_keep_alive = True
 
-        def __init__ (self, client=None, commands=None, contexts=None):
-                self.pns_client = client
+        def __init__ (
+                self, addr=('127.0.0.1', 3534), commands=None, contexts=None
+                ):
+                self.pns_tcp_addr = addr
+                self.pns_client = self.PNS_CLIENT (addr, self.pns_peer)
                 self.pns_commands = commands or {}
                 self.pns_contexts = contexts or {}
+
+        def pns_peer (self, resolved, model):
+                ip = model[3]
+                if ip:
+                        return True # opened, keep this handler
+                        
+                if self.pns_keep_alive:
+                        self.pns_client = None
+                else:
+                        self.pns_client = self.PNS_CLIENT (
+                                addr, self.pns_peer
+                                )
+                return False # closed, release this handler
                 
         def pns_command (self, articulated, handler):
                 assert (
@@ -126,10 +148,10 @@ def pns_walk_out (subject, contexts):
 
 class PNS_walk (finalization.Finalization):
         
-        "walk the PNS graph to find context(s) for a name"
+        "walk the PNS graph to find subject(s) and context(s)"
 
         def __init__ (
-                self, name, articulator, walk_out=pns_walk_out, HORIZON=126
+                self, name, articulator, walk_out=pns_walk_out, HORIZON=31
                 ):
                 self.pns_name = name
                 self.pns_articulator = articulator
@@ -139,27 +161,49 @@ class PNS_walk (finalization.Finalization):
                 self.pns_walked = set ((name,))
                 self.pns_articulator.pns_command (
                         ('', '', name), self.pns_resolve_index
-                        ) # walk up the indexes ...
-                                
-        def pns_resolve_index (self, resolved, model):
-                if model == None:
-                        # unknown name
-                        self.pns_articulator.pns_command (
-                                ('', resolved[2], ''), 
-                                self.pns_resolve_context
-                                ) # walk up the contexts ...
-                        return
+                        ) # walk the indexes ...
 
-                # known name
-                name = model[0]
-                if name in self.pns_walked:
-                        return
-                
-                self.pns_walked.add (name)
-                self.pns_articulator.pns_command (
-                        ('', '', name), 
-                        self.pns_resolve_index
-                        ) # walk up the indexes ...
+        def pns_resolve_index (self, resolved, model):
+                if model != None:
+                        # known name
+                        name = model[0]
+                        if (
+                                len (self.pns_walked) > self.PNS_HORIZON or 
+                                name in self.pns_walked
+                                ):
+                                return
+                        
+                        # new and below the horizon
+                        self.pns_walked.add (name)
+                        self.pns_articulator.pns_command (
+                                ('', name, ''), 
+                                self.pns_resolve_context
+                                ) # walk the contexts ...
+        
+                # unknown name
+                names = tuple (netstring.decode (resolved[2]))
+                if len (names) == 0:
+                        # inarticulated
+                        self.pns_articulator.pns_command (
+                                ('', name, ''), 
+                                self.pns_resolve_context
+                                ) # walk the contexts ...
+                        return             
+                        
+                # for each name articulated
+                for name in names:
+                        if name in self.pns_walked:
+                                continue
+                        
+                        if len (self.pns_walked) > self.PNS_HORIZON:
+                                break
+                        
+                        # new and below the horizon
+                        self.pns_walked.add (name)
+                        self.pns_articulator.pns_command (
+                                ('', name, ''), 
+                                self.pns_resolve_context
+                                ) # walk the contexts ...                        
                                 
         def pns_resolve_context (self, resolved, model):
                 if model != None:
@@ -181,6 +225,111 @@ class PNS_walk (finalization.Finalization):
                                 ('', '', name), 
                                 self.pns_resolve_index
                                 ) # walk up the indexes ...
+
+
+def pns_find_out (resolved, model):
+        if model[2] != '0:,':
+                assert None == loginfo.log (
+                        netstring.encode (model), 'pns-find-out'
+                        )
+                
+class PNS_search (PNS_walk):
+        
+        def __init__ (
+                self, subject, articulator, predicate='sat', 
+                find_out=pns_find_out, HORIZON=31
+                ):
+                self.pns_predicate = predicate
+                self.pns_find_out = find_out
+                PNS_walk.__init__ (
+                        self, subject, articulator, 
+                        self.pns_walk_out, HORIZON
+                        )
+
+        def pns_walk_out (self, subject, contexts):
+                self.pns_articulator.pns_statement (
+                        (subject, self.pns_predicate, ''), '',
+                        self.pns_find_out
+                        )
+
+
+class PNS_find (finalization.Finalization):
+        
+        "walk the PNS graph to find answer(s) for a subject and a predicate"
+        
+        def __init__ (
+                self, subject, articulator, predicate='sat', 
+                find_out=pns_find_out, HORIZON=31
+                ):
+                self.pns_name = subject
+                self.pns_articulator = articulator
+                self.pns_predicate = predicate
+                self.pns_find_out = find_out
+                self.PNS_HORIZON = HORIZON
+                #
+                self.pns_walked = set ((subject,))
+                self.pns_articulator.pns_statement (
+                        (subject, predicate, ''), '', 
+                        self.pns_resolve_statement
+                        ) # ask an open question about the subject ...
+                                
+        def pns_resolve_statement (self, resolved, model):
+                if model[2] != '0:,':
+                        # context(s) and object(s) found
+                        self.pns_find_out (resolved, model)
+                        # stop walking.
+                        return
+                
+                # no answer 
+                self.pns_articulator.pns_command (
+                        ('', resolved[0], ''), 
+                        self.pns_resolve_context
+                        ) # walk up the context first ...
+                return
+                
+        def pns_resolve_context (self, resolved, model):
+                if model == None:
+                        # no context
+                        self.pns_articulator.pns_command (
+                                ('', '', resolved[1]), 
+                                self.pns_resolve_index
+                                ) # walk up the index second ...
+                        return
+                
+                question = (resolved[1], self.pns_predicate, '')
+                for context in model[1]:
+                        #if context in self.pns_walked:
+                        #        continue
+                        #
+                        # self.pns_walked.add (context)
+                        self.pns_articulator.pns_statement (
+                                question, '', self.pns_resolve_statement
+                                )
+                
+        def pns_resolve_index (self, resolved, model):
+                if model != None:
+                        # known name
+                        self.pns_articulator.pns_statement (
+                                (resolved[2], self.pns_predicate, ''), '',
+                                self.pns_resolve_statement
+                                ) 
+                                # ask an open question about it ...
+                        return
+
+                # unknown subject for this predicate, articulate ...
+                for name in tuple (netstring.decode (resolved[2])):
+                        if name in self.pns_walked:
+                                continue
+                                
+                        if len (self.pns_walked) >= self.PNS_HORIZON:
+                                break # beyond the horizon, stop walking.
+
+                        # for each new name below the horizon 
+                        self.pns_walked.add (name)
+                        self.pns_articulator.pns_command (
+                                ('', '', name), 
+                                self.pns_resolve_index
+                                ) # walk up the indexes once ...
 
 
 # Note
@@ -206,39 +355,18 @@ if __name__ == '__main__':
                 ' - Copyright 2005 Laurent A.V. Szyster\n'
                 )
                 
-        from allegra import async_loop, pns_client
+        from allegra import async_loop
         
-        class PNS_pipe (pns_client.PNS_pipe):
-                
-                def pns_articulate (self):
-                        try:
-                                encoded = self.pns_pipe.next ()
-                                
-                        except StopIteration:
-                                # no more statements to handle, close when
-                                # done ...
-                                self.pns_close_when_done = True
-                                return
-
-                        model = list (netstring.decode (encoded))
-                        if len (model) != 4:
-                                self.pns_close_when_done = True
-                                return
-                        
-                        if model[1] == model[2] == model[3] == '':
-                                Walk (self.pns_articulator, model[0])
-                        elif model[2] != '' or model[3] != '':
-                                self.pns_articulator.pns_articulate (
-                                        tuple (model[:3]), model[3]
-                                        )
-                        else:
-                                pass
-                        
+        # TODO: ... PNS_pipe
+        
+        ip = '127.0.0.1'
+        port = 3534
         if len (sys.argv) > 1:
+                if len (sys.argv) > 2:
+                        port = int (sys.argv[2])
                 ip = sys.argv[1]
-        else:
-                ip = '127.0.0.1'
-        PNS_pipe (ip, netstring.netpipe (lambda: sys.stdin.read (4096)))
+        articulator = PNS_articulator ((ip, port))
+        netpipe = netstring.netpipe (lambda: sys.stdin.read (4096))
         async_loop.dispatch ()
         assert None == finalization.collect ()
         #
@@ -261,4 +389,13 @@ if __name__ == '__main__':
         #
         # but for an interactive prompt, use instead pns_prompt.py.
         
-        
+
+# Note
+#
+# The trouble with walking is that each set generations will be guaranteed
+# to have a latency of at least the select.poll timeout. That's good for
+# a high-performance peer that generates a lot of walkers in parallel, but
+# it will impair a single user walking alone.
+#
+# 
+# only one user should expects

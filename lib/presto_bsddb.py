@@ -18,13 +18,98 @@
 ""
 
 import os
+
 from bsddb import db
 
-from allegra import xml_utf8, xml_unicode
-from allegra.presto import PRESTo_sync, presto_synchronize, presto_xml
+from allegra import (
+        loginfo, finalization, synchronizer, 
+        xml_dom, xml_utf8, xml_unicode, 
+        presto, presto_http
+        )
 
 
-class BSDDB_table (PRESTo_sync):
+class PRESTo_dom (
+        xml_dom.XML_dom, loginfo.Loginfo, finalization.Finalization
+        ):
+        
+        "BSDDB implementation of PRESTo's COM interfaces"
+        
+        presto_defered = None
+        
+        def __init__ (self, name, types={}, type=presto.PRESTo_async):
+                self.xml_prefixes = {u'http://presto/': u'presto'}
+                self.xml_pi = {}
+                self.xml_type = type
+                self.xml_types = types
+                self.presto_name = name
+                        
+        def __repr__ (self):
+                return 'presto-bsddb-dom name="%s"' % self.presto_name
+        
+        def sync_get (self):
+                try:
+                        data = self.bsddb_DB.get (self.presto_name)
+                except db.DBError, excp:
+                        data = '<presto:bsddb-excp/>'
+                self.select_trigger ((self.async_get, (data, )))
+        
+        def sync_set (self, data):
+                try:
+                        self.bsddb_DB[self.presto_name] = data
+                except db.DBError, excp:
+                        pass
+                self.select_trigger ((self.async_defered, ()))
+                        
+        def async_get (self, data):
+                self.xml_parser_reset ()
+                try:
+                        self.xml_expat.Parse (data, 1)
+                except expat.ExpatError, error:
+                        self.xml_error = error
+                        self.xml_parse_error ()
+                        self.xml_expat = self.xml_parsed = None
+                if self.xml_root == None:
+                        self.xml_root = self.xml_type ()
+                if self.xml_root.xml_attributes == None:
+                        self.xml_root.xml_attributes = {}
+                self.async_defered ()
+
+        def async_defered (self):
+                defered = self.presto_defered
+                self.presto_defered = None
+                for call, args in defered:
+                        call (*args)
+
+        # The PRESTo commit and rollback interfaces
+        
+        def presto_rollback (self, defered):
+                if self.presto_defered:
+                        try:
+                                self.presto_defered.append (defered)
+                        except:
+                                return False
+                        
+                else:
+                        self.presto_defered = [defered]
+                        self.xml_root = None
+                        self.synchronized ((
+                                self.sync_get, (self.presto_name)
+                                ))
+                return True
+        
+        def presto_commit (self, defered):
+                if self.presto_defered:
+                        return False
+                
+                self.presto_defered = (defered, )
+                self.synchronized ((self.sync_set, (
+                        xml_unicode.xml_string (self.xml_root, self), 
+                        )))
+                return True
+
+
+
+class BSDDB_table (presto.PRESTo_sync):
         
         BSDDB_DB_TYPES = {
                 u'BTREE': db.DB_BTREE,
@@ -78,8 +163,8 @@ class BSDDB_table (PRESTo_sync):
 
 class BSDDB_open (BSDDB_table):
         
-        # Simply creates a new bsddb table or an old oneif it exists
-        # and reports its status or an error condition. This object
+        # Simply creates a new bsddb table or open an existing one
+        # and reports its status or an error condition. This component
         # may be completely transient and used as a single interface
         # to create many database tables of different types, or to check
         # their status.
@@ -124,7 +209,7 @@ class BSDDB_open (BSDDB_table):
                         reactor ('')
                         return
                         
-                reactor ('<stat>%s</stat>' % presto_xml (
+                reactor ('<stat>%s</stat>' % presto.presto_xml (
                                 self.bsddb_DB.stat (), set ()
                                 ))
                 if self.xml_dom == None:
@@ -133,13 +218,8 @@ class BSDDB_open (BSDDB_table):
                 reactor ('</bsddb>')
                 reactor ('')
                 
-        def __call__ (self, root, reactor):
-                return self.presto_synchronized (
-                        reactor, 'presto_bsddb_open'
-                        )
-                
         presto_methods = {
-                u'open': presto_synchronize ('presto_bsddb_open')
+                u'open': presto.presto_synchronize (presto_bsddb_open)
                 }
 
 
@@ -173,7 +253,7 @@ class BSDDB_get (BSDDB_table):
                                         )
                                 ))
                 except AssertionError, excp:
-                        reactor ('<excp>Assertion Error</excp>' % excp)
+                        reactor ('<excp>Assertion Error</excp>')
                 except Exception, excp:
                         # send an exception, "decache" the container (and
                         # consequently close the DB environnement).
@@ -190,11 +270,8 @@ class BSDDB_get (BSDDB_table):
                 reactor ('</bsddb>')
                 reactor ('')
 
-        def __call__ (self, root, reactor):
-                return self.presto_synchronized (reactor, 'presto_bsddb_get')
-                
         presto_methods = {
-                u'get': presto_synchronize ('presto_bsddb_get')
+                u'get': presto.presto_synchronize (presto_bsddb_get)
                 }
 
 
@@ -232,10 +309,9 @@ class BSDDB_set (BSDDB_table):
                 reactor ('</bsddb>')
                 reactor ('')
 
-        def __call__ (self, root, reactor):
-                return self.presto_synchronized (reactor, 'presto_bsddb_set')
-                
-        presto_methods = {u'set': presto_synchronize ('presto_bsddb_set')}
+        presto_methods = {
+                u'set': presto.presto_synchronize (presto_bsddb_set)
+                }
 
 
 class BSDDB_record (BSDDB_table):
@@ -274,7 +350,7 @@ class BSDDB_record (BSDDB_table):
                 reactor ('')
 
         presto_methods = {
-                u'record': presto_synchronize ('presto_bsddb_record')
+                u'record': presto.presto_synchronize (presto_bsddb_record)
                 }
 
 
@@ -321,5 +397,15 @@ class BSDDB_cursor (BSDDB_table):
                 reactor ('')
 
         presto_methods = {
-                u'cursor': presto_synchronize ('presto_bsddb_cursor')
+                u'cursor': presto.presto_synchronize ('presto_bsddb_cursor')
                 }
+
+# Note about this implementation
+#
+# dbopen db= type=
+# dbget db= key=
+# dbset db= key= value=
+# dblog db= value=
+# dbrecord db= index= value=
+# dbindex db= key= index=
+# dbcursor record= index= move= count=

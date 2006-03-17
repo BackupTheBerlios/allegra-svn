@@ -252,12 +252,4 @@ class PNS_session (presto.PRESTo_async):
                 return False # closed, release this handler
 
         def pns_log (self, model):
-                # TODO: move to a BSDDB queue ...
-                s = ''.join (pns_xml.pns_to_xml_unicode_strings (
-                        self.xml_dom.xml_prefixes, model
-                        ))
-                try:
-                        self.pns_xml_log.append (s)
-                except:
-                        self.pns_xml_log = [s]
-                
+                pass # TODO: move to a BSDDB queue ...                

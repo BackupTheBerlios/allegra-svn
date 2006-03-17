@@ -20,7 +20,7 @@
 import os, stat, glob, urllib
 
 from allegra import (
-        netstring, loginfo, async_loop, finalization, synchronizer, 
+        netstring, loginfo, async_loop, finalization, thread_loop, 
         collector, producer, mime_headers, http_server, presto
         )
 
@@ -44,7 +44,7 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                 else:
                         self.http_host = '%s:%d' % (host, port)
                 presto.PRESTo_root.__init__ (self, path)
-                synchronizer.synchronized (self)
+                thread_loop.synchronized (self)
                 
         def __repr__ (self):
                 return 'presto-http-cache path="%s"' % self.presto_path

@@ -26,9 +26,10 @@ if os.name == 'nt':
 else:
         allegra_time = time.time
 
-from allegra import \
-        loginfo, finalization, synchronizer, \
+from allegra import (
+        loginfo, finalization, thread_loop, synchronized,
         producer, reactor, xml_dom, xml_unicode
+        )
 
 
 # TODO: move away ...
@@ -94,7 +95,7 @@ class PRESTo_sync (PRESTo_async):
         
         def __init__ (self, name, attributes):
                 xml_dom.XML_element.__init__ (self, name, attributes)
-                synchronizer.synchronized (self)
+                thread_loop.synchronized (self)
         
         # Note also that there are two logging interfaces for a synchronized
         # PRESTo instance, asynchronous and synchronous:
@@ -178,7 +179,7 @@ class PRESTo_dom (
                 self.xml_type = type
                 self.xml_types = types
                 self.presto_name = name
-                synchronizer.synchronized (self)
+                thread_loop.synchronized (self)
                         
         def __repr__ (self):
                 return 'presto-dom name="%s"' % self.presto_name
@@ -261,10 +262,10 @@ class PRESTo_dom (
                         ))
                 return True
         
-PRESTo_dom.sync_open = synchronizer.sync_open
-PRESTo_dom.sync_write = synchronizer.sync_write
-PRESTo_dom.sync_read = synchronizer.sync_read
-PRESTo_dom.sync_close = synchronizer.sync_close
+PRESTo_dom.sync_open = synchronized.sync_open
+PRESTo_dom.sync_write = synchronized.sync_write
+PRESTo_dom.sync_read = synchronized.sync_read
+PRESTo_dom.sync_close = synchronized.sync_close
 
 
 # Loading and unloading Python modules, XML namespace to types mapping.
