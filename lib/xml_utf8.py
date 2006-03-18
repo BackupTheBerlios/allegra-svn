@@ -261,6 +261,25 @@ class XML_static (object):
                                 ))
 
 
+def transcode (e):
+        e.xml_name = unicode (e.xml_name, 'utf-8')
+        if e.xml_attributes:
+                e.xml_attributes = dict ((
+                        (unicode (k, 'utf-8'), unicode (v, 'utf-8'))
+                        for k, v in e.xml_attributes.items ()
+                        ))
+        if e.xml_first:
+                e.xml_first = unicode (e.xml_first, 'utf-8')
+        else:
+                e.xml_first = u''
+        for child in e.xml_children:
+                utf8_to_unicode (child)
+        if e.xml_follow:
+                e.xml_follow = unicode (e.xml_follow, 'utf-8')
+        else:
+                e.xml_follow = None
+
+
 if __name__ == '__main__':
         import os, sys, time
         sys.stderr.write (
