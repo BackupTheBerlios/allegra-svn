@@ -271,7 +271,7 @@ def get_rest (component, reactor):
 
 # POST form data, return the REST
 
-def post_rest (component, reactor):
+def post_rest (component, reactor, POST_LIMIT=1<<16):
         if reactor.mime_collector_body == None:
                 if (
                         reactor.http_request[0] == 'POST' and
@@ -280,7 +280,7 @@ def post_rest (component, reactor):
                                 ] == 'application/x-www-form-urlencoded'
                         ):
                         reactor.mime_collector_body = \
-                                collector.Limited_collector (1<<16)
+                                collector.Limited_collector (POST_LIMIT)
                         reactor.http_response = 200
                 else:
                         reactor.http_response = 405 # Method Not Allowed
@@ -305,7 +305,7 @@ def post_rest (component, reactor):
                         ), 200)
         
 
-def form_rest (component, reactor):
+def form_rest (component, reactor, POST_LIMIT=1<<16):
         "GET or POST handler for REST request"
         if reactor.mime_collector_body != None:
                 if component.xml_attributes:
@@ -330,7 +330,7 @@ def form_rest (component, reactor):
                         )
                 ):
                 reactor.mime_collector_body = \
-                        collector.Limited_collector (0)
+                        collector.Limited_collector (POST_LIMIT)
                 reactor.http_response = 200
                 return
         
