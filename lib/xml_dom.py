@@ -105,6 +105,15 @@ class XML_dom (object):
                 self.xml_prefixes = prefixes or {}
                 self.xml_pi = pi or {}
 
+        def xml_parse_string (self, data):
+                self.xml_parser_reset ()
+                try:
+                        self.xml_expat.Parse (data, 1)
+                except expat.ExpatError, error:
+                        self.xml_expat_ERROR (error)
+                self.xml_expat = None
+                return self.xml_root
+                
         def xml_parser_reset (self):
                 if self.xml_unicoding:
                         self.xml_first = u''
