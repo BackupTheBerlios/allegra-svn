@@ -147,6 +147,7 @@ class HTTP_server_channel (
                         #
                         # return False and stall the collector we expect a
                         # MIME body collector to be provided ...
+                        return False
                 
                 return self.http_continue (reactor)
                 

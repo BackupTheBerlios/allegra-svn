@@ -92,13 +92,13 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
         def presto_continue (self, reactor):
                 self.presto_continue_http (reactor)
                 channel = reactor.http_channel
-                if channel.collector_stalled:
-                        channel.http_continue (reactor)
-                        channel.async_collect ()
-                        #
-                        # Resume collection of the async_chat buffer
-                        # stalled while loading the synchronized XML
-                        # instance in the cache.
+                channel.http_continue (reactor)
+                channel.collector_stalled = False
+                #channel.async_collect ()
+                #
+                # Resume collection of the async_chat buffer
+                # stalled while loading the synchronized XML
+                # instance in the cache.
 
         def presto_continue_http (self, reactor):
                 dom = reactor.presto_dom

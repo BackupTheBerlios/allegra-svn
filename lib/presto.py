@@ -126,13 +126,13 @@ class PRESTo_sync (PRESTo_async):
 
         
 def presto_synchronize (method):
-        def synchronized (element, reactor):
+        def sync (element, reactor):
                 xml_reactor = PRESTo_reactor_sync (element.select_trigger)
                 xml_reactor.presto_vector = reactor.presto_vector.copy ()
                 element.synchronized ((method, (element, xml_reactor)))
                 return xml_reactor
                 
-        return synchronized
+        return sync
         #
         # a method factory that "wraps" the asynchronous PRESTo reactor 
         # handled with a synchronized buffer reactor before passing it
@@ -234,7 +234,13 @@ class PRESTo_dom (
         # The PRESTo commit and rollback interfaces
         
         def presto_rollback (self, defered):
-                if self.presto_defered:
+                if self.presto_defered == None:
+                        self.presto_defered = [defered]
+                        self.xml_root = None
+                        self.synchronized ((
+                                self.sync_open, (self.presto_name, 'r')
+                                ))
+                else:
                         try:
                                 self.presto_defered.append (defered)
                         except:
@@ -244,12 +250,6 @@ class PRESTo_dom (
                                 # committing, anyway it would be useless
                                 # to do so ...
                         
-                else:
-                        self.presto_defered = [defered]
-                        self.xml_root = None
-                        self.synchronized ((
-                                self.sync_open, (self.presto_name, 'r')
-                                ))
                 return True
         
         def presto_commit (self, defered):
