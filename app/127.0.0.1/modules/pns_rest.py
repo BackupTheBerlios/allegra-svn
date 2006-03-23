@@ -19,34 +19,53 @@ from allegra import (
         netstring, loginfo, finalization, 
         producer, xml_dom, xml_unicode,
         pns_sat, pns_xml, pns_articulator,
-        presto_pns, presto_http
+        presto, presto_pns, presto_http
         )
 
 
 # PNS/REST interface
 
-def pns_get_rest (component, reactor):
-        "search for context(s)"
+def pns_handle_rest (component, reactor):
+        #
+        # handle the beginning of any PNS/REST request: 
+        #
+        # 1. check that there is something to articulate
+        # 2. attribute a PNS/TCP client if there is none available
+        # 3. decode the request's text, language and predicate
+        # 4. articulate a name for the context articulated
+        #
+        # and either return an XML string on error or a tuple:
+        #
+        #        (articulated, name, predicate)
+        #
+        # on success. this function is applied by all PNS/REST methods
+        # to handle the same part of their process.
+        #
         if not reactor.presto_vector:
                 return '<presto:pns-articulate/>'
         
-        if component.pns_client == None:
-                if component.pns_open (reactor):
-                        component.pns_articulator = \
-                                pns_articulator.PNS_articulator (
-                                        component.pns_client
-                                        )
-                else:
-                        return '<presto:pns-tcp-error/>'
-                        
-        elif component.pns_articulator == None: 
-                component.pns_articulator = pns_articulator.PNS_articulator (
-                        component.pns_client
-                        )
         context = reactor.presto_vector.get (u'context', u'').encode ('UTF-8')
         if not context:
                 return '<presto:pns-articulate/>'
         
+        if component.pns_client == None:
+                metabase = component.xml_attributes.setdefault (
+                        u'metabase', u'127.0.0.1:3534'
+                        ).encode ('ASCII', 'ignore')
+                try:
+                        host, port = metabase.split (':')
+                except:
+                        component.pns_client = component.PNS_CLIENT (
+                                (metabase, 3534), component.pns_peer
+                                )
+                else:
+                        component.pns_client = component.PNS_CLIENT (
+                                (host, int (port)), component.pns_peer
+                                )
+                if component.pns_client == None:
+                        return '<presto:pns-tcp-error/>'
+                
+                component.xml_dom = reactor.presto_dom
         predicate = reactor.presto_vector.get (
                 u'predicate', u'sat'
                 ).encode ('UTF-8')
@@ -80,18 +99,28 @@ class PNS_articulate_xml (finalization.Finalization):
                 prefixes={}, types={}, type=xml_dom.XML_element
                 ):
                 self.pns_name = name
-                self.pns_statement = articulator.pns_client.pns_statement
+                self.pns_statement = articulator.pns_question
                 self.pns_question = (name, predicate, '')
                 self.xml_prefixes = prefixes
                 self.xml_type = type
                 self.xml_types = types
                 self.xml_children = []
                 articulator.pns_command (
+                        ('', '', name), self.pns_resolve_index
+                        )
+                articulator.pns_command (
                         ('', name, ''), self.pns_resolve_context
+                        )
+                        
+        def pns_resolve_index (self, resolved, model):
+                if model == None:
+                        return
+                
+                self.xml_children.append (
+                        pns_xml.name_unicode (model[0], 'index')
                         )
         
         def pns_resolve_context (self, resolved, model):
-                loginfo.log ('pns_resolve_context %r' % (model,), 'debug')
                 if model == None:
                         return
                 
@@ -99,6 +128,7 @@ class PNS_articulate_xml (finalization.Finalization):
                         finalized = pns_xml.PNS_XML_continuation (
                                 self, self.pns_question
                                 )
+                        finalized.pns_context = context
                         self.pns_statement (
                                 self.pns_question, context, 
                                 finalized.pns_to_xml_unicode 
@@ -106,47 +136,77 @@ class PNS_articulate_xml (finalization.Finalization):
                         finalized.finalization = self.pns_xml_continue
 
         def pns_xml_continue (self, finalized):
-                loginfo.log ('pns_xml_continue %r' % finalized, 'debug')
                 e = finalized.xml_parsed
                 if e:
                         if e.xml_valid:
                                 e.xml_valid (self)
+                        e.xml_attributes[u'context'] = unicode (
+                                finalized.pns_context, 'UTF-8'
+                                )
                         self.xml_children.append (e)
 
 
 class PNS_articulate_rest (producer.Stalled_generator):
         
-        "the articulation's finalization"
-        
         def __call__ (self, finalized):
-                loginfo.log ('PNS_articulate_rest %r' % finalized, 'debug')
                 self.generator = xml_unicode.xml_prefixed (
                         finalized, finalized.xml_prefixes
                         )
                                 
-
-def articulate_get (component, reactor):
-        rest = pns_get_rest (component, reactor)
+def articulate (component, reactor):
+        rest = pns_handle_rest (component, reactor)
         try:
-                articulated, name, predicate = rest
+                articulated, context, predicate = rest
         except:
                 return rest
         
-        loginfo.log ('articulate_get', 'debug')
-        react = PNS_articulate_rest ()
-        PNS_articulate_xml (
-                name, component.pns_articulator, predicate,
-                prefixes=reactor.presto_dom.xml_prefixes
-                ).finalization = react
-        return react
+        text = reactor.presto_vector.pop (u'text', None)
+        if not text:
+                # load the PNS/XML elements from the metabase and include
+                # the result tree in the REST response.
+                #
+                react = PNS_articulate_rest ()
+                PNS_articulate_xml (
+                        context, component, predicate,
+                        prefixes=reactor.presto_dom.xml_prefixes
+                        ).finalization = react
+                return react # returns a stalled reactor ...
+                
+        # articulate text as a PNS/XML or PNS/SAT statement in the
+        # context submitted and return the root element as result.
+        #
+        pns_statement = component.pns_statement
+        root = pns_xml.articulate (
+                xml_dom.XML_dom ({
+                        'http://www.w3.org/XML/1998/namespace': 'xml'
+                        }), context, {}, pns_xml.Articulate, pns_statement
+                ).xml_parse_string (text)
+        if root == None:
+                # if the text is not a valid XML document, articulate PNS/SAT 
+                # statements and provide a PNS/XML <sat/> element as response.
+                subject = pns_sat.articulate_re (
+                        text.encode ('UTF-8'), articulated.append, 
+                        component.pns_sat_language
+                        )
+                for (l, f, t, n) in articulated:
+                        pns_statement ((n, 'sat', t, context))
+                root = xml_dom.XML_element (
+                        u'sat', {u'pns': unicode (
+                                subject, 'UTF-8', 'xmlcharrefreplace'
+                                )}
+                        )
+                root.xml_first = text
+        else:
+                xml_utf8.transcode (root)
+        return root # returns an XML element ...
         
 
-def articulate_post (component, reactor):
-        pass
-
 def articulate_new (component, reactor):
-        "clear the articulator's cache, if any"
-        component.pns_articulator = None
+        #
+        # clear the articulator's cache, if any
+        #
+        component.pns_commands = {}
+        component.pns_contexts = {}
         return '<presto:pns-articulate-new/>'
 
 
@@ -163,15 +223,12 @@ class PNS_search_xml (finalization.Finalization):
         # names *are* interfaces in Python *~)
         
         def __init__ (
-                self, name, articulator, predicate, HORIZON=68,
-                prefixes={}, types={}, type=xml_dom.XML_element
+                self, name, articulator, predicate, prefixes, HORIZON=68
                 ):
                 self.pns_contexts = set ()
                 self.pns_name = name
                 self.pns_predicate = predicate
                 self.xml_prefixes = prefixes
-                self.xml_type = type
-                self.xml_types = types
                 self.xml_children = []
                 self.pns_statement = articulator.pns_client.pns_statement
                 pns_articulator.PNS_walk (
@@ -180,37 +237,25 @@ class PNS_search_xml (finalization.Finalization):
         
         def pns_walk_out (self, subject, contexts):
                 self.pns_contexts.update (contexts)
-                question = (subject, self.pns_predicate, '')
-                for context in contexts:
-                        finalized = pns_xml.PNS_XML_continuation (
-                                self, question
+                self.pns_statement (
+                        (subject, self.predicate, ''), '', 
+                        finalized.pns_resolve_statements
+                        )
+                        
+        def pns_resolve_statements (resolved, model):
+                self.xml_children.append (''.join (
+                        pns_xml.statements_unicode (
+                                model, self.xml_prefixes
                                 )
-                        self.pns_statement (
-                                question, context, 
-                                finalized.pns_to_xml_unicode 
-                                )
-                        finalized.finalization = self.pns_xml_continue
-
-        def pns_xml_continue (self, finalized):
-                e = finalized.xml_parsed
-                if e:
-                        if e.xml_valid:
-                                e.xml_valid (self)
-                        self.xml_children.append (e)
-
+                        ))
 
 class PNS_search_rest (producer.Stalled_generator):
         
-        "the PNS/REST search's finalization"
-        
         def __call__ (self, finalized):
-                self.generator = xml_unicode.xml_prefixed (
-                        finalized, finalized.xml_prefixes
-                        )
-                                
+                self.generator = iter (finalized.xml_children)                                
         
 def search (component, reactor):
-        rest = pns_get_rest (component, reactor)
+        rest = pns_handle_rest (component, reactor)
         try:
                 articulated, name, predicate = rest
         except:
@@ -218,7 +263,7 @@ def search (component, reactor):
         
         react = PNS_search_rest ()
         PNS_search_xml (
-                name, component.pns_articulator, predicate,
+                name, component, predicate,
                 prefixes=reactor.presto_dom.xml_prefixes
                 ).finalization = react
         return react
@@ -226,27 +271,47 @@ def search (component, reactor):
 
 # PRESTo Component Declaration
 
-class PNS_REST (presto_pns.PNS_session):
+# PNS/REST articulator
 
+class PNS_REST (
+        presto.PRESTo_async, pns_articulator.PNS_articulator
+        ):
+        
         xml_name = u'http://allegra/ pns-rest'
+
+        def __init__ (self, name, attr):
+                self.xml_attributes = attr or {}
+
+        def xml_valid (self, dom):
+                dom.xml_prefixes['http://presto/'] = 'presto'
+                self.pns_commands = {}
+                self.pns_contexts = {}
+                self.pns_client = None
+                #
+                #metabase = self.xml_attributes.setdefault (
+                #        u'metabase', u'127.0.0.1:3534'
+                #        ).encode ('ASCII', 'ignore')
+                #try:
+                #        host, port = metabase.split (':')
+                #except:
+                #        pns_articulator.PNS_articulator.__init__ (
+                #                self, (metabase, 3534)
+                #                )
+                #else:
+                #        pns_articulator.PNS_articulator.__init__ (
+                #                self, (host, int (port))
+                #                )
+
+        pns_peer = presto_pns.pns_peer
         
-        pns_articulator = None
-        
-        presto = presto_http.get_rest
+        presto = presto_http.form_rest
                         
         presto_interfaces = set ((
-                u'PRESTo', 
-                u'subject', u'predicate', u'object', u'context', 
-                u'lang',
+                u'PRESTo', u'context', u'text', u'lang', u'predicate'
                 ))
 
-        presto_methods = {
-                u'pns': presto_pns.pns_statement,
-                u'search': search,
-                u'articulate': articulate_get,
-                u'clear': articulate_new,
-                }
-
+        presto_methods = {u'articulate': articulate}
+        
 
 presto_components = (PNS_REST, )
 

@@ -33,28 +33,20 @@ class PNS_articulator (finalization.Finalization):
         "a keep-alive caching PNS articulator"
         
         PNS_CLIENT = pns_client.PNS_client ()
-        
-        pns_keep_alive = True
 
         def __init__ (
                 self, addr=('127.0.0.1', 3534), commands=None, contexts=None
                 ):
-                self.pns_tcp_addr = addr
-                self.pns_client = self.PNS_CLIENT (addr, self.pns_peer)
                 self.pns_commands = commands or {}
                 self.pns_contexts = contexts or {}
+                self.pns_client = self.PNS_CLIENT (addr, self.pns_peer)
 
         def pns_peer (self, resolved, model):
                 ip = model[3]
                 if ip:
                         return True # opened, keep this handler
                         
-                if self.pns_keep_alive:
-                        self.pns_client = None
-                else:
-                        self.pns_client = self.PNS_CLIENT (
-                                addr, self.pns_peer
-                                )
+                self.pns_client = None
                 return False # closed, release this handler
                 
         def pns_command (self, articulated, handler):
@@ -99,25 +91,21 @@ class PNS_articulator (finalization.Finalization):
                         handler (resolved, self.pns_commands[resolved])
                 return False
 
-        def pns_statement (self, articulated, context, handler):
+        def pns_question (self, articulated, context, handler):
                 assert (
                         type (articulated) == tuple and 
-                        len (articulated) == 3 and
+                        len (articulated) == 3 and 
+                        articulated[2] == '' and
                         not (articulated[0] == '' or articulated[1] == '')
                         )
                 try:
                         model = self.pns_contexts[context][articulated]
                 except:
-                        #if articulated[2] != '':
-                        #        # cache statements now!
-                        #        self.pns_contexts.setdefault (
-                        #                articulated[3], {}
-                        #                )[articulated] = articulated
                         self.pns_client.pns_statement (
                                 articulated, context, (
                                         lambda
                                         resolved, model, s=self, h=handler:
-                                        s.pns_statement_continue (
+                                        s.pns_question_continue (
                                                 resolved, model, h
                                                 )
                                         )
@@ -125,21 +113,26 @@ class PNS_articulator (finalization.Finalization):
                 else:
                         if handler != None:
                                 handler (articulated, model)
-                
-        def pns_statement_continue (self, resolved, model, handler=None):
-                if model[4] != '_':
-                        # TODO: ... handle '.', '!' and '?' 
-                        return False
 
-                if resolved[2] == '':
-                        # cache question's answers.
-                        self.pns_contexts.setdefault (
-                                model[3], {}
-                                )[resolved] = model
+        def pns_question_continue (self, resolved, model, handler=None):
+                # cache question's answers.
+                self.pns_contexts.setdefault (
+                        model[3], {}
+                        )[resolved] = model
                 if handler != None:
                         handler (resolved, model)
-                return True
+                return False
 
+        def pns_statement (self, model, handler):
+                model, error = pns_model.pns_triple (model)
+                if error:
+                        return False
+                
+                self.pns_client.pns_statement (
+                        tuple (model[:3]), model[3], handler
+                        )
+                return True
+                
 
 def pns_walk_out (subject, contexts):
         assert None == loginfo.log (netstring.encode ((
@@ -228,10 +221,9 @@ class PNS_walk (finalization.Finalization):
 
 
 def pns_find_out (resolved, model):
-        if model[2] != '0:,':
-                assert None == loginfo.log (
-                        netstring.encode (model), 'pns-find-out'
-                        )
+        assert None == loginfo.log (
+                netstring.encode (model), 'pns-find-out'
+                )
                 
 class PNS_search (PNS_walk):
         
@@ -247,7 +239,7 @@ class PNS_search (PNS_walk):
                         )
 
         def pns_walk_out (self, subject, contexts):
-                self.pns_articulator.pns_statement (
+                self.pns_articulator.pns_question (
                         (subject, self.pns_predicate, ''), '',
                         self.pns_find_out
                         )
@@ -268,13 +260,13 @@ class PNS_find (finalization.Finalization):
                 self.PNS_HORIZON = HORIZON
                 #
                 self.pns_walked = set ((subject,))
-                self.pns_articulator.pns_statement (
+                self.pns_articulator.pns_question (
                         (subject, predicate, ''), '', 
-                        self.pns_resolve_statement
+                        self.pns_resolve_question
                         ) # ask an open question about the subject ...
                                 
-        def pns_resolve_statement (self, resolved, model):
-                if model[2] != '0:,':
+        def pns_resolve_question (self, resolved, model):
+                if model[2]:
                         # context(s) and object(s) found
                         self.pns_find_out (resolved, model)
                         # stop walking.
@@ -291,46 +283,50 @@ class PNS_find (finalization.Finalization):
                 if model == None:
                         # no context
                         self.pns_articulator.pns_command (
-                                ('', '', resolved[1]), 
+                                ('', '', self.pns_name), 
                                 self.pns_resolve_index
                                 ) # walk up the index second ...
                         return
                 
-                question = (resolved[1], self.pns_predicate, '')
                 for context in model[1]:
-                        #if context in self.pns_walked:
-                        #        continue
-                        #
-                        # self.pns_walked.add (context)
-                        self.pns_articulator.pns_statement (
-                                question, '', self.pns_resolve_statement
+                        if context in self.pns_walked:
+                                continue
+                        
+                        if len (self.pns_walked) >= self.PNS_HORIZON:
+                                break # beyond the horizon, stop walking.
+
+                        self.pns_walked.add (context)
+                        self.pns_articulator.pns_question (
+                                (context, self.pns_predicate, ''), '', 
+                                self.pns_resolve_question
                                 )
                 
         def pns_resolve_index (self, resolved, model):
                 if model != None:
-                        # known name
-                        self.pns_articulator.pns_statement (
+                        # known subject
+                        self.pns_name = resolved[2]
+                        self.pns_articulator.pns_question (
                                 (resolved[2], self.pns_predicate, ''), '',
-                                self.pns_resolve_statement
+                                self.pns_resolve_question
                                 ) 
                                 # ask an open question about it ...
                         return
 
-                # unknown subject for this predicate, articulate ...
-                for name in tuple (netstring.decode (resolved[2])):
-                        if name in self.pns_walked:
-                                continue
-                                
-                        if len (self.pns_walked) >= self.PNS_HORIZON:
-                                break # beyond the horizon, stop walking.
-
-                        # for each new name below the horizon 
-                        self.pns_walked.add (name)
-                        self.pns_articulator.pns_command (
-                                ('', '', name), 
-                                self.pns_resolve_index
-                                ) # walk up the indexes once ...
-
+#                # unknown subject, articulate ...
+#                for name in tuple (netstring.decode (resolved[2])):
+#                        if name in self.pns_walked:
+#                                continue
+#                                
+#                        if len (self.pns_walked) >= self.PNS_HORIZON:
+#                                break # beyond the horizon, stop walking.
+#
+#                        # for each new name below the horizon 
+#                        self.pns_walked.add (name)
+#                        self.pns_articulator.pns_question (
+#                                (resolved[2], self.pns_predicate, ''), '',
+#                                self.pns_resolve_question
+#                                ) 
+#                                # ask an open question about it ...
 
 # Note
 #

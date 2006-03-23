@@ -19,8 +19,8 @@
 
 from allegra import (
         netstring, loginfo, finalization, producer, 
-        pns_model, pns_xml, pns_client, 
-        presto 
+        pns_model, pns_xml, pns_client, pns_articulator,
+        presto, presto_http
         )
 
 
@@ -127,7 +127,7 @@ class PNS_command (producer.Stalled_generator):
                                 pns_xml.name_unicode (
                                         model[3], 'presto:pns-index'
                                         ),
-                                        ))
+                                ))
                 elif resolved[2] == '':
                         self.generator = (
                                 pns_xml.name_unicode (
@@ -201,6 +201,21 @@ def pns_statement (component, reactor):
                 react = PNS_statement (reactor.presto_dom)
                 component.pns_client.pns_statement (model, context, react)
                 return react
+        
+        
+def pns_peer (component, resolved, model):
+        ip = model[3]
+        if ip:
+                component.xml_attributes[u'peer'] = unicode (ip, 'UTF-8')
+                return True # opened, keep this handler
+                
+        component.pns_client = None
+        try:
+                del component.xml_attributes[u'peer']
+        except KeyError:
+                pass
+        component.xml_dom = None # de-cycle on close, unload from cache!
+        return False # closed, release this handler
 
 
 class PNS_session (presto.PRESTo_async):
@@ -211,10 +226,11 @@ class PNS_session (presto.PRESTo_async):
 
         pns_client = None
 
+        def __init__ (self, name, attr):
+                self.xml_attributes = attr or {}
+
         def xml_valid (self, dom):
                 dom.xml_prefixes['http://presto/'] = 'presto'
-                if self.xml_attributes == None:
-                        self.xml_attributes = {}
         
         def pns_open (self, reactor):
                 metabase = self.xml_attributes.setdefault (
@@ -237,19 +253,15 @@ class PNS_session (presto.PRESTo_async):
                 
                 return False
 
-        def pns_peer (self, resolved, model):
-                ip = model[3]
-                if ip:
-                        self.xml_attributes[u'peer'] = unicode (ip, 'UTF-8')
-                        return True # opened, keep this handler
-                        
-                self.pns_client = None
-                try:
-                        del self.xml_attributes[u'peer']
-                except KeyError:
-                        pass
-                self.xml_dom = None # de-cycle on close, unload from cache!
-                return False # closed, release this handler
+        pns_peer = pns_peer
 
         def pns_log (self, model):
                 pass # TODO: move to a BSDDB queue ...                
+
+        presto = presto_http.get_rest
+                        
+        presto_interfaces = set ((
+                u'subject', u'predicate', u'object', u'context', 
+                ))
+
+        presto_methods = {None: pns_statement}
