@@ -472,6 +472,8 @@ class PNS_XML_continuation (finalization.Finalization):
 
 class PNS_XML_continuations (PNS_XML_continuation):
         
+        pns_contexts = None
+        
         def __call__ (self, finalized):
                 # join a child element response continuation
                 child = finalized.xml_parsed
@@ -520,7 +522,7 @@ class PNS_XML_continuations (PNS_XML_continuation):
                                 joined = PNS_XML_continuation (
                                         self.pns_dom, child
                                         )
-                                joined.pns_context = context
+                                joined.pns_context = model[3]
                                 self.pns_dom.pns_statement (
                                         (subject, name, ''), context,
                                         joined.pns_to_xml_unicode

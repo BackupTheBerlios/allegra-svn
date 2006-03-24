@@ -16,9 +16,8 @@
 # USA
 
 from allegra import (
-        netstring, loginfo, finalization, 
-        producer, xml_dom, xml_unicode,
-        pns_sat, pns_xml, pns_articulator,
+        netstring, loginfo, finalization, producer, 
+        xml_dom, xml_unicode, pns_sat, pns_xml, pns_articulator,
         presto, presto_pns, presto_http
         )
 
@@ -42,11 +41,11 @@ def pns_handle_rest (component, reactor):
         # to handle the same part of their process.
         #
         if not reactor.presto_vector:
-                return '<presto:pns-articulate/>'
+                return '<pns:articulate/>'
         
         context = reactor.presto_vector.get (u'context', u'').encode ('UTF-8')
         if not context:
-                return '<presto:pns-articulate/>'
+                return '<pns:articulate/>'
         
         if component.pns_client == None:
                 metabase = component.xml_attributes.setdefault (
@@ -63,7 +62,7 @@ def pns_handle_rest (component, reactor):
                                 (host, int (port)), component.pns_peer
                                 )
                 if component.pns_client == None:
-                        return '<presto:pns-tcp-error/>'
+                        return '<pns:tcp-error/>'
                 
                 component.xml_dom = reactor.presto_dom
         predicate = reactor.presto_vector.get (
@@ -81,7 +80,7 @@ def pns_handle_rest (component, reactor):
                 context, articulated.append, component.pns_sat_language
                 )
         if not name:
-                return '<presto:pns-articulate/>'
+                return '<pns:articulate/>'
 
         return (articulated, name, predicate)
 
@@ -90,7 +89,7 @@ def pns_handle_rest (component, reactor):
 
 class PNS_articulate_xml (finalization.Finalization):
         
-        xml_name = u'http://allegra/ pns-articulate'
+        xml_name = u'http://pns/ articulate'
         xml_first = u''
         xml_parent = xml_attributes = xml_follow = None
                 
@@ -98,7 +97,6 @@ class PNS_articulate_xml (finalization.Finalization):
                 self, name, articulator, predicate,
                 prefixes={}, types={}, type=xml_dom.XML_element
                 ):
-                self.pns_name = name
                 self.pns_statement = articulator.pns_question
                 self.pns_question = (name, predicate, '')
                 self.xml_prefixes = prefixes
@@ -117,32 +115,41 @@ class PNS_articulate_xml (finalization.Finalization):
                         return
                 
                 self.xml_children.append (
-                        pns_xml.name_unicode (model[0], 'index')
-                        )
+                        pns_xml.name_unicode (model[0], 'pns:index')
+                        ) # TODO? resolve SAT or leave it bare ...
         
         def pns_resolve_context (self, resolved, model):
                 if model == None:
                         return
                 
                 for context in model[1]:
-                        finalized = pns_xml.PNS_XML_continuation (
-                                self, self.pns_question
-                                )
-                        finalized.pns_context = context
-                        self.pns_statement (
-                                self.pns_question, context, 
-                                finalized.pns_to_xml_unicode 
-                                )
-                        finalized.finalization = self.pns_xml_continue
+                        self.xml_children.append (
+                                pns_xml.name_unicode (context, 'pns:context')
+                                ) # TODO? resolve SAT or leave it bare ...
+                #
+                finalized = pns_xml.PNS_XML_continuations (
+                        self, self.pns_question[:2]
+                        )
+                self.pns_statement (
+                        self.pns_question, '', finalized.pns_to_xml_unicode_a
+                        )
+                finalized.finalization = self.pns_xml_continue
 
         def pns_xml_continue (self, finalized):
-                e = finalized.xml_parsed
-                if e:
+                if finalized.pns_contexts == None:
+                        return
+                
+                for context, e in finalized.pns_contexts.items ():
                         if e.xml_valid:
                                 e.xml_valid (self)
-                        e.xml_attributes[u'context'] = unicode (
-                                finalized.pns_context, 'UTF-8'
-                                )
+                        if e.xml_attributes:
+                                e.xml_attributes[u'context'] = unicode (
+                                        context, 'UTF-8'
+                                        )
+                        else:
+                                e.xml_attributes = {u'context': unicode (
+                                        context, 'UTF-8'
+                                        )}
                         self.xml_children.append (e)
 
 
@@ -207,7 +214,7 @@ def articulate_new (component, reactor):
         #
         component.pns_commands = {}
         component.pns_contexts = {}
-        return '<presto:pns-articulate-new/>'
+        return '<pns:articulate-new/>'
 
 
 # PNS/REST search
@@ -216,7 +223,7 @@ class PNS_search_xml (finalization.Finalization):
         
         # a PNS_search, XML_element *and* XML_dom implementation
         
-        xml_name = u'http://allegra/ search'
+        xml_name = u'http://pns/ search'
         xml_first = u''
         xml_parent = xml_attributes = xml_follow = None
         
@@ -277,13 +284,15 @@ class PNS_REST (
         presto.PRESTo_async, pns_articulator.PNS_articulator
         ):
         
-        xml_name = u'http://allegra/ pns-rest'
+        xml_name = u'http://pns/ rest'
 
         def __init__ (self, name, attr):
                 self.xml_attributes = attr or {}
 
         def xml_valid (self, dom):
+                dom.xml_prefixes['http://pns/'] = 'pns'
                 dom.xml_prefixes['http://presto/'] = 'presto'
+                #
                 self.pns_commands = {}
                 self.pns_contexts = {}
                 self.pns_client = None
