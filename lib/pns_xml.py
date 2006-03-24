@@ -391,7 +391,7 @@ class PNS_XML_continuation (finalization.Finalization):
         # XML element itself, but that will require some changes to
         # the xml_dom.py interfaces that I'm not yet ready to make ...
         
-        xml_parsed = None
+        xml_children = xml_parsed = None
         
         def __init__ (self, dom, question):
                 self.pns_question = question
@@ -469,6 +469,78 @@ class PNS_XML_continuation (finalization.Finalization):
                                 joined.finalization = self
                 return False
 
+
+class PNS_XML_continuations (PNS_XML_continuation):
+        
+        def __call__ (self, finalized):
+                # join a child element response continuation
+                child = finalized.xml_parsed
+                parent = self.pns_contexts[finalized.pns_context]
+                sibblings = parent.xml_children
+                if child == None:
+                        sibblings.remove (finalized.pns_question)
+                        return
+
+                sibblings[sibblings.index (finalized.pns_question)] = child
+                child.xml_parent = weakref.ref (parent)
+                if child.xml_valid != None:
+                        child.xml_valid (self.pns_dom)
+
+        def pns_to_xml_utf8_a (self, resolved, model):
+                if model[4] != ('_') or model[2] == '':
+                        return False
+                
+                self.pns_contexts = {}
+                question = resolved[:2]
+                for co in netstring.decode (model[2]):
+                        c, o = netstring.decode (co) # TODO? fix this
+                        self.pns_to_xml_utf8 (
+                                resolved, question+(o, c, '_')
+                                )
+                        self.pns_contexts[c] = self.xml_parsed
+                self.xml_parsed = None
+                return False
+
+        def pns_to_xml_unicode (self, resolved, model):
+                self.xml_parsed, children = pns_to_xml_unicode (
+                        model, self.pns_dom.xml_types, self.pns_dom.xml_type
+                        )
+                if children:
+                        self.xml_parsed.xml_children = children = list (
+                                netstring.decode (children)
+                                )
+                        for child in children:
+                                subject, name = tuple (
+                                        netstring.decode (child)
+                                        )
+                                if subject:
+                                        context = model[0]
+                                else:
+                                        context = subject = model[0]
+                                joined = PNS_XML_continuation (
+                                        self.pns_dom, child
+                                        )
+                                joined.pns_context = context
+                                self.pns_dom.pns_statement (
+                                        (subject, name, ''), context,
+                                        joined.pns_to_xml_unicode
+                                        )
+                                joined.finalization = self
+
+        def pns_to_xml_unicode_a (self, resolved, model):
+                if model[4] != ('_') or model[2] == '':
+                        return False
+                
+                self.pns_contexts = {}
+                question = resolved[:2]
+                for co in netstring.decode (model[2]):
+                        c, o = netstring.decode (co) # TODO? fix this
+                        self.pns_to_xml_unicode (
+                                resolved, question+(o, c, '_')
+                                )
+                        self.pns_contexts[c] = self.xml_parsed
+                self.xml_parsed = None
+                return False
 
 class PNS_XML (finalization.Finalization):
         

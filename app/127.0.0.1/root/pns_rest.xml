@@ -1,2 +1,2 @@
 <?xml version="1.0" encoding="ascii"?>
-<allegra:pns-rest xmlns:allegra="http://allegra/" />
+<pns:rest xmlns:pns="http://pns/" />
