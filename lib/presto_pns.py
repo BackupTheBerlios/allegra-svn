@@ -32,10 +32,6 @@ class PRESTo_dom (
         
         "PNS/XML implementation of PRESTo's COM interfaces"
         
-        xml_name = 'http://presto/ component'
-
-        presto_defered = None
-        
         def __init__ (self, name, types={}, type=presto.PRESTo_async):
                 self.xml_prefixes = {u'http://presto/': u'presto'}
                 self.xml_pi = {}
@@ -46,19 +42,18 @@ class PRESTo_dom (
         def __repr__ (self):
                 return 'presto-pns-dom name="%s"' % self.presto_name
         
+        xml_name = 'http://presto/ pns'
+
+        presto_defered = None
+        
         # The PRESTo commit and rollback interfaces
         
         def presto_rollback (self, defered): 
                 # yes I use defered too (but just a list is enough to 
                 # implement them, thank you ;-)
-                #
-                if self.presto_defered:
-                        try:
-                                self.presto_defered.append (defered)
-                        except:
-                                return False
-                        
-                else:
+                try:
+                        self.presto_defered.append (defered)
+                except:
                         self.presto_defered = [defered]
                         self.pns_to_xml (
                                 self.xml_name, 
@@ -72,14 +67,29 @@ class PRESTo_dom (
                 if self.presto_defered:
                         return False
                 
-                self.presto_defered = (defered, )
                 self.xml_to_pns (
                         self.presto_name, 
                         self.presto_root.presto_host,
                         self.pns_client.pns_statement
                         )
+                defered[0] (*defered[1]) 
                 return True
+                #
+                # no actual defered on commit, waiting for the peer's
+                # acknowledgement has no purpose unless you expect to 
+                # rollback immediately after a commit.
         
+        def pns_to_xml_continue (self, finalized):
+                "PNS/XML rolledback"
+                e = finalized.xml_parsed
+                if e and e.xml_valid != None:
+                        e.xml_valid (self)
+                self.xml_root = e
+                defered = self.presto_defered
+                self.presto_defered = self.pns_statement = None
+                for callback, args in defered:
+                        callback (*args)
+                
 
 # PNS/REST client component and methods
 
@@ -112,10 +122,10 @@ class PNS_statement (producer.Stalled_generator):
 def pns_graph_rest (ci):
         context, index = netstring.decode (ci)
         return ''.join ((
-                '<presto:graph>',
-                pns_xml.name_unicode (context, 'presto:pns-context'),
-                pns_xml.name_unicode (index, 'presto:pns-index'),
-                '</presto:graph>'
+                '<pns:graph>',
+                pns_xml.name_unicode (context, 'pns:context'),
+                pns_xml.name_unicode (index, 'pns:index'),
+                '</pns:graph>'
                 ))
 
 
@@ -125,13 +135,13 @@ class PNS_command (producer.Stalled_generator):
                 if resolved[1] == '':
                         self.generator = iter ((
                                 pns_xml.name_unicode (
-                                        model[3], 'presto:pns-index'
+                                        model[3], 'pns:index'
                                         ),
                                 ))
                 elif resolved[2] == '':
                         self.generator = (
                                 pns_xml.name_unicode (
-                                        context, 'presto:pns-context'
+                                        context, 'pns:context'
                                         ) 
                                 for context in netstring.decode (
                                         model[3]
@@ -143,17 +153,56 @@ class PNS_command (producer.Stalled_generator):
                                 for ci in netstring.decode (model[3])
                                 )
                 else:
-                        self.generator = iter (('<presto:pns-graph/>',))
+                        self.generator = iter (('<pns:graph/>',))
                 return False
                         
+
+def pns_open (component, reactor):
+        metabase = component.xml_attributes.setdefault (
+                u'metabase', u'127.0.0.1:3534'
+                ).encode ('ASCII', 'ignore')
+        try:
+                host, port = metabase.split (':')
+        except:
+                channel = component.PNS_CLIENT (
+                        (metabase, 3534), component.pns_peer
+                        )
+        else:
+                channel = component.PNS_CLIENT (
+                        (host, int (port)), component.pns_peer
+                        )
+        if channel:
+                component.pns_client = channel
+                component.xml_dom = reactor.presto_dom
+                return True
+        
+        return False
+
+
+def pns_peer (component, resolved, model):
+        ip = model[3]
+        if ip:
+                component.xml_attributes[u'peer'] = unicode (ip, 'UTF-8')
+                return True # opened, keep this handler
+                
+        component.pns_client = None
+        try:
+                del component.xml_attributes[u'peer']
+        except KeyError:
+                pass
+        component.xml_dom = None # de-cycle on close, unload from cache!
+        return False # closed, release this handler
+
 
 def pns_statement (component, reactor):
         "pass-through method for PNS/TCP statements"
         if not reactor.presto_vector:
-                return '<presto:pns-statement/>'
+                return '<pns:statement/>'
         
-        if component.pns_client == None and not component.pns_open (reactor):
-                return '<presto:pns-tcp-error/>'
+        if component.pns_client == None and not pns_open (
+                component, reactor
+                ):
+                return '<pns:tcp-error/>'
                 
         model = (
                 reactor.presto_vector.setdefault (
@@ -178,7 +227,7 @@ def pns_statement (component, reactor):
                                         )
                         else:
                                 # filter-out PNS/TCP close, of course.
-                                return '<presto:pns-statement/>'
+                                return '<pns:statement/>'
                         
                 else:
                         # PNS/Inference command
@@ -203,24 +252,9 @@ def pns_statement (component, reactor):
                 return react
         
         
-def pns_peer (component, resolved, model):
-        ip = model[3]
-        if ip:
-                component.xml_attributes[u'peer'] = unicode (ip, 'UTF-8')
-                return True # opened, keep this handler
-                
-        component.pns_client = None
-        try:
-                del component.xml_attributes[u'peer']
-        except KeyError:
-                pass
-        component.xml_dom = None # de-cycle on close, unload from cache!
-        return False # closed, release this handler
-
-
-class PNS_session (presto.PRESTo_async):
+class PNS_TCP (presto.PRESTo_async):
         
-        xml_name = u'http://presto/ pns'
+        xml_name = u'http://pns/ tcp'
         
         PNS_CLIENT = pns_client.PNS_client ()
 
@@ -230,29 +264,8 @@ class PNS_session (presto.PRESTo_async):
                 self.xml_attributes = attr or {}
 
         def xml_valid (self, dom):
-                dom.xml_prefixes['http://presto/'] = 'presto'
+                dom.xml_prefixes['http://pns/'] = 'pns'
         
-        def pns_open (self, reactor):
-                metabase = self.xml_attributes.setdefault (
-                        u'metabase', u'127.0.0.1:3534'
-                        ).encode ('ASCII', 'ignore')
-                try:
-                        host, port = metabase.split (':')
-                except:
-                        channel = self.PNS_CLIENT (
-                                (metabase, 3534), self.pns_peer
-                                )
-                else:
-                        channel = self.PNS_CLIENT (
-                                (host, int (port)), self.pns_peer
-                                )
-                if channel:
-                        self.pns_client = channel
-                        self.xml_dom = reactor.presto_dom
-                        return True
-                
-                return False
-
         pns_peer = pns_peer
 
         def pns_log (self, model):

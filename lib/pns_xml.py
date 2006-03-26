@@ -153,41 +153,34 @@ def xml_utf8_chunk (element, dom):
 def xml_utf8_name (element, dom):
         # articulate a context's name one from its children's name(s)
         field = set ()
-        return pns_model.pns_name (
-                netstring.encode ((
-                        child.pns_name 
-                        for child in element.xml_children 
-                        if child.pns_name
-                        )), field
-                )
+        return pns_model.pns_name (netstring.encode ((
+                child.pns_name 
+                for child in element.xml_children 
+                if child.pns_name
+                )), field)
                 
 
 def xml_utf8_context (element, dom):
         if not element.xml_children:
                 return
         
-        name = element.pns_name or dom.pns_name
+        context = element.pns_name or dom.pns_name
         for child in element.xml_children:
                 # A PNS/XML statement with the same context and subject is a
                 # leaf. All other are branches, that have their parent's name
                 # has contexts but not as subject.
                 #
                 dom.pns_statement ((
-                        child.pns_name or name,
+                        child.pns_name or context,
                         child.xml_name,
-                        netstring.encode (
-                                xml_utf8_to_pns (child)
-                                ),
-                        name
+                        netstring.encode (xml_utf8_to_pns (child)),
+                        context
                         ))
                 child.xml_children = None # drop articulated children now!
                 # articulate the child SATs in this element's context
                 for articulated in child.pns_sat_articulated:
                         if not dom.pns_statement ((
-                                articulated[2], 
-                                'sat', 
-                                articulated[3],
-                                element.pns_name
+                                articulated[2], 'sat', articulated[3], context
                                 )):
                                 break
                                 #
