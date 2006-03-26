@@ -143,7 +143,7 @@ def xml_unprefixed (e, xml_attributes=''):
                                 if child.xml_follow:
                                         yield xml_cdata (child.xml_follow)
                         
-                        else:
+                        elif child:
                                 yield child
                                 
                 yield '</%s>' % tag
@@ -182,7 +182,7 @@ def xml_prefixed (e, prefixes, xml_attributes=''):
                                 if child.xml_follow:
                                         yield xml_cdata (child.xml_follow)
                         
-                        else:
+                        elif child:
                                 yield child
                                 
                 yield '</%s>' % tag

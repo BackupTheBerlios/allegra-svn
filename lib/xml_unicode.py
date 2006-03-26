@@ -168,10 +168,10 @@ def xml_unprefixed (e, xml_attributes='', encoding='ASCII'):
                                                 child.xml_follow, encoding
                                                 )
                         
-                        elif type (child) == types.UnicodeType:
+                        elif type (child) == types.UnicodeType and child:
                                 yield xml_cdata (child, encoding)
                                 
-                        else:
+                        elif child:
                                 yield child
                                 
                 yield '</%s>' % tag
@@ -216,10 +216,10 @@ def xml_prefixed (e, prefixes, xml_attributes='', encoding='ASCII'):
                                                 child.xml_follow, encoding
                                                 )
                         
-                        elif type (child) == types.UnicodeType:
+                        elif type (child) == types.UnicodeType and child:
                                 yield xml_cdata (child, encoding)
                                 
-                        else:
+                        elif child:
                                 yield child
                                 
                 yield '</%s>' % tag
