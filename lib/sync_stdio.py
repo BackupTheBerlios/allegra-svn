@@ -25,7 +25,7 @@ SYNOPSIS
 
 import sys
 
-from allegra import prompt, loginfo, async_loop, thread_loop
+from allegra import prompt, loginfo, async_loop, finalization, thread_loop
 
 
 class Sync_stdio_file:
@@ -179,4 +179,4 @@ if __name__ == '__main__':
 		)
         Python_prompt ().start ()
         async_loop.dispatch ()
-        
+        assert None == finalization.collect ()
