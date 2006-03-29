@@ -111,11 +111,9 @@ class PNS_inference (thread_loop.Thread_loop):
                 encoded = '%d:%s,' % (len (context), context)
                 self.pns_map_context (subject, context, encoded)
                 # recursively index the subject names
-                names = self.pns_map_names (subject)
-                if names != None:
-                        # and map them to this context too if any
-                        for name in names:
-                                self.pns_map_context (name, context, encoded)
+                for name in self.pns_map_names (subject):
+                        # and map articulated names to this context too 
+                        self.pns_map_context (name, context, encoded)
                         
         def pns_map_context (self, subject, context, encoded):
                 if subject == context:
@@ -135,16 +133,13 @@ class PNS_inference (thread_loop.Thread_loop):
                 
                 if stored.find (encoded) < 0:
                         # new context for this subject
-                        stored[-1] = chr (horizon + 1)
-                        self.pns_routes[subject] = encoded + stored
-                        return
+                        self.pns_routes[subject] = ''.join ((
+                                encoded, stored[:-1], chr (horizon + 1)
+                                ))
 
         def pns_map_names (self, index):
                 # index a sequence of names to the index
-                names = list (netstring.decode (index))
-                if len (names) == 0:
-                        return
-                        
+                names = tuple (netstring.decode (index))
                 for name in names:
                         stored = self.pns_index.get (name)
                         if stored == None:
