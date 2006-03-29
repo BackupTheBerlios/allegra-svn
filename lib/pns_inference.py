@@ -129,15 +129,14 @@ class PNS_inference (thread_loop.Thread_loop):
                         
                 # map a subject to a context
                 horizon = ord (stored[-1])
-                if not horizon > 255:
+                if horizon > 255:
                         # hard limit on the maximum entry length
                         return
                 
                 if stored.find (encoded) < 0:
                         # new context for this subject
-                        self.pns_routes[subject] = (
-                                encoded + stored[:-1] + chr (horizon + 1)
-                                )
+                        stored[-1] = chr (horizon + 1)
+                        self.pns_routes[subject] = encoded + stored
                         return
 
         def pns_map_names (self, index):
