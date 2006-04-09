@@ -19,8 +19,24 @@
 
 SYNOPSIS
 
-	python -OO sync_stdio.py
+the development console, with full all debug assertion logs, 
+outlined for readability and CRLF applications (grep, more, tail, etc ...):
 
+        python sync_stdio.py
+
+or a quiet outlined console:
+
+	python -OO sync_stdio.py -d
+
+or netstring logs for tests and benchmarks:
+
+        python -OO sync_stdio.py < script.py 1> stdout
+
+or netstring logs and a timeout in seconds:
+        
+        python -OO sync_stdio.py 10 < script.py 1> stdout 2> stderr
+
+for automated test suites.
 """
 
 import sys
@@ -107,12 +123,16 @@ class Sync_stdoe (Sync_stdio):
 
 class Sync_prompt (Sync_stdio):
 
-	sync_prompt_ready = False
+	sync_prompt_ready = not __debug__
 
 	def thread_loop_init (self):
-		self.select_trigger_log (
-			'press CTRL+C to open and close the console', 'info'
-			)
+                if self.sync_prompt_ready:
+                        self.thread_loop_queue ((self.sync_stdin, ()))
+                else:
+                        self.select_trigger_log (
+                                'press CTRL+C to open and close the console', 
+                                'info'
+                                )
 		return True
 		
 	def async_prompt_catch (self):
@@ -129,12 +149,12 @@ class Sync_prompt (Sync_stdio):
 		self.sync_stderr ('>>> ')
 		line = sys.stdin.readline ()[:-1]
 		if line == '':
-			self.select_trigger ((self.sync_prompt, ()))
+			self.select_trigger ((self.async_prompt, ()))
 			return
 
 		self.select_trigger ((self.async_readline, (line,)))
 		
-        def sync_prompt (self):
+        def async_prompt (self):
                 self.sync_prompt_ready = False
                 
 	def async_readline (self, line):
