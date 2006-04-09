@@ -28,15 +28,10 @@ or a quiet outlined console:
 
 	python -OO sync_stdio.py -d
 
-or netstring logs for tests and benchmarks:
+or netstring logs for tests scripts:
 
-        python -OO sync_stdio.py < script.py 1> stdout
+        python -OO sync_stdio.py < script.py 1> stdout 2> stderr
 
-or netstring logs and a timeout in seconds:
-        
-        python -OO sync_stdio.py 10 < script.py 1> stdout 2> stderr
-
-for automated test suites.
 """
 
 import sys
