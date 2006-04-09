@@ -83,7 +83,6 @@ class Sync_stdio (thread_loop.Thread_loop):
 			self.sys_stdout, self.sys_stderr
 			)
 		del self.sys_stdout, self.sys_stderr
-                del self.sync_stdout, self.sync_stderr
 		try:
 			del self.log
 		except:
@@ -97,6 +96,10 @@ class Sync_stdio (thread_loop.Thread_loop):
 
         async_prompt_catch = async_stdio_stop
 
+        def thread_loop_delete (self):
+                del self.sync_stdout, self.sync_stderr
+                return True
+                
 
 class Sync_stdoe (Sync_stdio):
 
