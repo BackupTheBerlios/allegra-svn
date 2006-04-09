@@ -98,6 +98,7 @@ class Sync_stdio (thread_loop.Thread_loop):
 			loginfo.write_and_flush (sys.stdout)
 			)
 		self.thread_loop_queue (None)
+                return True
 
         async_prompt_catch = async_stdio_stop
 
@@ -183,7 +184,7 @@ class Python_prompt (Sync_prompt):
 
 	def async_stdio_stop (self):
 		self.python_prompt_env = None # break circular reference
-		Sync_prompt.async_stdio_stop (self)
+		return Sync_prompt.async_stdio_stop (self)
 		
 
 if __name__ == '__main__':

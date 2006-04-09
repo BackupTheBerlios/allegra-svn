@@ -147,6 +147,7 @@ class PNS_peer (loginfo.Loginfo):
 			self.pns_resolution.thread_loop_stop
 		self.pns_resolution_finalize = self.pns_finalize
 		self.pns_tcp.handle_close ()
+                return True
 	
 	def pns_finalize (self):
 		# 5. delete all circular references
@@ -245,21 +246,14 @@ if __name__ == '__main__':
 		from allegra import sync_stdio
 		class PNS_run (PNS_peer):
 			def __init__ (self, udp, tcp, root):
-				self.log ('start', 'info')
-				self.sync_stdoe = sync_stdio.Sync_stdoe ()
-				self.sync_stdoe.start ()
-				self.async_catch = async_loop.async_catch
-				async_loop.async_catch = self.pns_shutdown
-				PNS_peer.__init__ (self, udp, tcp, root)
-			def pns_shutdown (self):
-				PNS_peer.pns_shutdown (self)
-				async_loop.async_catch = self.async_catch
-				self.async_catch = None
-				return 1
+                                PNS_peer.__init__ (self, udp, tcp, root)
+                                sync_stdio.Sync_stdoe ().start ()
+                                self.async_loop_catch = async_loop.async_catch
+                                async_loop.async_catch = self.pns_shutdown
 			def pns_finalize (self):
 				PNS_peer.pns_finalize (self)
-				self.sync_stdoe.async_stdio_stop ()
-				self.sync_stdoe = None
+				self.async_loop_catch ()
+				self.async_loop_catch = None
 	if len (sys.argv) > 3:
 		PNS_run (sys.argv[1], sys.argv[2], sys.argv[3])
 	elif len (sys.argv) > 2:
