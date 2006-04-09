@@ -41,6 +41,8 @@ class Sync_stdio_file:
 class Sync_stdio (thread_loop.Thread_loop):
 
 	def __init__ (self):
+                self.async_loop_catch = async_loop.async_catch
+                async_loop.async_catch = self.async_prompt_catch
 		stdout, stderr = (
 			Sync_stdio_file (self.async_stdout),
 			Sync_stdio_file (self.async_stderr)
@@ -64,10 +66,13 @@ class Sync_stdio (thread_loop.Thread_loop):
 		self.thread_loop_queue ((self.sync_stderr, (data,)))
 
 	def async_stdio_stop (self):
+                async_loop.async_catch = self.async_loop_catch
+                self.async_loop_catch = None
 		sys.__stdout__, sys.__stderr__ = (
 			self.sys_stdout, self.sys_stderr
 			)
 		del self.sys_stdout, self.sys_stderr
+                del self.sync_stdout, self.sync_stderr
 		try:
 			del self.log
 		except:
@@ -78,6 +83,8 @@ class Sync_stdio (thread_loop.Thread_loop):
 			)
 		self.thread_loop_queue (None)
 
+        async_prompt_catch = async_stdio_stop
+
 
 class Sync_stdoe (Sync_stdio):
 
@@ -85,6 +92,9 @@ class Sync_stdoe (Sync_stdio):
 		return 'sync-stdoe'
 
 	def thread_loop_init (self):
+                self.select_trigger_log (
+                        'Press CTRL+C to stop synchronous I/O', 'info'
+                        )
 		self.thread_loop_queue ((self.sync_stdin, ()))
 		return True
 
@@ -99,21 +109,13 @@ class Sync_prompt (Sync_stdio):
 
 	sync_prompt_ready = False
 
-	def __init__ (self):
-		self.async_catch = async_loop.async_catch
-		async_loop.async_catch = self.sync_prompt_catch
-		Sync_stdio.__init__ (self)
-
 	def thread_loop_init (self):
 		self.select_trigger_log (
 			'press CTRL+C to open and close the console', 'info'
 			)
 		return True
 		
-	def sync_prompt (self):
-		self.sync_prompt_ready = False
-		
-	def sync_prompt_catch (self):
+	def async_prompt_catch (self):
 		if self.sync_prompt_ready:
 			self.thread_loop_queue ((
 				self.sync_stderr, ('[CTRL+C]\n',)
@@ -132,14 +134,12 @@ class Sync_prompt (Sync_stdio):
 
 		self.select_trigger ((self.async_readline, (line,)))
 		
+        def sync_prompt (self):
+                self.sync_prompt_ready = False
+                
 	def async_readline (self, line):
 		assert None == self.log (line)
 		self.thread_loop_queue ((self.sync_stdin, ()))
-
-	def async_stdio_stop (self):
-		async_loop.async_catch = self.async_catch
-		self.async_catch = None
-		Sync_stdio.async_stdio_stop (self)
 
 
 class Python_prompt (Sync_prompt):
