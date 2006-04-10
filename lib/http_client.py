@@ -304,6 +304,8 @@ def POST (pipeline, url, body, headers=None):
                 )
 
 
+RE_URL = re.compile ('http://([^/:]+)[:]?([0-9]+)?(/.+)')
+
 if __name__ == '__main__':
         import sys, time
         from allegra import async_loop

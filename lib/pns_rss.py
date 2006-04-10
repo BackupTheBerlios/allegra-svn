@@ -156,15 +156,19 @@ RSS_TYPES = {
         #'http://purl.org/atom/ns# id'
         }
 
+def feed (url, statement):
+        host, port, urlpath = http_client.RE_URL.match (url).groups ()
+        dom = xml_reactor.XML_collector (unicoding=0)
+        pns_xml.articulate (
+                dom, url, RSS_TYPES, xml_dom.XML_delete, statement
+                )
+        request = http_client.GET (http_client.HTTP_client (
+                ) (host, int (port or '80')), urlpath) (dom)
+        return dom, request
 
-def feed (url, statement, benchmark=True):
-        host, port, urlpath = re.compile (
-                'http://([^/:]+)[:]?([0-9]+)?(/.+)'
-                ).match (url).groups ()
-        if benchmark:
-                dom = xml_reactor.XML_benchmark (unicoding=0)
-        else:
-                dom = xml_reactor.XML_collector (unicoding=0)
+def feed_benchmark (url, statement):
+        host, port, urlpath = http_client.RE_URL.match (url).groups ()
+        dom = xml_reactor.XML_benchmark (unicoding=0)
         pns_xml.articulate (
                 dom, url, RSS_TYPES, xml_dom.XML_delete, statement
                 )
@@ -204,10 +208,10 @@ if __name__ == '__main__':
                 
         else:
                 pns_statement = pns_xml.log_statement
-        dom, request = feed (sys.argv[1], pns_statement, benchmark)
-        async_loop.loop ()
-        t = time.clock () - t
         if benchmark:
+                dom, request = feed_benchmark (sys.argv[1], pns_statement)
+                async_loop.loop ()
+                t = time.clock () - t
                 loginfo.log (
                         'fetched in %f seconds, '
                         'as %d chunks parsed in %f seconds' % (
@@ -215,4 +219,43 @@ if __name__ == '__main__':
                                 dom.xml_benchmark_time
                                 ), 'info'
                         )
-                async_loop.dispatch ()
+        else:
+                dom, request = feed (sys.argv[1], pns_statement)
+        async_loop.dispatch ()
+        assert None == finalization.collect ()
+        
+        
+# TODO: add support for RSS 2.0 and RDF, drop ATOM alltogether, maybe
+#       articulate only at the <item/> level for RSS, allmost not using 
+#       at all the capabilities of PNS/XML.
+#       
+# Basically, for what its applied, RSS is broken. No surprise, it *is* the
+# work of a 14 years old kid. It is worse than RDF in all aspect but one:
+# simplicity. RDF is fundamentally too simple *and* too sophisticated. It
+# is complicated to apply and eventually yields ... syllogisms!
+#
+# RSS is as broken, but a lot simpler to apply.
+#
+# A whole ecosystem of markup has been added by popular RSS applications,
+# like <category/> tags and microformat attributes. This module provides a
+# base to derive and extend specialized RSS articulators.
+#
+# Eventually, it should support RSS 0.9x, RSS 2.0 and RDF.
+#
+# ATOM is not worth an implementation in a library for two good reasons.
+#
+# 1. it is an API, not a protocol, it belongs to the application.
+#
+# 2. it is of course inefficient as a protocol and eventually, it is
+#    mostly broken as an API.
+#
+# At first sight, ATOM looks very much like an EDIFACT message definition. 
+# And I know from experience that those kind of specifications are too 
+# complicated to be of practical applications.
+#
+# ATOM is too nested, too dispersed and parsing it is fucking complicated
+# no matter what method is used: push or pull, breath or depth first it
+# makes little sense. It's a REST interface intended to be dressed up in 
+# HTML, probably using XSLT or another XML transformation language.
+#
+# For anything else it is impractical.
