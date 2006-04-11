@@ -251,6 +251,7 @@ class HTTP_server_channel (
                         self.producer_fifo.append (None)
                 #
                 # do not iniate send, wait for a write event instead ...
+                #self.handle_write ()
                 #
                 # ... finally, log the response's first line.
                 assert None == reactor.log (
@@ -532,6 +533,13 @@ def cli (argv):
 
 if __name__ == '__main__':
         import sys
+        if '-s' in sys.argv:
+                sys.argv.remove ('-s')
+                from allegra import sync_stdio
+        elif not __debug__:
+                from allegra import sync_stdio
+        else:
+                sync_stdio = None
         if '-d' in sys.argv:
                 sys.argv.remove ('-d')
                 loginfo.Loginfo_stdio.log = \
@@ -553,8 +561,18 @@ if __name__ == '__main__':
                 for h, p in http_hosts (root, host, port)
                 if stat.S_ISDIR (os.stat (p)[0])
                 ])
-        server.async_catch = async_loop.async_catch
-        async_loop.async_catch = server.tcp_server_catch
+        if sync_stdio:
+                class Sync_stdoe (sync_stdio.Sync_stdoe):
+                        def async_prompt_catch (self):
+                                self.async_stdio_stop ()
+                                server.handle_close ()
+                                return True
+
+                Sync_stdoe ().start ()
+        else:
+                server.async_catch = async_loop.async_catch
+                async_loop.async_catch = server.tcp_server_catch
+                del server
         async_loop.dispatch ()
         assert None == finalization.collect ()
         

@@ -161,6 +161,12 @@ class TCP_server (async_core.Async_dispatcher):
                 self.handle_close ()
                 return True
         
+        def tcp_server_throw (self):
+                async_loop.async_catch = self.async_catch
+                self.async_catch = None
+                self.handle_close ()
+                return async_loop.async_catch ()
+        
 
 class TCP_server_limit (TCP_server):
         

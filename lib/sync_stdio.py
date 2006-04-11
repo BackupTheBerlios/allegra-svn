@@ -39,7 +39,7 @@ import sys
 from allegra import prompt, loginfo, async_loop, finalization, thread_loop
 
 
-class Sync_stdio_file:
+class Sync_stdoe_file:
 
 	def __init__ (self, async_write):
 		self.write = async_write
@@ -55,8 +55,8 @@ class Sync_stdio (thread_loop.Thread_loop):
                 self.async_loop_catch = async_loop.async_catch
                 async_loop.async_catch = self.async_prompt_catch
 		stdout, stderr = (
-			Sync_stdio_file (self.async_stdout),
-			Sync_stdio_file (self.async_stderr)
+			Sync_stdoe_file (self.async_stdout),
+			Sync_stdoe_file (self.async_stderr)
 			)
 		(
 			self.sync_stdout, self.sync_stderr
@@ -97,6 +97,9 @@ class Sync_stdio (thread_loop.Thread_loop):
         async_prompt_catch = async_stdio_stop
 
         def thread_loop_delete (self):
+                assert None == self.select_trigger_log (
+                        'stdio-stop', 'debug'
+                        )
                 del self.sync_stdout, self.sync_stderr
                 return True
                 

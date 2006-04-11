@@ -384,6 +384,13 @@ def post_multipart (reactor):
 if __name__ == '__main__':
         import sys, time
         t = time.clock ()
+        if '-s' in sys.argv:
+                sys.argv.remove ('-s')
+                from allegra import sync_stdio
+        elif not __debug__:
+                from allegra import sync_stdio
+        else:
+                sync_stdio = None
         if '-d' in sys.argv:
                 sys.argv.remove ('-d')
                 loginfo.Loginfo_stdio.log = \
@@ -404,9 +411,19 @@ if __name__ == '__main__':
                 (h, PRESTo_http_root (p)) 
                 for h, p in http_server.http_hosts (root, host, port)
                 ])
-        server.async_catch = async_loop.async_catch
-        async_loop.async_catch = server.tcp_server_catch
-        del server
+        if sync_stdio:
+                class Sync_stdoe (sync_stdio.Sync_stdoe):
+                        def async_prompt_catch (self):
+                                self.async_stdio_stop ()
+                                server.handle_close ()
+                                return True
+
+                Sync_stdoe ().start ()
+                #del server
+        else:
+                server.async_catch = async_loop.async_catch
+                async_loop.async_catch = server.tcp_server_catch
+                del server
         assert None == loginfo.log (
                 'startup seconds="%f"' % (time.clock () - t), 'PRESTo/HTTP'
                 )
