@@ -50,17 +50,17 @@ ARTICULATE_ASCII_Head = (
         RE_Public_Names,
         # Major punctuation
         re.compile ('[?!.](?:$|\\s+)'), # sentences
-        re.compile ('[:;](?:$|\\s+)'),    # property(ies)
-        re.compile ('[,](?:$|\\s+)'),     # enumeration
-        # All brackets, flattened, plus the ' - ' common pattern
-        re.compile ('[(]|[)]|[[]|[]]|{|}|\\s+-+\\s+'),
+        re.compile ('[:;](?:$|\\s+)'), # property(ies)
+        re.compile ('[,](?:$|\\s+)'), # enumeration
+        # Brackets, plus the ' - ' common pattern
+        re.compile ('[(){}[]]|\\s+-+\\s+'),
         # Double quotes and a common web separator
         re.compile ('["|]'), 
         )
 
 ARTICULATE_ASCII_Tail = (
         # Noun (Upper case, like "D.J. Bernstein" or "RDF")
-        re.compile ('(?:^|\\s+)(?:(?:([A-Z]+[^\\s]*)(?:$|\\s+))+)'),
+        re.compile ('(?:^|\\s+)(?:(?:([A-Z]+[^\\s]*)(?:$|\\s*))+)'),
         # Whitespaces
         re.compile ('\\s+'), 
         # All sorts of hyphens 

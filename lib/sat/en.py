@@ -53,10 +53,17 @@ ARTICULATE = sat.ARTICULATE_ASCII_Head + (
                 )), 
         # Prepositions: Locators in Time and Place
         sat.articulators_re ((
-                'in', 'at', 'on', 'to',
+                'in', 'at', 'on', 'to', 
                 )),
         # Articles
         sat.articulators_re ((
                 'a', 'an', 'the', 
+                )),
+        # ? 
+        sat.articulators_re ((
+                'it', 'I', 'me', 'you', 'he', 'she', 'we', 'they',
+                'my', 'your', 'his', 'her', 'our', 'their',
+                'this', 'these', 'those', 'them',
+                'of', 'for',
                 )),
         ) + sat.ARTICULATE_ASCII_Tail
