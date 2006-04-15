@@ -676,9 +676,12 @@ def statement_utf8 (model, prefixes):
                 ' context="%s"' % xml_utf8.xml_attr (model[3])
                 )
 
-def statements_utf8 (model, prefixes):
+def statements_utf8 (model, prefixes, contexts):
         for co in netstring.decode (model[2]):
                 c, o = netstring.decode (co)
+                if c not in contexts:
+                        continue
+                
                 for more in statement_utf8 (
                         (model[0], model[1], o, c, '_'), prefixes, encoding
                         ):
@@ -717,9 +720,12 @@ def statement_unicode (model, prefixes, encoding='ASCII'):
                         ), encoding
                 )
 
-def statements_unicode (model, prefixes, encoding='ASCII'):
+def statements_unicode (model, prefixes, contexts, encoding='ASCII'):
         for co in netstring.decode (model[2]):
                 c, o = netstring.decode (co)
+                if c not in contexts:
+                        continue
+                
                 for more in statement_unicode (
                         (model[0], model[1], o, c, '_'), prefixes, encoding
                         ):
@@ -783,3 +789,7 @@ def name_unicode (name, tag='public', encoding='ASCII'):
 #         :subject,:name,:,
 #
 # it just might not be worth the trouble.
+#
+# TODO: add a depth limit to PNS_XML, avoid the possible infinite loop 
+#       when there is a circular PNS/XML statement in the metabase for
+#       the articulated XML element tree.
