@@ -53,7 +53,8 @@ ARTICULATE_ASCII_Head = (
         re.compile ('[:;](?:$|\\s+)'), # property(ies)
         re.compile ('[,](?:$|\\s+)'), # enumeration
         # Brackets, plus the ' - ' common pattern
-        re.compile ('[(){}[]]|\\s+-+\\s+'),
+        re.compile ('[(){}\\[\\]]'),
+        re.compile ('\\s+-+\\s+'),
         # Double quotes and a common web separator
         re.compile ('["|]'), 
         )
