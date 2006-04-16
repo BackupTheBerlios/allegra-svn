@@ -17,6 +17,8 @@
 
 "a Finalization implementation for async_loop's asynchronous network peers"
 
+# see http://laurentszyster.be/blog/finalization
+
 from allegra import loginfo, async_loop
 
 
@@ -132,26 +134,4 @@ class Join (Continuation):
                         self.finalizations = None
                 #
                 # join
-
-# Why does is it a good idea to use finalizations for continuation?
-#
-# Practically, this "hack" ensures that any program using continuation
-# for its flow is then "memory-driven", naturally "memory-safe" because 
-# it runs as memory is released, mecanically allocating memory for a new
-# task only if it released the memory allocated for the previous one.
-# So, any further memory use is defered *after* having made room for it. 
-#
-# This is a very interesting property for a mission critical program, which
-# makes Allegra's web peer a very interesting pateform for some business 
-# network applications development.
-# 
-# The practical use of finalizations in Allegra is to articulate PNS/TCP,
-# program MIME workflows but also to attach a continuations to HTTP server
-# requests. In this case, the finalization itself will not happen until the
-# HTTP request instance is deleted. If you consider such finalization like 
-# sending a mail asynchronously or logging synchronously to a BSDDB, freeing 
-# up as much memory as possible before looks like a very good idea. The
-# practical benefit of finalizations is that they help to conserve memory
-# also by forcing programmers to remove all circular references in order 
-# to run their programs to closure. And not leaking is a primary requirement
-# for any long-running application like a PNS metabase or a web server.
+                
