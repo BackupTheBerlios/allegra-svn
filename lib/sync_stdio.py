@@ -113,10 +113,10 @@ class Sync_stdoe (Sync_stdio):
                 self.select_trigger_log (
                         'Press CTRL+C to stop synchronous I/O', 'info'
                         )
-		self.thread_loop_queue ((self.sync_stdin, ()))
+		self.thread_loop_queue ((self.sync_stdin_close, ()))
 		return True
 
-	def sync_stdin (self):
+	def sync_stdin_close (self):
 		sys.stdin.close ()
 		assert None == self.select_trigger_log (
 			'stdin_close', 'debug'
@@ -125,8 +125,10 @@ class Sync_stdoe (Sync_stdio):
 
 class Sync_prompt (Sync_stdio):
 
-	sync_prompt_ready = not __debug__
-
+        sync_prompt_prefix = '>>> '
+        sync_prompt_comment = '#'
+        sync_prompt_ready = not __debug__
+        
 	def thread_loop_init (self):
                 if self.sync_prompt_ready:
                         self.thread_loop_queue ((self.sync_stdin, ()))
@@ -142,20 +144,44 @@ class Sync_prompt (Sync_stdio):
 			self.thread_loop_queue ((
 				self.sync_stderr, ('[CTRL+C]\n',)
 				))
+                        self.sync_prompt_ready = False
 		else:
 			self.thread_loop_queue ((self.sync_stdin, ()))
 			self.sync_prompt_ready = True
 		return True
 
-	def sync_stdin (self):
-		self.sync_stderr ('>>> ')
-		line = sys.stdin.readline ()[:-1]
+	def sync_stdin_console (self):
+	        self.sync_stderr (self.sync_prompt_prefix)
+                line = sys.stdin.readline ()
 		if line == '':
+                        if sys.stdin.closed:
+                                self.select_trigger ((
+                                        self.async_stdio_stop, ()
+                                        ))
+                        else:
+                                self.select_trigger ((self.async_prompt, ()))
+                elif line == '\n':
 			self.select_trigger ((self.async_prompt, ()))
-			return
-
-		self.select_trigger ((self.async_readline, (line,)))
-		
+                else:
+        		self.select_trigger ((
+                                self.async_readline, (line[:-1],)
+                                ))
+                
+        sync_stdin = sync_stdin_console
+                
+        def sync_stdin_script (self):
+                line = sys.stdin.readline ()
+                if line == '':
+                        self.select_trigger ((self.async_prompt, ()))
+                elif line == '\n' or line.startswith (
+                        self.sync_prompt_comment
+                        ):
+                        self.thread_loop_queue ((self.sync_stdin, ()))
+                else:
+                        self.select_trigger ((
+                                self.async_readline, (line[:-1],)
+                                ))
+                                
         def async_prompt (self):
                 self.sync_prompt_ready = False
                 
@@ -167,11 +193,14 @@ class Sync_prompt (Sync_stdio):
 class Python_prompt (Sync_prompt):
 
 	def __init__ (self, env=None):
+                loginfo.log ('Python %s on %s' % (
+                        sys.version, sys.platform
+                        ), 'info')
 		self.python_prompt_env = env or {'prompt': self}
 		Sync_prompt.__init__ (self)
 
 	def __repr__ (self):
-		return 'python-prompt'
+		return 'python-prompt id="%x"' % id (self)
 
 	def async_readline (self, line):
 		method, result = prompt.python_prompt (
@@ -180,7 +209,10 @@ class Python_prompt (Sync_prompt):
 		if method == 'excp':
 			self.loginfo_traceback (result)
 		elif result != None:
-			self.async_stderr ('%r\n' % (result,))
+			# self.async_stderr ('%r\n' % (result,))
+                        self.select_trigger ((
+                                loginfo.log, ('%r' % (result, ), )
+                                ))
 		self.thread_loop_queue ((self.sync_stdin, ()))
 
 	def async_stdio_stop (self):
@@ -193,7 +225,12 @@ if __name__ == '__main__':
         if '-d' in sys.argv:
                 sys.argv.remove ('-d')
                 loginfo.Loginfo_stdio.log = \
-                        loginfo.Loginfo_stdio.loginfo_netlines     
+                        loginfo.Loginfo_stdio.loginfo_netlines
+                Python_prompt.sync_stdin = Sync_prompt.sync_stdin_console
+        elif __debug__:
+                Python_prompt.sync_stdin = Sync_prompt.sync_stdin_console
+        else:
+                Python_prompt.sync_stdin = Sync_prompt.sync_stdin_script
 	assert None == loginfo.log (
 		'Allegra Prompt'
 		' - Copyright 2005 Laurent A.V. Szyster'
