@@ -150,7 +150,7 @@ class Sync_prompt (Sync_stdio):
 			self.sync_prompt_ready = True
 		return True
 
-	def sync_stdin_console (self):
+	def sync_stdin (self):
 	        self.sync_stderr (self.sync_prompt_prefix)
                 line = sys.stdin.readline ()
 		if line == '':
@@ -166,8 +166,6 @@ class Sync_prompt (Sync_stdio):
         		self.select_trigger ((
                                 self.async_readline, (line[:-1],)
                                 ))
-                
-        sync_stdin = sync_stdin_console
                 
         def sync_stdin_script (self):
                 line = sys.stdin.readline ()
@@ -192,11 +190,12 @@ class Sync_prompt (Sync_stdio):
 
 class Python_prompt (Sync_prompt):
 
-	def __init__ (self, env=None):
+	def __init__ (self, env=None, info=None):
+                self.loginfo_info = info
+		self.python_prompt_env = env or {'prompt': self}
                 loginfo.log ('Python %s on %s' % (
                         sys.version, sys.platform
-                        ), 'info')
-		self.python_prompt_env = env or {'prompt': self}
+                        ), info)
 		Sync_prompt.__init__ (self)
 
 	def __repr__ (self):
@@ -211,9 +210,12 @@ class Python_prompt (Sync_prompt):
 		elif result != None:
 			# self.async_stderr ('%r\n' % (result,))
                         self.select_trigger ((
-                                loginfo.log, ('%r' % (result, ), )
+                                loginfo.log, (
+                                        '%r' % (result, ), self.loginfo_info
+                                        )
                                 ))
-		self.thread_loop_queue ((self.sync_stdin, ()))
+                if self.async_loop_catch != None: 
+		        self.thread_loop_queue ((self.sync_stdin, ()))
 
 	def async_stdio_stop (self):
 		self.python_prompt_env = None # break circular reference
@@ -222,20 +224,19 @@ class Python_prompt (Sync_prompt):
 
 if __name__ == '__main__':
         import sys
+        info = None # log prompt results to STDOUT by default
         if '-d' in sys.argv:
                 sys.argv.remove ('-d')
                 loginfo.Loginfo_stdio.log = \
                         loginfo.Loginfo_stdio.loginfo_netlines
-                Python_prompt.sync_stdin = Sync_prompt.sync_stdin_console
-        elif __debug__:
-                Python_prompt.sync_stdin = Sync_prompt.sync_stdin_console
-        else:
+        elif not __debug__:
                 Python_prompt.sync_stdin = Sync_prompt.sync_stdin_script
+                info = 'prompt'
 	assert None == loginfo.log (
 		'Allegra Prompt'
 		' - Copyright 2005 Laurent A.V. Szyster'
 		' | Copyleft GPL 2.0', 'info'
 		)
-        Python_prompt ().start ()
+        Python_prompt (None, info).start ()
         async_loop.dispatch ()
         assert None == finalization.collect ()
