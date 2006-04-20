@@ -233,13 +233,9 @@ class Async_chat (async_core.Async_dispatcher):
 
         def close_when_done (self):
                 """automatically close this channel once the outgoing queue 
-                is empty"""
+                is empty, or handle close now if it is allready empty"""
                 if len (self.producer_fifo) == 0:
-                        self.handle_close ()
-                        #
-                        # appending None to the producer_fifo when it is
-                        # empty cause a subtle bug in readable_for_stall,
-                        # and anyway, "when done" is now :-)
+                        self.handle_close () # when done is now!
                 else:
                         self.producer_fifo.append (None)
 
@@ -260,7 +256,7 @@ class Async_chat (async_core.Async_dispatcher):
                 assert None == self.log (
                         self.get_terminator (), 'found-terminator'
                         )
-                return False
+                return False # collector NOT stalled
 
 # Note about this implementation
 #
@@ -284,54 +280,8 @@ class Async_chat (async_core.Async_dispatcher):
 # supposed to do and pushes a string at the end that output queue, not a 
 # Simple_producer instance.
 #
-#
 # The channel's method collect_incoming_data is called to collect data 
 # between terminators. Its found_terminator method is called whenever
 # the current terminator is found, and if that method returns True, then
 # no more buffer will be consumed until the channel's collector_stalled
 # is not set to False by a call to async_collect.
-#
-#
-#
-# Blurb
-#
-# Since Allegra is designed to spare developpers the joy of asyncore and
-# asynchat API by providing them ready-made client, servers and peers for
-# the major Internet protocols, there is no need to maintain backward 
-# compatibily with the Standard Library's asynchat.
-#
-# In the Python Standard Library, asynchat is intended to be articulated,
-# to provide a base class from which to derive new implementation of a
-# TCP chat-like protocol and possibly distinct types of FIFO. In Allegra,
-# async_chat provides the root class of ready-made TCP client and servers for
-# various application protocols. One obvious simpler way to handler asynchat's 
-# FIFO queue and the strings pushed directly on to it makes a lot of
-# sense for optimization, the only thing left to do when so much is built
-# atop of an interface.
-#
-# The end result is a lighter and yet marginally more general implementation 
-# that suites a wide range of asynchronous servers, clients and peers 
-# developed on top of it.
-#
-# Flat is better than nested, according to Python's zen. Practically it is
-# indeed, because flat data structures are faster to instanciate and manage
-# than nested trees for the CPython VM (a lot faster as the reverse evidence
-# displayed by the outstanding performance gain of cElementTree demonstrates).
-# And when developping from the prompt, a short hierarchy of flat name space
-# are more usefull than a deeply nested and therefore usually dispersed name
-# graph.
-#
-# For instance, Twisted original package maze and the confusion it provoked
-# forced its author to a partial rewrite of a whole part of the API but
-# without beeing able to get rid of the most problematic of the library
-# itself: it is very difficult to read. And even more difficult to inspect
-# from the prompt.
-#
-# Consider now Allegra's allmost flat name space (saves obvious functions
-# best kept in and accessed from a separate module, possibly on their way
-# to profiling and C optimization). All methods and properties of an HTTP
-# client channel can be inspected without much transformation, because
-# they are well named. A developper allways has a wide horizon of interfaces
-# available, but in a single namespace: he see more of the state and can
-# reaches more methods from it.
-#
