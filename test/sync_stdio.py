@@ -1,16 +1,11 @@
-from allegra.async_loop import dispatch
-from allegra.sync_stdio import Sync_stdoe, Python_prompt
+from allegra import async_loop, sync_stdio
 
-Python_prompt ().start ()
-dispatch ()
+sync_stdio.Python_prompt ().start ()
+async_loop.dispatch ()
+
+sync_stdio.Sync_stdoe ().start ()
+async_loop.dispatch ()
+
 if __debug__:
-    from allegra.finalization import collect
-    collect ()
-    
-Sync_stdoe ().start ()
-dispatch ()
-if __debug__:
-    from allegra.finalization import collect
-    collect ()
-    
-    
+        from allegra import finalization
+        finalization.collect ()
