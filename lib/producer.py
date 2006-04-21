@@ -161,27 +161,19 @@ class Composite_producer (object):
 
 class Tee_producer (object):
         
-        def __init__ (self, producer):
+        def __init__ (self, buffers, stalled):
                 self.index = -1
-                try:
-                        self.buffers = producer.tee_buffers
-                except AttributeError:
-                        self.buffers = producer.tee_buffers = []
-                self.producer = producer
+                self.buffers = buffers
+                self.stalled = stalled
                 
         def more (self):
                 self.index += 1
-                try:
-                        return self.buffers[self.index]
-                
-                except IndexError:
-                        self.buffers.append (self.producer.more ())
-                        return self.buffers[-1]
+                return self.buffers[self.index]
                 
         def producer_stalled (self):
                 return (
-                        len (self.buffers) == self.index+1 and
-                        self.producer.producer_stalled ()
+                        len (self.buffers) == self.index + 1 and
+                        self.stalled ()
                         )
         
 

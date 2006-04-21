@@ -42,7 +42,7 @@ class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
                 return 'http-server-reactor id="%x"' % id (self)
         
 
-# split a URL into ('http://hostname', '/path', '?query', '#fragment')
+# split a URL into ('protocol:', 'hostname', '/path', 'query', '#fragment')
 #
 HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)[?]?([^#]+)?(#.+)?')
 
@@ -369,7 +369,9 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         return True
         
                 reactor.mime_producer_headers.update (teed.mime_headers)
-                reactor.mime_producer_body = producer.Tee_producer (teed)
+                reactor.mime_producer_body = producer.Tee_producer (
+                        teed.async_buffers, teed.producer_stalled
+                        )
                 reactor.http_response = 200
                 return False
         
@@ -407,7 +409,9 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         teed.mime_headers['Content-Encoding'] = \
                                 content_encoding
                 reactor.mime_producer_headers.update (teed.mime_headers)
-                reactor.mime_producer_body = producer.Tee_producer (teed)
+                reactor.mime_producer_body = producer.Tee_producer (
+                        teed.async_buffers, teed.producer_stalled
+                        )
                 reactor.http_response = 200
                 self.http_cached[filename] = weakref.ref (teed)
                 reactor.http_channel.http_continue (reactor)
