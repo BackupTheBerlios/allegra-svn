@@ -335,7 +335,7 @@ else:
         
 
 def none (): pass
-            
+
 class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
 
         synchronizer = None
@@ -369,9 +369,7 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         return True
         
                 reactor.mime_producer_headers.update (teed.mime_headers)
-                reactor.mime_producer_body = producer.Tee_producer (
-                        teed.async_buffers, teed.producer_stalled
-                        )
+                reactor.mime_producer_body = producer.Tee_producer (teed)
                 reactor.http_response = 200
                 return False
         
@@ -409,9 +407,7 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         teed.mime_headers['Content-Encoding'] = \
                                 content_encoding
                 reactor.mime_producer_headers.update (teed.mime_headers)
-                reactor.mime_producer_body = producer.Tee_producer (
-                        teed.async_buffers, teed.producer_stalled
-                        )
+                reactor.mime_producer_body = producer.Tee_producer (teed)
                 reactor.http_response = 200
                 self.http_cached[filename] = weakref.ref (teed)
                 reactor.http_channel.http_continue (reactor)
