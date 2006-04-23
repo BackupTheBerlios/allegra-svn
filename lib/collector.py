@@ -20,30 +20,53 @@
 from allegra import async_chat, loginfo
 
 
+class Null_collector (object):
+
+        # collect data to /dev/null
+
+        collector_is_simple = True
+
+        def collect_incoming_data (self, data):
+                return
+
+        def found_terminator (self):
+                return True
+
+
+def null (data): pass
+
+
 class File_collector (object):
         
         collector_is_simple = True
         
         def __init__ (filename, mode='w'):
                 self.file = open (filename, mode)
-                self.collect_incoming_data = open (filename, mode).write
+                self.collect_incoming_data = self.file.write
 
         def found_terminator (self):
                 self.file.close ()
+                self.collect_incoming_data = None
                 return True
                 
-
+                
 class Limited_collector (object):
         
         collector_is_simple = True
         
-        def __init__ (self, buffer):
+        def __init__ (self, limit):
                 self.data = ''
-                self.buffer = buffer
+                self.limit = limit
 
         def collect_incoming_data (self, data):
-                if not (0 < self.buffer < len (data)):
+                self.limit -= len (data)
+                if self.limit > 0:
                         self.data += data
+                else:
+                        self.collect_incoming_data = null
+                        # 
+                        # just don't do anything after the limit, not even
+                        # testing for it ;-)
 
         def found_terminator (self):
                 return True
@@ -64,19 +87,6 @@ class Loginfo_collector (object):
 	def found_terminator (self):
 		return False # final!
 		
-
-class Null_collector (object):
-
-	# collect data to /dev/null
-
-	collector_is_simple = True
-
-	def collect_incoming_data (self, data):
-		return
-
-	def found_terminator (self):
-		return True
-
 
 class Simple_collector (object):
 

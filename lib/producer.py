@@ -20,21 +20,6 @@
 import types, exceptions
 
 
-def false ():
-        return False
-
-class Stalled_producer (object):
-        
-        def more (self):
-                return ''
-        
-        def producer_stalled (self):
-                return True
-        
-        def __call__ (self):
-                self.producer_stalled = false
-
-
 class Simple_producer (object):
 	
 	"producer for a string"
@@ -59,6 +44,36 @@ class Simple_producer (object):
 
 	def producer_stalled (self):
 		return False
+
+
+class File_producer (object):
+        
+        "producer wrapper for file[-like] objects"
+
+        def __init__ (self, file, buffer_size=1<<16):
+                self.file = file
+                self.buffer_size = buffer_size
+
+        def more (self):
+                return self.file.read (self.buffer_size)
+
+        def producer_stalled (self):
+                return False
+        
+
+def false ():
+        return False
+
+class Stalled_producer (object):
+        
+        def more (self):
+                return ''
+        
+        def producer_stalled (self):
+                return True
+        
+        def __call__ (self):
+                self.producer_stalled = false
 
 
 class Stalled_generator (object):
@@ -154,9 +169,10 @@ class Composite_producer (object):
 	#	head = 'string'
 	#	body = (generator of 'string' or producer ())
 	#
-	# In effect, if you can generate only strings (like xml_utf.py can)
-	# a composite producer will glob more or less precise chunks to fill
-	# the accessor's buffer.
+        # It's a practical producer for asynchronous REST responses composed
+        # of simple strings and maybe-stalling producers. The overhead of
+        # another loop buys globbing and helps the peer fill its channel's
+        # buffers more efficiently for TCP/IP.
 
 
 class Tee_producer (object):
@@ -185,21 +201,6 @@ class Tee_producer (object):
                 
                 return self.producer.producer_stalled ()
         
-
-class File_producer (object):
-	
-	"producer wrapper for file[-like] objects"
-
-	def __init__ (self, file, buffer_size=1<<16):
-		self.file = file
-		self.buffer_size = buffer_size
-
-	def more (self):
-		return self.file.read (self.buffer_size)
-
-	def producer_stalled (self):
-		return False
-	
 
 class Encoding_producer (object):
 
