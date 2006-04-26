@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="ascii"?>
 <?xml-stylesheet type="text/xsl" href="/styles/pns_rest.xsl"?> 
 <pns:rest 
-  xmlns:pns="http://pns/" 
+  xmlns:pns="http://pns/"
   />
