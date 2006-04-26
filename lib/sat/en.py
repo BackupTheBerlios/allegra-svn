@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"SAT/EN - Simple Articulated Text / English"
+"SAT/EN - Simple Articulated Text : English Stack"
 
 from allegra import sat
 
@@ -59,11 +59,11 @@ ARTICULATE = sat.ARTICULATE_ASCII_Head + (
         sat.articulators_re ((
                 'a', 'an', 'the', 
                 )),
-        # ? 
+        # ? Pronoun and sundry ...
         sat.articulators_re ((
                 'it', 'I', 'me', 'you', 'he', 'she', 'we', 'they',
                 'my', 'your', 'his', 'her', 'our', 'their',
                 'this', 'these', 'those', 'them',
-                'of', 'for',
+                'of',
                 )),
         ) + sat.ARTICULATE_ASCII_Tail

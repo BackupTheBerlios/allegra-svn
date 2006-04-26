@@ -61,12 +61,11 @@ ARTICULATE_ASCII_Head = (
 
 ARTICULATE_ASCII_Tail = (
         # Noun (Upper case, like "D.J. Bernstein" or "RDF")
-        re.compile ('(?:^|\\s+)(?:(?:([A-Z]+[^\\s]*)(?:$|\\s*))+)'),
+        re.compile ('(?:^|\\s+)(?:(?:([A-Z]+[^\\s]*)(?:$|\\s*)?)+)'),
         # Whitespaces
         re.compile ('\\s+'), 
         # All sorts of hyphens 
-        re.compile ("[/*+\\-#']")
+        re.compile ("['/*+\\-#]")
         )
 
-ARTICULATE = ARTICULATE_ASCII_Head + ARTICULATE_ASCII_Tail 
-
+ARTICULATE = ARTICULATE_ASCII_Head + ARTICULATE_ASCII_Tail
