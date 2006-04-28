@@ -88,73 +88,6 @@ class Loginfo_collector (object):
 		return False # final!
 		
 
-class Simple_collector (object):
-
-	# wraps a complex collector with a simple interface
-	
-	collector_is_simple = True
-	
-	simple_collector = None
-
-	def __init__ (self, collector):
-		collector.set_terminator = self.set_terminator
-		collector.get_terminator = self.get_terminator
-		self.collector = collector
-		self.terminator = None
-		self.ac_in_buffer = ''
-
-	def get_terminator (self):
-		return self.terminator
-
-	def set_terminator (self, terminator):
-		self.terminator = terminator
-
-	def collect_incoming_data (self, data):
-                self.ac_in_buffer += data
-                while async_chat.collect (self.collector):
-                        pass
-			
-	def found_terminator (self):
-		return True # allways final
-	
-
-class Length_collector (object):
-
-	# wraps a complex collector with a length collector
-	
-	collector_is_simple = False
-
-	def __init__ (self, collector, size):
-		self.set_terminator = collector.set_terminator
-		self.length_collector = collector
-		self.length_collector_left = size
-
-	def length_collector_truncate (self, data):
-		pass # drop any truncated data
-
-	def collect_incoming_data (self, data):
-		self.length_left -= len (data)
-		if self.length_left < 0:
-			self.length_collector.collect_incoming_data (
-				data[:self.length_left]
-				)
-			self.collector_length_truncate (
-				data[self.length_left:]
-				)
-			self.collect_incoming_data = \
-				self.length_collector_truncate
-		else:
-			self.length_collector.collect_incoming_data (data)
-
-	def found_terminator (self):
-		if (
-			self.length_collector.found_terminator () and
-			self.length_collector_left > 0
-			):
-			self.set_terminator (self.length_collector_left)
-		return self.length_collector_left == 0
-	
-        
 class Codec_decoder (object):
         
         # Decode collected data using the codecs' decode interface:
@@ -257,3 +190,69 @@ class Padded_decoder (object):
                         self.buffer = ''
                 self.collector.found_terminator ()
                 return True
+        
+        
+class Simple_collector (object):
+
+        # wraps a complex collector with a simple interface
+        
+        collector_is_simple = True
+        
+        def __init__ (self, collector):
+                collector.set_terminator = self.set_terminator
+                collector.get_terminator = self.get_terminator
+                self.collector = collector
+                self.terminator = None
+                self.buffer = ''
+
+        def get_terminator (self):
+                return self.terminator
+
+        def set_terminator (self, terminator):
+                self.terminator = terminator
+
+        def collect_incoming_data (self, data):
+                self.buffer = async_chat.collect (
+                        self.collector, self.buffer + data
+                        )
+                        
+        def found_terminator (self):
+                del collector.set_terminator, collector.get_terminator
+                return True # allways final
+        
+
+class Length_collector (object):
+
+        # wraps a complex collector with a length collector
+        
+        collector_is_simple = False
+
+        def __init__ (self, collector, size):
+                self.set_terminator = collector.set_terminator
+                self.length_collector = collector
+                self.length_collector_left = size
+
+        def length_collector_truncate (self, data):
+                pass # drop any truncated data
+
+        def collect_incoming_data (self, data):
+                self.length_left -= len (data)
+                if self.length_left < 0:
+                        self.length_collector.collect_incoming_data (
+                                data[:self.length_left]
+                                )
+                        self.collector_length_truncate (
+                                data[self.length_left:]
+                                )
+                        self.collect_incoming_data = \
+                                self.length_collector_truncate
+                else:
+                        self.length_collector.collect_incoming_data (data)
+
+        def found_terminator (self):
+                if (
+                        self.length_collector.found_terminator () and
+                        self.length_collector_left > 0
+                        ):
+                        self.set_terminator (self.length_collector_left)
+                return self.length_collector_left == 0        

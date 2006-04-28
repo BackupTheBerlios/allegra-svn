@@ -17,7 +17,7 @@
 
 "A fork of the original Medusa's collection of producers"
 
-import types, exceptions
+import types
 
 
 class Simple_producer (object):
@@ -126,7 +126,7 @@ class Composite_producer (object):
 	        		buffer += self.current
 	        		try:
 	  				self.current = self.generator.next ()
-		  		except exceptions.StopIteration:
+		  		except StopIteration:
 		  			self.current = ''
 		  			break
 		  		
@@ -149,7 +149,7 @@ class Composite_producer (object):
 						
 	        		try:
 	  				self.current = self.generator.next ()
-		  		except exceptions.StopIteration:
+		  		except StopIteration:
 		  			self.current = ''
 		  			break
 		  		

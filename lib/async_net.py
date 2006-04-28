@@ -15,21 +15,59 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-import types, collections, socket
+import collections, socket
 
 from allegra import async_core
+
+def collect (c, buffer):
+        while buffer:
+                pos = buffer.find (':')
+                if pos < 0:
+                        if not buffer.isdigit ():
+                                c.async_net_error ('1 not a netstring')
+                                return ''
                         
+                        return buffer
                         
+                try:
+                        next = pos + int (buffer[:pos]) + 1
+                except:
+                        c.async_net_error ('2 not a length')
+                        return ''
+                        
+                if next >= len (buffer):
+                        if next > c.ac_in_buffer_size:
+                                c.async_net_error ('3 buffer limit')
+                                return ''
+                                
+                        return buffer # ... buffer more
+                
+                elif buffer[next] == ',':
+                        if c.async_net_continue (buffer[pos+1:next]):
+                                return buffer[next+1:]
+                        
+                else:
+                        c.async_net_error ('4 missing end')
+                        return ''
+                        
+                buffer = buffer[next+1:]
+                #
+                # TODO: optimize this method to avoid consuming
+                #       the buffer this way, by scanning it instead
+                #       but that's a little bit more tricky ...
+        return buffer
+
+
 class Async_net (async_core.Async_dispatcher):
 
-        an_in_buffer_size = an_out_buffer_size = 4096
-        
-        async_net_buffer = 1<<16 # buffer 64KB maximum
+        ac_in_buffer_size = 1<<14
+        ac_out_buffer_size = 4096
         
         def __init__ (self, conn=None):
-                self.an_in_buffer = ''
-                self.an_out_buffer = ''
-                self.an_fifo = collections.deque ()
+                self.ac_in_buffer = ''
+                self.ac_out_buffer = ''
+                self.netstrings_fifo = collections.deque ()
+                # self.async_net_push = self.netstrings_fifo.append
                 async_core.Async_dispatcher.__init__ (self, conn)
 
         def __repr__ (self):
@@ -37,84 +75,57 @@ class Async_net (async_core.Async_dispatcher):
                 
         def readable (self):
                 "readable when the input buffer is not full"
-                return (len (self.an_in_buffer) <= self.an_in_buffer_size)
+                return (len (self.ac_in_buffer) <= self.ac_in_buffer_size)
 
         def writable (self):
                 """writable when connected and the output buffer or queue 
                 are not empty"""
                 return not (
-                        (self.an_out_buffer == '') and
-                        not self.an_fifo and self.connected
+                        (self.ac_out_buffer == '') and
+                        not self.netstrings_fifo and self.connected
                         )
 
         def handle_read (self):
-                "buffer more input and try to parse netstrings"
+                "try to buffer more input and parse netstrings"
                 try:
-                        data = self.recv (self.an_in_buffer_size)
+                        data = self.recv (self.ac_in_buffer_size)
                 except socket.error, why:
                         self.handle_error()
                         return
 
-                self.an_in_buffer += data
-                while self.an_in_buffer:
-                        pos = self.an_in_buffer.find (':')
-                        if pos < 0:
-                                if not self.an_in_buffer.isdigit ():
-                                        self.async_net_error (
-                                                '1 not a netstring'
-                                                )
-                                return
-                                
-                        try:
-                                next = pos + int (self.an_in_buffer[:pos]) + 1
-                        except:
-                                self.async_net_error ('2 not a length')
-                                return
-                                
-                        if 0 < self.async_net_buffer < next:
-                                self.async_net_error ('3 buffer limit')
-                                return
-                                
-                        if next >= len (self.an_in_buffer):
-                                return # ... buffer more
-                        
-                        if self.an_in_buffer[next] == ',':
-                                self.async_net_continue (
-                                        self.an_in_buffer[pos+1:next]
-                                        )
-                        else:
-                                self.async_net_error ('4 missing end')        
-                                return
-                                
-                        self.an_in_buffer = self.an_in_buffer[next+1:]
+                self.ac_in_buffer = collect (self, self.ac_in_buffer + data)
 
         def handle_write (self):
-                "refill the output buffer and send it or close if done"
-                obs = self.an_out_buffer_size
-                while len (self.an_out_buffer) < obs and self.an_fifo:
-                        strings = self.an_fifo.popleft ()
+                "refill the output buffer, try to send it or close if done"
+                obs = self.ac_out_buffer_size
+                buffer = self.ac_out_buffer
+                fifo = self.netstrings_fifo
+                while len (buffer) < obs and fifo:
+                        strings = fifo.popleft ()
                         if strings == None:
-                                if self.an_out_buffer == '':
+                                if buffer == '':
                                         self.handle_close ()
                                         return
                                 
-                                self.an_fifo.append (None)        
-                                break
-                            
-                        self.an_out_buffer += ''.join ([
+                                else:
+                                        fifo.append (None)
+                                        break
+        
+                        buffer += ''.join ((
                                 '%d:%s,' % (len (s), s) for s in strings
-                                ])
-                if self.an_out_buffer and self.connected:
+                                ))
+                if buffer and self.connected:
                         try:
-                                sent = self.send (
-                                        self.an_out_buffer[:obs]
-                                        )
+                                sent = self.send (buffer[:obs])
                         except socket.error, why:
                                 self.handle_error ()
                         else:
                                 if sent:
-                                        self.an_out_buffer = \
-                                                self.an_out_buffer[sent:]
+                                        self.ac_out_buffer = buffer[sent:]
+                                else:
+                                        self.ac_out_buffer = buffer
+                else:
+                        self.ac_out_buffer = buffer
 
         # A compatible interface with Async_chat.close_when_done used by
         # Allegra's TCP clients and servers implementation.
@@ -123,24 +134,24 @@ class Async_net (async_core.Async_dispatcher):
                 """close this channel when previously queued strings have
                 been sent, or close now if the queue is empty.
                 """
-                if len (self.an_fifo) == 0:
+                if len (self.netstrings_fifo) == 0:
                         self.handle_close ()
                 else:
-                        self.an_fifo.append (None)
+                        self.netstrings_fifo.append (None)
 
         # The Async_net Interface
 
         def async_net_push (self, strings):
                 "push an iterable of 8-bit byte strings, initiate send"
-                self.an_fifo.append (strings)
-                self.handle_write ()
+                self.netstrings_fifo.append (strings)
+                # self.handle_write ()
 
         def async_net_continue (self, data):
                 "handle a netstring received"
                 assert None == self.log (data, 'async-net-continue')
+                return False
 
         def async_net_error (self, message):
                 "handle netstring protocol errors"
                 assert None == self.log (message, 'async-net-error')
                 self.handle_close ()
-                

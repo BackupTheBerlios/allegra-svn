@@ -42,106 +42,67 @@ import collections, socket
 from allegra import async_core
 
 
-# Given 'haystack', see if any prefix of 'needle' is at its end.  This
-# assumes an exact match has already been checked.  Return the number of
-# characters matched.
-# for example:
-# f_p_a_e ("qwerty\r", "\r\n") => 1
-# f_p_a_e ("qwertydkjf", "\r\n") => 0
-# f_p_a_e ("qwerty\r\n", "\r\n") => <undefined>
-
 def find_prefix_at_end (haystack, needle):
+        "given 'haystack', see if any prefix of 'needle' is at its end."
         l = len (needle) - 1
         while l and not haystack.endswith (needle[:l]):
                 l -= 1
         return l
-        #
-        # this could maybe be made faster with a computed regex?
-        # [answer: no; circa Python-2.0, Jan 2001]
-        # new python:   28961/s
-        # old python:   18307/s
-        # re:        12820/s
-        # regex:     14035/s
 
 
-def collect (c):
-        c.collector_stalled = False
-        lb = len (c.ac_in_buffer)
+def collect (c, buffer):
+        "collect a buffer for a channel or collector"
+        lb = len (buffer)
         while lb:
                 terminator = c.get_terminator ()
                 if terminator is None or terminator == '':
-                        c.collect_incoming_data (c.ac_in_buffer)
-                        c.ac_in_buffer = ''
+                        c.collect_incoming_data (buffer)
+                        buffer = ''
                 elif isinstance (terminator, int):
-                        n = terminator
-                        if lb < n:
-                                c.collect_incoming_data (c.ac_in_buffer)
-                                c.ac_in_buffer = ''
-                                c.terminator = c.terminator - lb
+                        if lb < terminator:
+                                c.collect_incoming_data (buffer)
+                                buffer = ''
+                                c.set_terminator (terminator - lb)
                         else:
-                                c.collect_incoming_data (c.ac_in_buffer[:n])
-                                c.ac_in_buffer = c.ac_in_buffer[n:]
-                                c.terminator = 0
+                                c.collect_incoming_data (buffer[:terminator])
+                                buffer = buffer[terminator:]
+                                c.set_terminator (0)
                                 if c.found_terminator ():
                                         c.collector_stalled = True
                                         break
 
                 else:
                         tl = len (terminator)
-                        index = c.ac_in_buffer.find (terminator)
+                        index = buffer.find (terminator)
                         if index != -1:
                                 if index > 0:
                                         c.collect_incoming_data (
-                                                c.ac_in_buffer[:index]
+                                                buffer[:index]
                                                 )
-                                c.ac_in_buffer = c.ac_in_buffer[index+tl:]
+                                buffer = buffer[index+tl:]
                                 if c.found_terminator ():
                                         c.collector_stalled = True
                                         break
                                 
                         else:
                                 index = find_prefix_at_end (
-                                        c.ac_in_buffer, terminator
+                                        buffer, terminator
                                         )
                                 if index:
                                         if index != lb:
                                                 c.collect_incoming_data (
-                                                        c.ac_in_buffer[:-index]
+                                                        buffer[:-index]
                                                         )
-                                                c.ac_in_buffer = \
-                                                        c.ac_in_buffer[-index:]
+                                                buffer = buffer[-index:]
                                         break
                                         
                                 else:
-                                        c.collect_incoming_data (
-                                                c.ac_in_buffer
-                                                )
-                                        c.ac_in_buffer = ''
-                lb = len (c.ac_in_buffer)
-        
+                                        c.collect_incoming_data (buffer)
+                                        buffer = ''
+                lb = len (buffer)
+        return buffer
 
-def produce (c):
-        while len (c.producer_fifo):
-                p = c.producer_fifo[0]
-                if p == None:
-                        if c.ac_out_buffer == '':
-                                c.producer_fifo.popleft ()
-                                c.handle_close () # this *is* an event
-                        return
-                    
-                elif type (p) == str:
-                        c.producer_fifo.popleft ()
-                        c.ac_out_buffer += p
-                        return
 
-                data = p.more ()
-                if data:
-                        c.ac_out_buffer += data
-                        return
-                    
-                c.producer_fifo.popleft ()                        
-                        
-                        
 class Async_chat (async_core.Async_dispatcher):
 
         ac_in_buffer_size = ac_out_buffer_size = 4096
@@ -150,6 +111,7 @@ class Async_chat (async_core.Async_dispatcher):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
                 self.producer_fifo = collections.deque ()
+                # self.push = self.producer_fifo.append
                 async_core.Async_dispatcher.__init__ (self, conn)
 
         def __repr__ (self):
@@ -157,24 +119,12 @@ class Async_chat (async_core.Async_dispatcher):
         
         collector_stalled = False
                 
-        #def readable (self):
-        #        "predicate for inclusion in the poll loop for input"
-        #        return (len (self.ac_in_buffer) <= self.ac_in_buffer_size)
-
         def readable (self):
                 "predicate for inclusion in the poll loop for input"
                 return not (
                         self.collector_stalled or
                         len (self.ac_in_buffer) > self.ac_in_buffer_size
                         )
-
-        #def writable (self):
-        #        "predicate for inclusion in the poll loop for output"
-        #        return not (
-        #                (self.ac_out_buffer == '') and
-        #                not self.producer_fifo and 
-        #                self.connected
-        #                )
 
         def writable (self):
                 "predicate for inclusion in the poll loop for output"
@@ -194,37 +144,64 @@ class Async_chat (async_core.Async_dispatcher):
                                 )
 
         def handle_read (self):
-                "try to refill the input buffer and consume it"
+                "try to refill the input buffer and collect it"
                 try:
                         data = self.recv (self.ac_in_buffer_size)
                 except socket.error, why:
-                        self.handle_error()
+                        self.handle_error ()
                         return
 
-                self.ac_in_buffer += data
-                self.async_collect ()
+                self.ac_in_buffer = collect (self, self.ac_in_buffer + data)
 
         def handle_write (self):
-                "try to refill the output buffer and send it"
+                "maybe refill the output buffer and try to send it"
                 obs = self.ac_out_buffer_size
-                if (len (self.ac_out_buffer) < obs):
-                        self.async_produce ()
-                if self.ac_out_buffer and self.connected:
+                buffer = self.ac_out_buffer
+                if len (buffer) < obs:
+                        fifo = self.producer_fifo
+                        while fifo:
+                                p = fifo[0]
+                                if p == None:
+                                        if buffer == '':
+                                                fifo.popleft ()
+                                                self.handle_close () 
+                                                return
+                                        
+                                        break
+                                    
+                                elif type (p) == str:
+                                        fifo.popleft ()
+                                        buffer += p
+                                        break
+                
+                                data = p.more ()
+                                if data:
+                                        buffer += data
+                                        break
+                                    
+                                fifo.popleft ()
+                        #
+                        # note that we don't glob here and don't try to
+                        # refill the buffer as much as possible because
+                        # that's something better handled at the application
+                        # protocol level (for instance HTTP/1.1 chunking)
+                        #
+                        # the buffer here acts more as a limit than as an
+                        # accumulator ...
+                        #
+                if buffer and self.connected:
                         try:
-                                sent = self.send (
-                                        self.ac_out_buffer[:obs]
-                                        )
+                                sent = self.send (buffer[:obs])
                         except socket.error, why:
                                 self.handle_error ()
                         else:
                                 if sent:
-                                        self.ac_out_buffer = \
-                                                self.ac_out_buffer[sent:]
+                                        self.ac_out_buffer = buffer[sent:]
+                                else:
+                                        self.ac_out_buffer = buffer
+                else:
+                        self.ac_out_buffer = buffer
                         
-        async_collect = collect
-
-        async_produce = produce
-        
         def push (self, p):
                 "push a string or producer on the output queue, initiate send"
                 assert type (p) == str or hasattr (p, 'more')
