@@ -156,7 +156,7 @@ class Async_net (async_core.Async_dispatcher):
 
         # The Async_net Interface
 
-        def async_net_out_buffer (self, strings):
+        def async_net_out (self, strings):
                 "buffer netstrings of an iterable of 8-bit byte strings"
                 self.ac_out_buffer += ''.join ((
                         '%d:%s,' % (len (s), s) for s in strings
@@ -179,17 +179,18 @@ class Async_net (async_core.Async_dispatcher):
                 except NetstringError, error:
                         self.async_net_error (error)
 
-        async_net_in_buffer = ''
+        async_net_in = ''
 
         def async_net_collect (self, bytes):
                 "collect an incomplete netstring chunk into a buffer"
-                self.async_net_in_buffer += bytes
+                self.async_net_in += bytes
                 
         def async_net_terminate (self, bytes):
                 "terminate a collected or buffered netstring"
                 if bytes == None:
-                        self.async_net_continue (self.async_net_in_buffer)
-                        self.async_net_in_buffer = ''
+                        bytes = self.async_net_in
+                        self.async_net_in = ''
+                        self.async_net_continue (bytes)
                 else:
                         self.async_net_continue (bytes)
 
