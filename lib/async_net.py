@@ -19,43 +19,56 @@ import collections, socket
 
 from allegra import async_core
 
-def collect (c, buffer):
-        while buffer:
-                pos = buffer.find (':')
-                if pos < 0:
-                        if not buffer.isdigit ():
-                                c.async_net_error ('1 not a netstring')
-                                return ''
-                        
-                        return buffer
-                        
-                try:
-                        next = pos + int (buffer[:pos]) + 1
-                except:
-                        c.async_net_error ('2 not a length')
-                        return ''
-                        
-                if next >= len (buffer):
-                        if next > c.ac_in_buffer_size:
-                                c.async_net_error ('3 buffer limit')
-                                return ''
-                                
-                        return buffer # ... buffer more
-                
-                elif buffer[next] == ',':
-                        if c.async_net_continue (buffer[pos+1:next]):
-                                return buffer[next+1:]
+
+class NetstringError (Exception): pass
+
+def netcollect (next, buffer, collect, terminate):
+        "consume a buffer of netstrings into a collector sink"
+        lb = len (buffer)
+        if next > 0:
+                if next > lb:
+                        collect (buffer)
+                        return next - lb, '' # buffer more ...
+
+                if buffer[next] == ',':
+                        collect (buffer[:next])
+                        if terminate (None):
+                                return 0, buffer[next+1:] # stop now!
                         
                 else:
-                        c.async_net_error ('4 missing end')
-                        return ''
+                        raise NetstringError, '3 missing end'
+                
+                prev = next + 1
+        else:
+                prev = 0
+        while prev < lb:
+                pos = buffer.find (':', prev)
+                if pos < 0:
+                        if prev > 0:
+                                buffer = buffer[prev:]
+                        if not buffer.isdigit ():
+                                raise NetstringError, '1 not a netstring'
                         
-                buffer = buffer[next+1:]
-                #
-                # TODO: optimize this method to avoid consuming
-                #       the buffer this way, by scanning it instead
-                #       but that's a little bit more tricky ...
-        return buffer
+                        return 0, buffer # buffer more ...
+                        
+                try:
+                        next = pos + int (buffer[prev:pos]) + 1
+                except:
+                        raise NetstringError, '2 not a length'
+                        
+                if next >= lb:
+                        collect (buffer[pos+1:])
+                        return next - lb, '' # buffer more
+                
+                elif buffer[next] == ',':
+                        if terminate (buffer[pos+1:next]):
+                                return 0, buffer[next+1:] # stop now!
+                        
+                else:
+                        raise NetstringError, '3 missing end'
+                      
+                prev = next + 1 # continue ...
+        return 0, '' # buffer consumed.
 
 
 class Async_net (async_core.Async_dispatcher):
@@ -63,11 +76,12 @@ class Async_net (async_core.Async_dispatcher):
         ac_in_buffer_size = 1<<14
         ac_out_buffer_size = 4096
         
+        terminator = 0
+        
         def __init__ (self, conn=None):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
                 self.netstrings_fifo = collections.deque ()
-                # self.async_net_push = self.netstrings_fifo.append
                 async_core.Async_dispatcher.__init__ (self, conn)
 
         def __repr__ (self):
@@ -93,7 +107,8 @@ class Async_net (async_core.Async_dispatcher):
                         self.handle_error()
                         return
 
-                self.ac_in_buffer = collect (self, self.ac_in_buffer + data)
+                self.ac_in_buffer += data
+                self.async_net_resume ()
 
         def handle_write (self):
                 "refill the output buffer, try to send it or close if done"
@@ -141,17 +156,69 @@ class Async_net (async_core.Async_dispatcher):
 
         # The Async_net Interface
 
+        def async_net_out_buffer (self, strings):
+                "buffer netstrings of an iterable of 8-bit byte strings"
+                self.ac_out_buffer += ''.join ((
+                        '%d:%s,' % (len (s), s) for s in strings
+                        ))
+
         def async_net_push (self, strings):
-                "push an iterable of 8-bit byte strings, initiate send"
+                "push an iterable of 8-bit byte strings for output"
+                assert hasattr (strings, '__iter__')
                 self.netstrings_fifo.append (strings)
-                # self.handle_write ()
 
-        def async_net_continue (self, data):
-                "handle a netstring received"
-                assert None == self.log (data, 'async-net-continue')
-                return False
+        def async_net_resume (self):
+                "try to consume the input netstrings buffered"
+                try:
+                        self.terminator, self.ac_in_buffer = netcollect (
+                                self.terminator, 
+                                self.ac_in_buffer,
+                                self.async_net_collect, 
+                                self.async_net_terminate
+                                )
+                except NetstringError, error:
+                        self.async_net_error (error)
 
+        async_net_in_buffer = ''
+
+        def async_net_collect (self, bytes):
+                "collect an incomplete netstring chunk into a buffer"
+                self.async_net_in_buffer += bytes
+                
+        def async_net_terminate (self, bytes):
+                "terminate a collected or buffered netstring"
+                if bytes == None:
+                        self.async_net_continue (self.async_net_in_buffer)
+                        self.async_net_in_buffer = ''
+                else:
+                        self.async_net_continue (bytes)
+
+        def async_net_continue (self, bytes):
+                "assert debug log of collected netstrings"
+                assert None == self.log (bytes, 'async-net-continue')
+        
         def async_net_error (self, message):
-                "handle netstring protocol errors"
-                assert None == self.log (message, 'async-net-error')
+                "log netstrings error and close the channel"
+                self.log (message, 'async-net-error')
                 self.handle_close ()
+             
+                
+# Optimized Netstrings Stream
+#
+# To produce a stream of netstrings for what is essentially a packet protocol
+# like TCP, the optimum is to queue iterables of strings, "scan" it to build
+# a buffer and rely on CPython's optimization of incrementation ...
+#
+# It may be even faster to just write directly to the buffer when iterables
+# are not generators that the application would prefer to execute when the
+# channel is writable (in order to ration processing and memory along I/O,
+# providing reliable time sharing for slow network applications and 
+# delivering the freshest possible response state to all peers).
+#
+# So, there is an async_net_buffer method for simpler netstring channels.
+#
+# Note that it may also be applied to bypass the netstrings fifo, giving
+# practically two levels of priority: one for what is itered and buffered 
+# immediately and one for what is queued to be itered when I/O is available.
+#
+# 
