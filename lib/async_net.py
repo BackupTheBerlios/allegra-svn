@@ -201,24 +201,3 @@ class Async_net (async_core.Async_dispatcher):
                 "log netstrings error and close the channel"
                 self.log (message, 'async-net-error')
                 self.handle_close ()
-             
-                
-# Optimized Netstrings Stream
-#
-# To produce a stream of netstrings for what is essentially a packet protocol
-# like TCP, the optimum is to queue iterables of strings, "scan" it to build
-# a buffer and rely on CPython's optimization of incrementation ...
-#
-# It may be even faster to just write directly to the buffer when iterables
-# are not generators that the application would prefer to execute when the
-# channel is writable (in order to ration processing and memory along I/O,
-# providing reliable time sharing for slow network applications and 
-# delivering the freshest possible response state to all peers).
-#
-# So, there is an async_net_buffer method for simpler netstring channels.
-#
-# Note that it may also be applied to bypass the netstrings fifo, giving
-# practically two levels of priority: one for what is itered and buffered 
-# immediately and one for what is queued to be itered when I/O is available.
-#
-# 
