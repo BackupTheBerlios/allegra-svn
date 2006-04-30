@@ -186,7 +186,7 @@ class Async_net (async_core.Async_dispatcher):
                 self.async_net_in += bytes
                 
         def async_net_terminate (self, bytes):
-                "terminate a collected or buffered netstring"
+                "terminate a collected or buffered netstring and continue"
                 if bytes == None:
                         bytes = self.async_net_in
                         self.async_net_in = ''
