@@ -181,7 +181,7 @@ def netpipe (more, BUFFER_MAX=0):
 		if 0 < BUFFER_MAX < next:
 			raise (
 				NetstringsError, 
-				'3 buffer overflow (%d bytes)' % BUFFER_MAX
+				'4 buffer overflow (%d bytes)' % BUFFER_MAX
 				)
 			
 		while next >= len (buffer):
@@ -189,13 +189,13 @@ def netpipe (more, BUFFER_MAX=0):
 			if data:
 				buffer += data
 			else:
-				raise NetstringsError, '4 end of pipe'
+				raise NetstringsError, '5 end of pipe'
 		
 		if buffer[next] == ',':
 			yield buffer[pos+1:next]
 
 		else:
-			raise NetstringsError, '5 missing coma'
+			raise NetstringsError, '3 missing coma'
 
 		buffer = buffer[next+1:]
 		if buffer == '' or buffer.isdigit ():
