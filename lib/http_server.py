@@ -134,7 +134,7 @@ class HTTP_server_channel (
 		if self.http_version != version[-3:]:
 			self.http_version = version[-3:]
                 # push the (stalled) reactor in the channel's output fifo
-                self.producer_fifo.append (reactor)
+                self.output_fifo.append (reactor)
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
                 if self.http_server.http_continue (reactor):
@@ -248,7 +248,7 @@ class HTTP_server_channel (
                         'connection'
                         ) != 'keep-alive':
                         # close when done if not kept alive
-                        self.producer_fifo.append (None)
+                        self.output_fifo.append (None)
                 #
                 # do not iniate send, wait for a write event instead ...
                 #self.handle_write ()

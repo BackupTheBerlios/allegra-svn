@@ -22,18 +22,18 @@ from allegra import async_core
 
 class NetstringError (Exception): pass
 
-def netcollect (next, buffer, collect, terminate):
-        "consume a buffer of netstrings into a collector sink"
+def collect_net (next, buffer, collect, terminate):
+        "consume a buffer of netstrings into a stallable collector sink"
         lb = len (buffer)
         if next > 0:
                 if next > lb:
                         collect (buffer)
-                        return next - lb, '' # buffer more ...
+                        return next - lb, '', False # buffer more ...
 
                 if buffer[next] == ',':
                         collect (buffer[:next])
                         if terminate (None):
-                                return 0, buffer[next+1:] # stop now!
+                                return 0, buffer[next+1:], True # stop now!
                         
                 else:
                         raise NetstringError, '3 missing end'
@@ -49,7 +49,7 @@ def netcollect (next, buffer, collect, terminate):
                         if not buffer.isdigit ():
                                 raise NetstringError, '1 not a netstring'
                         
-                        return 0, buffer # buffer more ...
+                        return 0, buffer, False # buffer more ...
                         
                 try:
                         next = pos + int (buffer[prev:pos]) + 1
@@ -58,45 +58,48 @@ def netcollect (next, buffer, collect, terminate):
                         
                 if next >= lb:
                         collect (buffer[pos+1:])
-                        return next - lb, '' # buffer more
+                        return next - lb, '', False # buffer more
                 
                 elif buffer[next] == ',':
                         if terminate (buffer[pos+1:next]):
-                                return 0, buffer[next+1:] # stop now!
+                                return 0, buffer[next+1:], True # stop now!
                         
                 else:
                         raise NetstringError, '3 missing end'
                       
                 prev = next + 1 # continue ...
-        return 0, '' # buffer consumed.
+        return 0, '', False # buffer consumed.
 
 
 class Async_net (async_core.Async_dispatcher):
 
-        ac_in_buffer_size = 1<<14
-        ac_out_buffer_size = 4096
-        
-        terminator = 0
-        
         def __init__ (self, conn=None):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
-                self.netstrings_fifo = collections.deque ()
+                self.output_fifo = collections.deque ()
                 async_core.Async_dispatcher.__init__ (self, conn)
 
         def __repr__ (self):
                 return 'async-net id="%x"' % id (self)
                 
+        ac_in_buffer_size = 4096
+        ac_out_buffer_size = 4096
+        terminator = 0
+        collector_stalled = False
+                
         def readable (self):
-                "readable when the input buffer is not full"
-                return (len (self.ac_in_buffer) <= self.ac_in_buffer_size)
+                "predicate for inclusion in the poll loop for input"
+                return not (
+                        self.collector_stalled or
+                        len (self.ac_in_buffer) > self.ac_in_buffer_size
+                        )
 
         def writable (self):
                 """writable when connected and the output buffer or queue 
                 are not empty"""
                 return not (
                         (self.ac_out_buffer == '') and
-                        not self.netstrings_fifo and self.connected
+                        not self.output_fifo and self.connected
                         )
 
         def handle_read (self):
@@ -104,17 +107,28 @@ class Async_net (async_core.Async_dispatcher):
                 try:
                         data = self.recv (self.ac_in_buffer_size)
                 except socket.error, why:
-                        self.handle_error()
+                        self.handle_error ()
                         return
 
-                self.ac_in_buffer += data
-                self.async_net_resume ()
+                try:
+                        (
+                                self.terminator, 
+                                self.ac_in_buffer,
+                                self.collector_stalled
+                                ) = collect_net (
+                                        self.terminator, 
+                                        self.ac_in_buffer + data,
+                                        self.async_net_collect, 
+                                        self.async_net_terminate
+                                        )
+                except NetstringError, error:
+                        self.async_net_error (error)
 
         def handle_write (self):
                 "refill the output buffer, try to send it or close if done"
                 obs = self.ac_out_buffer_size
                 buffer = self.ac_out_buffer
-                fifo = self.netstrings_fifo
+                fifo = self.output_fifo
                 while len (buffer) < obs and fifo:
                         strings = fifo.popleft ()
                         if strings == None:
@@ -149,10 +163,10 @@ class Async_net (async_core.Async_dispatcher):
                 """close this channel when previously queued strings have
                 been sent, or close now if the queue is empty.
                 """
-                if len (self.netstrings_fifo) == 0:
-                        self.handle_close ()
+                if self.output_fifo:
+                        self.output_fifo.append (None)
                 else:
-                        self.netstrings_fifo.append (None)
+                        self.handle_close ()
 
         # The Async_net Interface
 
@@ -165,17 +179,25 @@ class Async_net (async_core.Async_dispatcher):
         def async_net_push (self, strings):
                 "push an iterable of 8-bit byte strings for output"
                 assert hasattr (strings, '__iter__')
-                self.netstrings_fifo.append (strings)
+                self.output_fifo.append (strings)
 
         def async_net_resume (self):
                 "try to consume the input netstrings buffered"
+                if not self.ac_in_buffer:
+                        self.collector_stalled = False
+                        return
+                
                 try:
-                        self.terminator, self.ac_in_buffer = netcollect (
+                        (
                                 self.terminator, 
                                 self.ac_in_buffer,
-                                self.async_net_collect, 
-                                self.async_net_terminate
-                                )
+                                self.collector_stalled
+                                ) = collect_net (
+                                        self.terminator, 
+                                        self.ac_in_buffer,
+                                        self.async_net_collect, 
+                                        self.async_net_terminate
+                                        )
                 except NetstringError, error:
                         self.async_net_error (error)
 
@@ -190,13 +212,12 @@ class Async_net (async_core.Async_dispatcher):
                 if bytes == None:
                         bytes = self.async_net_in
                         self.async_net_in = ''
-                        self.async_net_continue (bytes)
-                else:
-                        self.async_net_continue (bytes)
+                return self.async_net_continue (bytes)
 
         def async_net_continue (self, bytes):
                 "assert debug log of collected netstrings"
                 assert None == self.log (bytes, 'async-net-continue')
+                return False
         
         def async_net_error (self, message):
                 "log netstrings error and close the channel"

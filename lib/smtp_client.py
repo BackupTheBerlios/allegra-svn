@@ -177,17 +177,17 @@ class SMTP_client_channel (
                         # send DATA command or mail input
                         if response == '354':
                                 # start mail input, end with <CRLF>.<CRLF>
-                                self.producer_fifo.append (''.join (
+                                self.output_fifo.append (''.join (
                                         mime_headers.lines (
                                                 reactor.mime_producer_headers
                                                 )
                                         ))
-                                self.producer_fifo.append (
+                                self.output_fifo.append (
                                         mime_reactor.Escaping_producer (
                                                 reactor.mime_producer_body
                                                 )
                                         )
-                                self.producer_fifo.append ('\r\n.\r\n')
+                                self.output_fifo.append ('\r\n.\r\n')
                                 self.handle_write ()
                         else:
                                 self.push ('DATA\r\n')

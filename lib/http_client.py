@@ -230,7 +230,7 @@ class HTTP_client_pipeline (
                                 reactor.mime_producer_headers
                                 )
                         lines.insert (0, line)
-                        self.producer_fifo.append (''.join (lines))
+                        self.output_fifo.append (''.join (lines))
                 else:
                         # POST and PUT ...
                         #
@@ -246,8 +246,8 @@ class HTTP_client_pipeline (
                                 reactor.mime_producer_headers
                                 )
                         lines.insert (0, line)
-                        self.producer_fifo.append (''.join (lines))
-                        self.producer_fifo.append (
+                        self.output_fifo.append (''.join (lines))
+                        self.output_fifo.append (
                                 reactor.mime_producer_body
                                 )
                 # append the reactor to the queue of responses expected ...

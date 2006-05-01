@@ -110,8 +110,7 @@ class Async_chat (async_core.Async_dispatcher):
         def __init__ (self, conn=None):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
-                self.producer_fifo = collections.deque ()
-                # self.push = self.producer_fifo.append
+                self.output_fifo = collections.deque ()
                 async_core.Async_dispatcher.__init__ (self, conn)
 
         def __repr__ (self):
@@ -130,7 +129,7 @@ class Async_chat (async_core.Async_dispatcher):
                 "predicate for inclusion in the poll loop for output"
                 try:
                         return not (
-                                self.producer_fifo[
+                                self.output_fifo[
                                         0
                                         ].producer_stalled () and
                                 self.connected
@@ -139,7 +138,7 @@ class Async_chat (async_core.Async_dispatcher):
                 except:
                         return not (
                                 (self.ac_out_buffer == '') and 
-                                not self.producer_fifo and 
+                                not self.output_fifo and 
                                 self.connected
                                 )
 
@@ -158,7 +157,7 @@ class Async_chat (async_core.Async_dispatcher):
                 obs = self.ac_out_buffer_size
                 buffer = self.ac_out_buffer
                 if len (buffer) < obs:
-                        fifo = self.producer_fifo
+                        fifo = self.output_fifo
                         while fifo:
                                 p = fifo[0]
                                 if p == None:
@@ -202,21 +201,16 @@ class Async_chat (async_core.Async_dispatcher):
                 else:
                         self.ac_out_buffer = buffer
                         
-        def push (self, p):
-                "push a string or producer on the output queue, initiate send"
+        def async_push (self, p):
+                "push a string or producer on the output deque"
                 assert type (p) == str or hasattr (p, 'more')
-                self.producer_fifo.append (p)
-                self.handle_write ()
+                self.output_fifo.append (p)
+                
+        push_with_producer = push = async_push
 
-        def close_when_done (self):
-                """automatically close this channel once the outgoing queue 
-                is empty, or handle close now if it is allready empty"""
-                if len (self.producer_fifo) == 0:
-                        self.handle_close () # when done is now!
-                else:
-                        self.producer_fifo.append (None)
-
-        # The Async_chat Interface
+        def async_collect (self):
+                self.collector_stalled = False
+                self.ac_in_buffer = collect (self, self.ac_in_buffer)
 
         terminator = '\n'
 
@@ -234,6 +228,14 @@ class Async_chat (async_core.Async_dispatcher):
                         self.get_terminator (), 'found-terminator'
                         )
                 return False # collector NOT stalled
+        
+        def close_when_done (self):
+                """automatically close this channel once the outgoing queue 
+                is empty, or handle close now if it is allready empty"""
+                if self.output_fifo:
+                        self.output_fifo.append (None)
+                else:
+                        self.handle_close () # when done is now!
 
 # Note about this implementation
 #

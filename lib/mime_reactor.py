@@ -264,7 +264,7 @@ if __name__ == '__main__':
 			
 # A MIME reactor that uses a reactor.Buffer_reactor to proxy the collected
 # headers and body to an asynchat channel simply by pushing the
-# reactor in its producer_fifo queue. It may be used to proxy any
+# reactor in its output_fifo queue. It may be used to proxy any
 # kind of MIME protocols, including HTTP, SMTP, POP3, etc.
 #
 # The lifecycle of a one way MIME proxy is usally this one:
