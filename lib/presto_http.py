@@ -94,7 +94,6 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                 channel = reactor.http_channel
                 channel.http_continue (reactor)
                 channel.collector_stalled = False
-                #channel.async_collect ()
                 #
                 # Resume collection of the async_chat buffer
                 # stalled while loading the synchronized XML

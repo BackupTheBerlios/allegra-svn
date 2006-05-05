@@ -122,8 +122,6 @@ class MIME_collector (object):
 
 class MULTIPART_collector (object):
 	
-	"A recursive MIME/MULTIPART collector"
-
 	collector_is_simple = False
 
         def __init__ (self, mime_collector, multipart_factory):

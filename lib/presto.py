@@ -561,7 +561,7 @@ PRESTo_others = (
 
 def presto_xml (
         instance, walked,
-        attributes=' xmlns="http://presto/"', horizon=1024, encoding='ASCII',
+        attributes=' xmlns="http://presto/"', encoding='ASCII',
         ):
         # Serialize any Python state to an XML string, using by default
         # an charset encoding that is supported everywhere: 7bit ASCII.
@@ -601,44 +601,29 @@ def presto_xml (
         if isinstance (instance, PRESTo_Iterable) and not instance_id in walked:
                 # 3. simple iterables: tuple, list, etc ...
                 walked.add (instance_id)
-                if len (walked) > horizon:
-                        attributes += ' horizon="%d"' % horizon
-                else:
-                        return '<iter%s>%s</iter>' % (
-                                attributes, 
-                                ''.join ((
-                                        presto_xml (
-                                                i, walked, '',
-                                                horizon, encoding
-                                                )
-                                        for i in instance
-                                        if not id (i) in walked
-                                        ))
-                                )
+                return '<iter%s>%s</iter>' % (
+                        attributes, 
+                        ''.join ((
+                                presto_xml (i, walked, '', encoding)
+                                for i in instance
+                                if not id (i) in walked
+                                ))
+                        )
         
         elif isinstance (instance, dict) and not instance_id in walked:
+                # 4. dictionnary
                 walked.add (instance_id)
-                if len (walked) > horizon:
-                        attributes += ' horizon="%d"' % horizon
-                else:
-                        # 4. dictionnary
-                        items = ((
-                                presto_xml (
-                                        k, walked, '',
-                                        horizon, encoding
-                                        ),
-                                presto_xml (
-                                        v, walked, '',
-                                        horizon, encoding
-                                        )
-                                ) for k, v in instance.items ())
-                        return '<map%s>%s</map>' % (
-                                attributes,
-                                ''.join ((
-                                        '<item>%s%s</item>' % i
-                                        for i in items if i[0] or i[1]
-                                        ))
-                                )
+                items = ((
+                        presto_xml (k, walked, '', encoding),
+                        presto_xml (v, walked, '', encoding)
+                        ) for k, v in instance.items ())
+                return '<map%s>%s</map>' % (
+                        attributes,
+                        ''.join ((
+                                '<item>%s%s</item>' % i
+                                for i in items if i[0] or i[1]
+                                ))
+                        )
                                         
         if instance_id in walked:
                 return '<str%s>...</str>' % attributes

@@ -156,24 +156,26 @@ RSS_TYPES = {
         #'http://purl.org/atom/ns# id'
         }
 
-def feed (url, statement):
+def feed (url, http, statement):
         host, port, urlpath = http_client.RE_URL.match (url).groups ()
         dom = xml_reactor.XML_collector (unicoding=0)
         pns_xml.articulate (
                 dom, url, RSS_TYPES, xml_dom.XML_delete, statement
                 )
-        request = http_client.GET (http_client.HTTP_client (
-                ) (host, int (port or '80')), urlpath) (dom)
+        request = http_client.GET (
+                http (host, int (port or '80')), urlpath
+                ) (dom)
         return dom, request
 
-def feed_benchmark (url, statement):
+def feed_benchmark (url, http, statement):
         host, port, urlpath = http_client.RE_URL.match (url).groups ()
         dom = xml_reactor.XML_benchmark (unicoding=0)
         pns_xml.articulate (
                 dom, url, RSS_TYPES, xml_dom.XML_delete, statement
                 )
-        request = http_client.GET (http_client.HTTP_client (
-                ) (host, int (port or '80')), urlpath) (dom)
+        request = http_client.GET (
+                http (host, int (port or '80')), urlpath
+                ) (dom)
         return dom, request
 
 
@@ -191,6 +193,7 @@ if __name__ == '__main__':
         else:
                 benchmark = __debug__
         t = time.clock ()
+        http = http_client.HTTP_client ()
         if len (sys.argv) > 2:
                 from allegra import netstring, pns_model, pns_client
                 pns = pns_client.PNS_client ()
@@ -209,7 +212,9 @@ if __name__ == '__main__':
         else:
                 pns_statement = pns_xml.log_statement
         if benchmark:
-                dom, request = feed_benchmark (sys.argv[1], pns_statement)
+                dom, request = feed_benchmark (
+                        sys.argv[1], http, pns_statement
+                        )
                 async_loop.loop ()
                 t = time.clock () - t
                 loginfo.log (
@@ -220,9 +225,11 @@ if __name__ == '__main__':
                                 ), 'info'
                         )
         else:
-                dom, request = feed (sys.argv[1], pns_statement)
+                dom, request = feed (sys.argv[1], http, pns_statement)
         async_loop.dispatch ()
-        assert None == finalization.collect ()
+        if __debug__:
+                import finalization
+                finalization.collect ()
         
         
 # TODO: add support for RSS 2.0 and RDF, drop ATOM alltogether, maybe

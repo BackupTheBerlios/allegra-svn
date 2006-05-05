@@ -17,32 +17,18 @@
 
 from allegra import pns_sat
 
-SAT_RE = {
-        'en': pns_sat.PNS_ARTICULATE_EN,
-        'fr': pns_sat.PNS_ARTICULATE_FR,
-        }
+PLAIN_TEXT_RE = (re.compile ('\r?\n(?:\r?\n)+'), ) # paragraphs
 
-PLAIN_TEXT_RE = (
-        re.compile ('\r?\n(?:\r?\n)+'), # paragraphs
-        )
 
-MIME_LANG = 'en'
-
-class TEXT_PLAIN (object):
+class Collector (object):
         
         mime_type = 'text/plain'
         
         collector_is_simple = True
         collector_stalled = False
         
-        SAT_CHUNK = 507
-        SAT_STRIP = pns_sat.SAT_STRIP_UTF8
-        SAT_HORIZON = 126
-        
-        def __init__ (self, headers, articulators=None):
-                self.articulators = PLAIN_TEXT_RE + (
-                        articulators or SAT_RE[MIME_LANG]
-                        )
+        def __init__ (self, headers, lang='en'):
+                self.articulators = PLAIN_TEXT_RE + lang
                 self.buffer = ''
                 self.horizon = set ()
                 self.articulated = []
@@ -55,37 +41,56 @@ class TEXT_PLAIN (object):
                         if next > 0:
                                 more = self.buffer[:next]
                                 self.buffer = self.buffer[next:]
-                                pns_sat.pns_sat_chunk (
-                                        more, 
-                                        self.horizon, 
-                                        self.articulated, 
-                                        self.articulators,
-                                        self.SAT_CHUNK, 
-                                        self.SAT_STRIP, 
-                                        self.SAT_HORIZON, 
-                                        0
-                                        )
+                                # ...
         
         def find_terminator (self):
                 if self.buffer:
-                        pns_sat.pns_sat_chunk (
-                                self.buffer, 
-                                self.horizon, 
-                                self.articulated, 
-                                self.articulators,
-                                self.SAT_CHUNK, 
-                                self.SAT_STRIP, 
-                                self.SAT_HORIZON, 
-                                0
-                                )
+                        pass # ...
 
+
+def articulate_headers (
+        headers, context, statement, lang,
+        names=('subject', ), predicates=('from', 'to', 'date', )
+        ):
+        articulated = []
+        subject = pns_model.pns_name (netstring.encode ((
+                pns_sat.articulate_re (
+                        headers.get (n), articulated.append, lang
+                        ) for n in names
+                )))
+        for predicate in predicates:
+                object = headers.get (predicate)
+                if object == None:
+                        continue
+                
+                statement ((subject, predicate, object), )
 
 # Note about this implementation
 # 
 # This module implements a minimal MIME collector and UTF-8 transcoder 
 # for PNS/SAT articulator, something practical to articulate plain text
-# found in USENET and e-mail messages. However, its first test case is
-# an HTTP/1.1 plain text indexer! There is a significant corpus of text
-# in that format, for instance all the Internet's RFCs.
+# found in USENET and e-mail messages. 
 #
-# 
+# The purpose of pns_mime is to support the Enron mail and comp.lang.python
+# test cases, indexing all mail made available by the famous case and
+# do the same for as much as comp.lang.python is available on USENET.
+#
+# The CLI is a pipe that collects a stream of MIME messages from STDIN and 
+# pipes out articulated PNS statements on STDOUT:
+#
+#   pns_mime < mime 1> pns
+#
+# or if provided the proper arguments:
+#
+#   pns_mime 127.0.0.1 3534 < mime
+#
+# to a PNS/TCP metabase.
+
+# <mime>
+#   <id/>
+#   <subject/>
+#   <from/>
+#   <to/>
+#   <content-type/>
+# </mime>
+#

@@ -19,9 +19,10 @@
 
 import re, time, quopri
 
-from allegra import \
-        loginfo, async_chat, tcp_client, \
+from allegra import (
+        loginfo, async_chat, tcp_client, 
         dns_client, mime_headers, mime_reactor
+        )
 
 
 class NNRP_client_channel (
@@ -69,35 +70,4 @@ class NNRP_client_channel (
 # Note about this implementation
 #
 # Just enough of an USENET client to retrieve one or all articles from
-# a given newsgroup, decode Quoted Printable headers and collect it 
-#
-# Synopsis
-#
-# >>> from allegra import collector, nnrp_client
-# >>> usenet = nnrp_client.NNRP_client ('news.chello.be')
-# >>> usenet.articles ('comp.lang.python', collect, 0)
-# >>> usenet.article ('comp.lang.python', collect)
-#
-# The Right Way
-#
-# What should a USENET reader do? 
-#
-#  1. get new groups since (date)
-#
-#  2. for each subscribed (group)
-#
-#         get all new articles headers since (id)
-#
-#  4. read (id) that are relevant
-#
-#  3. walk references (id) up and down?
-#
-# from allegra import collector, nnrp_client
-#
-# usenet = nnrp_client.NNRP_client ('news.chello.be')
-# usenet.LIST (collector.File_collector ('newsgroups.txt'))
-# Continue ((
-#     usenet.GROUP ('comp.lang.python', ),
-#     usenet.GROUP ('comp.lang.python-announce')
-#     ))
-#
+# a given newsgroup, decode Quoted Printable headers and collect it. 
