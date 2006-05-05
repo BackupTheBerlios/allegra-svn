@@ -33,7 +33,7 @@ class Null_collector (object):
                 return True
 
 
-def null (data): pass
+def devnull (data): pass
 
 
 class File_collector (object):
@@ -63,7 +63,7 @@ class Limited_collector (object):
                 if self.limit > 0:
                         self.data += data
                 else:
-                        self.collect_incoming_data = null
+                        self.collect_incoming_data = devnull
                         # 
                         # just don't do anything after the limit, not even
                         # testing for it ;-)
@@ -212,47 +212,10 @@ class Simple_collector (object):
                 self.terminator = terminator
 
         def collect_incoming_data (self, data):
-                self.buffer = async_chat.collect (
+                self.buffer = async_chat.collect_chat (
                         self.collector, self.buffer + data
                         )
                         
         def found_terminator (self):
                 del collector.set_terminator, collector.get_terminator
                 return True # allways final
-        
-
-class Length_collector (object):
-
-        # wraps a complex collector with a length collector
-        
-        collector_is_simple = False
-
-        def __init__ (self, collector, size):
-                self.set_terminator = collector.set_terminator
-                self.length_collector = collector
-                self.length_collector_left = size
-
-        def length_collector_truncate (self, data):
-                pass # drop any truncated data
-
-        def collect_incoming_data (self, data):
-                self.length_left -= len (data)
-                if self.length_left < 0:
-                        self.length_collector.collect_incoming_data (
-                                data[:self.length_left]
-                                )
-                        self.collector_length_truncate (
-                                data[self.length_left:]
-                                )
-                        self.collect_incoming_data = \
-                                self.length_collector_truncate
-                else:
-                        self.length_collector.collect_incoming_data (data)
-
-        def found_terminator (self):
-                if (
-                        self.length_collector.found_terminator () and
-                        self.length_collector_left > 0
-                        ):
-                        self.set_terminator (self.length_collector_left)
-                return self.length_collector_left == 0        

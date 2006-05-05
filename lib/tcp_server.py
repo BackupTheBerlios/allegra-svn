@@ -338,3 +338,8 @@ class TCP_server_throttle (TCP_server_limit):
 # that suites a multiprotocol peer on the edge of a the network: one
 # client session per IP address, limited to a 3 seconds inactive timeout
 # and a 4KBps I/O limit on a public network.
+
+#
+# TODO: factor out the server_* API out of tcp_server_* interfaces.
+#       then move it to its own server.py module.
+#

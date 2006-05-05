@@ -181,7 +181,7 @@ class Async_net (async_core.Async_dispatcher):
                 assert hasattr (strings, '__iter__')
                 self.output_fifo.append (strings)
 
-        def async_net_resume (self):
+        def async_net_pull (self):
                 "try to consume the input netstrings buffered"
                 if not self.ac_in_buffer:
                         self.collector_stalled = False

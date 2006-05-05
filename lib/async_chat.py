@@ -50,7 +50,7 @@ def find_prefix_at_end (haystack, needle):
         return l
 
 
-def collect (c, buffer):
+def collect_chat (c, buffer):
         "collect a buffer for a channel or collector"
         lb = len (buffer)
         while lb:
@@ -150,7 +150,9 @@ class Async_chat (async_core.Async_dispatcher):
                         self.handle_error ()
                         return
 
-                self.ac_in_buffer = collect (self, self.ac_in_buffer + data)
+                self.ac_in_buffer = collect_chat (
+                        self, self.ac_in_buffer + data
+                        )
 
         def handle_write (self):
                 "maybe refill the output buffer and try to send it"
@@ -201,34 +203,6 @@ class Async_chat (async_core.Async_dispatcher):
                 else:
                         self.ac_out_buffer = buffer
                         
-        def async_push (self, p):
-                "push a string or producer on the output deque"
-                assert type (p) == str or hasattr (p, 'more')
-                self.output_fifo.append (p)
-                
-        push_with_producer = push = async_push
-
-        def async_collect (self):
-                self.collector_stalled = False
-                self.ac_in_buffer = collect (self, self.ac_in_buffer)
-
-        terminator = '\n'
-
-        def set_terminator (self, terminator):
-                self.terminator = terminator
-
-        def get_terminator (self):
-                return self.terminator
-
-        def collect_incoming_data(self, data):
-                assert None == self.log (data, 'collect-incoming-data')
-
-        def found_terminator(self):
-                assert None == self.log (
-                        self.get_terminator (), 'found-terminator'
-                        )
-                return False # collector NOT stalled
-        
         def close_when_done (self):
                 """automatically close this channel once the outgoing queue 
                 is empty, or handle close now if it is allready empty"""
@@ -237,6 +211,42 @@ class Async_chat (async_core.Async_dispatcher):
                 else:
                         self.handle_close () # when done is now!
 
+        def async_chat_push (self, p):
+                "push a string or producer on the output deque"
+                assert type (p) == str or hasattr (p, 'more')
+                self.output_fifo.append (p)
+                
+        # push_with_producer = push = async_chat_push
+
+        def async_chat_pull (self):
+                "stall no more and collect the input buffer"
+                self.collector_stalled = False
+                if self.ac_in_buffer:
+                        self.ac_in_buffer = collect_chat (
+                                self, self.ac_in_buffer
+                                )
+
+        terminator = '\n'
+
+        def set_terminator (self, terminator):
+                "set the channel's terminator"
+                self.terminator = terminator
+
+        def get_terminator (self):
+                "get the channel's terminator"
+                return self.terminator
+
+        def collect_incoming_data(self, data):
+                "assert debug log of collected data"
+                assert None == self.log (data, 'collect-incoming-data')
+
+        def found_terminator(self):
+                "assert debug log of terminator found"
+                assert None == self.log (
+                        self.get_terminator (), 'found-terminator'
+                        )
+                return False # collector NOT stalled
+        
 # Note about this implementation
 #
 # This is a refactored version of asynchat.py as found in Python 2.4, and

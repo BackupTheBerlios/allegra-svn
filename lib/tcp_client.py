@@ -238,3 +238,8 @@ class Pipeline (object):
                 assert None == loginfo.log (
                         '%r' % reactor, 'pipeline_push'
                         )
+                        
+#
+# TODO: factor out a client_* API out of tcp_client_* interfaces, 
+#       then move it to its own client.py module.
+#                        

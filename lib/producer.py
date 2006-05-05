@@ -21,29 +21,27 @@ import types
 
 
 class Simple_producer (object):
-	
-	"producer for a string"
+        
+        "scanning producer for a string"
 
-	def __init__ (self, data, buffer_size=4096):
-		self.data = data
-		self.buffer_size = buffer_size
+        def __init__ (self, data, chunk=4096):
+                lb = len (data)
+                self.content_length = lambda: lb
+                self.more = self.produce (data, chunk).next
 
-	def more (self):
-		if len (self.data) > self.buffer_size:
-			result = self.data[:self.buffer_size]
-			self.data = self.data[self.buffer_size:]
-			return result
-		
-		else:
-			result = self.data
-			self.data = ''
-			return result
+        def produce (self, data, chunk):
+                lb = len (data)
+                start = 0
+                while start < lb:
+                        end = start + chunk
+                        yield data[start:end]
 
-	def content_length (self):
-		return len (self.data)
-
-	def producer_stalled (self):
-		return False
+                        start = end
+                del data, self.content_length, self.more
+                yield ''
+        
+        def producer_stalled (self):
+                return False
 
 
 class File_producer (object):

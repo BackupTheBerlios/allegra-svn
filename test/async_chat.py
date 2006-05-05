@@ -41,8 +41,8 @@ class Proxy_sender (async_chat.Async_chat):
         self.receiver.async_chat_push (data + '\n')
         
     def handle_close (self):
-         self.receiver.close ()
-         self.close ()
+        self.receiver.close ()
+        self.close ()
          
 
 class Proxy_receiver (async_chat.Async_chat):
@@ -69,9 +69,9 @@ class Proxy_receiver (async_chat.Async_chat):
         self.sender.async_chat_push (data + '\n')
 
     def handle_close (self):
-         self.log ('Closing')
-         self.sender.close ()
-         self.close ()
+        self.log ('Closing')
+        self.sender.close ()
+        self.close ()
          
 
 if __name__ == '__main__':
