@@ -150,19 +150,14 @@ def http_collector_continue (reactor, collected):
                         'content-length'
                         )
                 if content_length:
-                        if collected.collector_is_simple:
-                                reactor.mime_collector_body = collected
-                                reactor.set_terminator (int (content_length))
-                        else:
-                                reactor.mime_collector_body = \
-                                        collector.Length_collector (
-                                                collected, 
-                                                int (content_length)
-                                                )
+                        if not collected.collector_is_simple:
+                                collected = collector.Simple_collector (
+                                        collected
+                                        )
+                        reactor.set_terminator (int (content_length))
                 else:
-                        # HTTP/1.0 connection closed
-                        reactor.mime_collector_body = collected
                         reactor.set_terminator (None)
+                reactor.mime_collector_body = collected
 
 # TODO: charset and compression decoding.
 #
