@@ -36,7 +36,7 @@ def collect_net (next, buffer, collect, terminate):
                                 return 0, buffer[next+1:], True # stop now!
                         
                 else:
-                        raise NetstringError, '3 missing end'
+                        raise NetstringError, '3 missing comma'
                 
                 prev = next + 1
         else:
@@ -65,7 +65,7 @@ def collect_net (next, buffer, collect, terminate):
                                 return 0, buffer[next+1:], True # stop now!
                         
                 else:
-                        raise NetstringError, '3 missing end'
+                        raise NetstringError, '3 missing comma'
                       
                 prev = next + 1 # continue ...
         return 0, '', False # buffer consumed.
@@ -95,8 +95,7 @@ class Async_net (async_core.Async_dispatcher):
                         )
 
         def writable (self):
-                """writable when connected and the output buffer or queue 
-                are not empty"""
+                "predicate for inclusion in the poll loop for output"
                 return not (
                         (self.ac_out_buffer == '') and
                         not self.output_fifo and self.connected
@@ -161,8 +160,7 @@ class Async_net (async_core.Async_dispatcher):
                         
         def close_when_done (self):
                 """close this channel when previously queued strings have
-                been sent, or close now if the queue is empty.
-                """
+                been sent, or close now if the queue is empty."""
                 if self.output_fifo:
                         self.output_fifo.append (None)
                 else:
