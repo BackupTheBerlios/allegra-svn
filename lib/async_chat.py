@@ -190,7 +190,7 @@ class Async_chat (async_core.Async_dispatcher):
                         # the buffer here acts more as a limit than as an
                         # accumulator ...
                         #
-                if buffer and self.connected:
+                if buffer:
                         try:
                                 sent = self.send (buffer[:obs])
                         except socket.error, why:
@@ -201,7 +201,7 @@ class Async_chat (async_core.Async_dispatcher):
                                 else:
                                         self.ac_out_buffer = buffer
                 else:
-                        self.ac_out_buffer = buffer
+                        self.ac_out_buffer = ''
                         
         def close_when_done (self):
                 """automatically close this channel once the outgoing queue 

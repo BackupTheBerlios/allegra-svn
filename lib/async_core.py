@@ -250,9 +250,9 @@ class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
                         self.connected = 1
                 self.handle_write ()
 
-        def handle_expt_event (self):
-                assert None == self.log ('expt', 'debug')
-                self.handle_close ()
+        #def handle_expt_event (self):
+        #        assert None == self.log ('expt', 'debug')
+        #        self.handle_close ()
 
         def handle_error (self):
                 "log a traceback or raise SystemExit again"

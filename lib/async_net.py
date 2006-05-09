@@ -142,7 +142,7 @@ class Async_net (async_core.Async_dispatcher):
                         buffer += ''.join ((
                                 '%d:%s,' % (len (s), s) for s in strings
                                 ))
-                if buffer and self.connected:
+                if buffer:
                         try:
                                 sent = self.send (buffer[:obs])
                         except socket.error, why:
@@ -153,7 +153,7 @@ class Async_net (async_core.Async_dispatcher):
                                 else:
                                         self.ac_out_buffer = buffer
                 else:
-                        self.ac_out_buffer = buffer
+                        self.ac_out_buffer = ''
 
         # A compatible interface with Async_chat.close_when_done used by
         # Allegra's TCP clients and servers implementation.
