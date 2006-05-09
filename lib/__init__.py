@@ -22,9 +22,9 @@ __all__ = [
         'netstring', 'prompt', 'loginfo', 
         'async_loop', 'finalization', 'async_core',
         'select_trigger', 'thread_loop', 'sync_stdio', 
-        'async_net', 'async_chat', 'async_limits', 
-        'producer', 'collector', 'reactor', 'timeouts',
-        'udp_peer', 'tcp_server', 'tcp_client', 'synchronizer', 
+        'async_net', 'async_chat', 'producer', 'collector', 'reactor', 
+        'synchronized', 'async_limits', 'timeouts',
+        'udp_peer', 'tcp_server', 'tcp_client', 
         #
         # Web Application Protocols
         #
@@ -35,14 +35,15 @@ __all__ = [
         #
         # PNS, The Reference Implementation
         #
-        'pns_model', 'pns_sat', 'pns_mime', 'pns_xml', 'pns_rss', # 'pns_html', 
+        'sat', 'pns_model', 
+        'pns_sat', 'pns_mime', 'pns_xml', 'pns_rss', # 'pns_html', 
         'pns_tcp', 'pns_resolution', 'pns_inference', 'pns_udp', 
         'pns_peer', 'pns_client', 'pns_articulator', 
         #
         # Allegra Presto
         #
         'presto', 'presto_http', 
-        'presto_prompt', # 'presto_bsddb', 'presto_pns', 
+        'presto_prompt', 'presto_pns', # 'presto_bsddb', 
         #
         # The Last DNS Application
         #
