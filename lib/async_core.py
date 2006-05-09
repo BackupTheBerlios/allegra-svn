@@ -118,17 +118,9 @@ class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
                 "predicate for inclusion as readable in the poll loop"
                 return 1
 
-        if os.name == 'mac':
-                # The macintosh will select a listening socket for
-                # write if you let it.  What might this mean?
-                def writable (self):
-                        "predicate for inclusion as writable in the poll loop"
-                        return not self.accepting
-                        
-        else:
-                def writable (self):
-                        "predicate for inclusion as writable in the poll loop"
-                        return 1
+        def writable (self):
+                "predicate for inclusion as writable in the poll loop"
+                return 1
 
         # socket object methods.
 
