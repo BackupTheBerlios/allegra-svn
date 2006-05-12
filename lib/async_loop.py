@@ -158,13 +158,13 @@ def poll3 (map, timeout=0.0):
                         flags |= select.POLLIN | select.POLLPRI
                 if obj.writable ():
                         flags |= select.POLLOUT
-                #if flags:
+                if flags:
                 #        flags |= (
                 #                select.POLLERR | 
                 #                select.POLLHUP | 
                 #                select.POLLNVAL
                 #                )
-                #        pollster.register (fd, flags)
+                        pollster.register (fd, flags)
         try:
                 r = pollster.poll (timeout)
         except select.error, err:
