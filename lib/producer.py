@@ -20,11 +20,26 @@
 import types
 
 
+class File_producer (object):
+        
+        "producer wrapper for file[-like] objects"
+
+        def __init__ (self, file, chunk=1<<14): # 16KB buffer
+                self.file = file
+                self.chunk = chunk
+
+        def more (self):
+                return self.file.read (self.chunk)
+
+        def producer_stalled (self):
+                return False
+        
+
 class Simple_producer (object):
         
-        "scanning producer for a string"
+        "scanning producer for a large string"
 
-        def __init__ (self, data, chunk=4096):
+        def __init__ (self, data, chunk=1<<14): # 16KB buffer
                 lb = len (data)
                 self.content_length = lambda: lb
                 self.more = self.produce (data, chunk).next
@@ -42,36 +57,6 @@ class Simple_producer (object):
         
         def producer_stalled (self):
                 return False
-
-
-class File_producer (object):
-        
-        "producer wrapper for file[-like] objects"
-
-        def __init__ (self, file, buffer_size=1<<16):
-                self.file = file
-                self.buffer_size = buffer_size
-
-        def more (self):
-                return self.file.read (self.buffer_size)
-
-        def producer_stalled (self):
-                return False
-        
-
-def false ():
-        return False
-
-class Stalled_producer (object):
-        
-        def more (self):
-                return ''
-        
-        def producer_stalled (self):
-                return True
-        
-        def __call__ (self):
-                self.producer_stalled = false
 
 
 class Stalled_generator (object):
@@ -198,61 +183,3 @@ class Tee_producer (object):
                         return False
                 
                 return self.producer.producer_stalled ()
-        
-
-class Encoding_producer (object):
-
-	"a producer that encodes a UNICODE producer's data in a given charset"
-
-	def __init__ (self, producer, encoding='UTF-8', option='ignore'):
-		self.producer = producer
-		self.producer_stalled = self.producer.producer_stalled
-		self.encoding = encoding
-		self.option = option
-
-	def more (self):
-		return self.producer.more ().encode (
-			self.encoding, self.option
-			)
-
-
-# Note about this implementation
-#
-# Composite Producer
-#
-# The composite producer let its accessor mix strings and producers
-# at will, to compose the message body, preceded by a single string
-# for the head. Taking a generator for the body parts, instanciation
-# of the composing strings and producers may take place at the last
-# moment, when bandwith is available for the consumer.
-# 
-# Finally, note that the producer "globs" strings until a producer
-# is found, producing an "optimal" stream by reducing the number
-# of calls to send but without blocking on stalled producers. Globbing
-# a la Medusa made sense for serving large static files to many slow
-# clients, it is a lot less usefull when serving small dynamic responses
-# to a limited set of collaborating user agents.
-#
-# The typical use of the Composite producer is to traverse a flat
-# sequence of strings and producers. Null strings and producers
-# will simply be passed trough, until more data is available or the
-# end of the body is reached.
-#
-# Or, if you prefer, you can "print" strings or producers to a
-# composite producer, and it will do "the right thing". 
-#
-# It is a practical "porte-manteaux" structure to assemble and
-# serialize appropriately things like MIME messages, XML strings
-# and cryptographic signatures together. Using it with care can
-# produce fast *and* reliable Internet peers.
-#
-#			
-# Tee producer
-#
-# This is a simple but effective way to tee a buffer (be it a list, a tuple
-# or a deque) or 8-bit byte strings. See http_server.py for a practical
-# use of the Tee_producer class applied to cache in an efficient and non
-# blocking way files to be served asynchronously but read synchronously.
-#
-# Tee_producer is a great example of a simple articulation, with a simple
-# interface and implementation, that makes complex things possible.

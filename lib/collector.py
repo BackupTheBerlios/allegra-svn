@@ -40,8 +40,8 @@ class File_collector (object):
         
         collector_is_simple = True
         
-        def __init__ (filename, mode='w'):
-                self.file = open (filename, mode)
+        def __init__ (self, file):
+                self.file = file
                 self.collect_incoming_data = self.file.write
 
         def found_terminator (self):
@@ -85,7 +85,7 @@ class Loginfo_collector (object):
 		loginfo.log (data, self.info)
 		
 	def found_terminator (self):
-		return False # final!
+		return True # final!
 		
 
 class Codec_decoder (object):
@@ -121,9 +121,8 @@ class Codec_decoder (object):
                         decoded, consumed = self.decode (self.buffer)
                         if decoded:
                                 self.collector.collect_incoming_data (decoded)
-                self.collector.found_terminator ()
-                return True
-        
+                return self.collector.found_terminator ()
+       
 
 class Padded_decoder (object):
         
@@ -188,8 +187,7 @@ class Padded_decoder (object):
                                 decode (self.buffer)
                                 )
                         self.buffer = ''
-                self.collector.found_terminator ()
-                return True
+                return self.collector.found_terminator ()
         
         
 class Simple_collector (object):
@@ -217,5 +215,7 @@ class Simple_collector (object):
                         )
                         
         def found_terminator (self):
+                if self.buffer:
+                        async_chat.collect_chat (self.collector, self.buffer)
                 del collector.set_terminator, collector.get_terminator
                 return True # allways final
