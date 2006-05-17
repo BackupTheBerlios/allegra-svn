@@ -33,8 +33,27 @@ class Null_collector (object):
                 return True
 
 
-def devnull (data): pass
+DEVNULL = Null_collector ()
 
+
+class Loginfo_collector (object):
+        
+        # collect data to loginfo
+        
+        collector_is_simple = True
+
+        def __init__ (self, info=None):
+                self.info = info
+        
+        def collect_incoming_data (self, data):
+                loginfo.log (data, self.info)
+                
+        def found_terminator (self):
+                return True # final!
+
+
+LOGINFO = Loginfo_collector ()
+                
 
 class File_collector (object):
         
@@ -49,6 +68,8 @@ class File_collector (object):
                 self.collect_incoming_data = None
                 return True
                 
+                
+def devnull (data): pass
                 
 class Limited_collector (object):
         
@@ -71,22 +92,6 @@ class Limited_collector (object):
         def found_terminator (self):
                 return True
                 
-
-class Loginfo_collector (object):
-	
-	# collect data to loginfo
-	
-	collector_is_simple = True
-
-	def __init__ (self, info=None):
-		self.info = info
-	
-	def collect_incoming_data (self, data):
-		loginfo.log (data, self.info)
-		
-	def found_terminator (self):
-		return True # final!
-		
 
 class Codec_decoder (object):
         
@@ -147,13 +152,13 @@ class Padded_decoder (object):
                 self.buffer = ''
         
         def collect_incoming_data (self, data):
-                if self.buffer:
-                        length = len (self.buffer) + len (data) 
-                        if length < self.padding:
-                                self.buffer += data
-                                return
+                lb = len (self.buffer) + len (data) 
+                if lb < self.padding:
+                        self.buffer += data
+                        return
 
-                        tail = length % self.padding
+                tail = lb % self.padding
+                if self.buffer:
                         if tail:
                                 self.buffer = data[-tail:]
                                 self.collector.collect_incoming_data (
@@ -165,26 +170,20 @@ class Padded_decoder (object):
                                 self.collector.collect_incoming_data (
                                         self.decode (self.buffer + data)
                                         )
+                elif tail:
+                        self.buffer = data[-tail:]
+                        self.collector.collect_incoming_data (
+                                self.decode (data[:-tail])
+                                )
                 else:
-                        if length < self.padding:
-                                self.buffer += data
-                                return
-
-                        tail = len (data) % self.padding
-                        if tail:
-                                self.buffer = data[-tail:]
-                                self.collector.collect_incoming_data (
-                                        self.decode (data[:-tail])
-                                        )
-                        else:
-                                self.collector.collect_incoming_data (
-                                        decode (data)
-                                        )
+                        self.collector.collect_incoming_data (
+                                self.decode (data)
+                                )
         
         def found_terminator (self):
                 if self.buffer:
                         self.collector.collect_incoming_data (
-                                decode (self.buffer)
+                                self.decode (self.buffer)
                                 )
                         self.buffer = ''
                 return self.collector.found_terminator ()
