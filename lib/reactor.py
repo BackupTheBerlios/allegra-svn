@@ -49,7 +49,7 @@ class Buffer_reactor (object):
 # The Buffer_reactor is the only practical general-purpose implementation
 # of the reactor interface:
 #
-#	__init__ ()
+#       collector_is_simple == True
 #	collect_incoming_data (data)
 #	found_terminator ()
 #	more ()
