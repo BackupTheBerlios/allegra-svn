@@ -44,15 +44,4 @@ class Buffer_reactor (object):
 			self.buffer_reactor_complete == False
                         )
 
-# Note about this implementation
-#
-# The Buffer_reactor is the only practical general-purpose implementation
-# of the reactor interface:
-#
-#       collector_is_simple == True
-#	collect_incoming_data (data)
-#	found_terminator ()
-#	more ()
-#	producer_stalled ()
-#
-# It implements both a simple collector and a stallable producer.
+# The simplest reactor implementation: a pipe
