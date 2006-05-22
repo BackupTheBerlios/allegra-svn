@@ -15,124 +15,146 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"Metering and throttling decorators for async_core dispatchers"
 
 import time
 
 
-# Add asynchronous limits to a UDP dispatcher or a TCP channel
+# Metering for stream and datagram sockets
 
-def async_limit_recv (channel, when):
-	channel.async_bytes_in = 0
-	channel.async_when_in = when
-	recv = channel.recv
-	def async_limit_recv (buffer_size):
-		data = recv (buffer_size)
-	        channel.async_bytes_in += len (data)
-		channel.async_when_in = when
+def meter_recv (dispatcher, when):
+        "decorate a stream transport with an input meter"
+	dispatcher.ac_in_meter = 0
+	dispatcher.ac_in_when = when
+	metered_recv = dispatcher.recv
+	def recv (buffer_size):
+		data = metered_recv (buffer_size)
+	        dispatcher.ac_in_meter += len (data)
+		dispatcher.ac_in_when = time.time ()
 	        return data
 	        
-	channel.recv = async_limit_recv
+	dispatcher.recv = recv
 
-def async_limit_recvfrom (channel, when):
-	recvfrom = channel.recvfrom
-	def async_limit_recvfrom ():
-		data, peer = recvfrom ()
-	        channel.async_bytes_in += len (data)
-		channel.async_when_in = when
-	        return data, peer
-	        
-	channel.recvfrom = async_limit_recvfrom
-
-def async_limit_send (channel, when):
-	channel.async_bytes_out = 0
-	channel.async_when_out = when
-	send = channel.send
-	def async_limit_send (data):
-		sent = send (data)
-	        channel.async_bytes_out += sent
-		channel.async_when_out = when
+def meter_send (dispatcher, when):
+        "decorate a stream transport with an output meter"
+	dispatcher.ac_out_meter = 0
+	dispatcher.ac_out_when = when
+	metered_send = dispatcher.send
+	def send (data):
+		sent = metered_send (data)
+	        dispatcher.ac_out_meter += sent
+		dispatcher.ac_out_when = time.time ()
 	        return sent
 	        
-	channel.send = async_limit_send
+	dispatcher.send = send
 
-def async_limit_sendto (channel, when):
-	sendto = channel.sendto
-	def async_limit_sendto (self):
-		sent = sendto (data, peer)
-	        channel.async_bytes_out += sent
-		channel.async_when_out = when
+def meter_recvfrom (dispatcher, when):
+        "decorate a datagram transport with an input meter"
+        dispatcher.ac_in_meter = 0
+        dispatcher.ac_in_when = when
+        metered_recvfrom = dispatcher.recvfrom
+        def recvfrom ():
+                data, peer = metered_recvfrom ()
+                dispatcher.ac_in_meter += len (data)
+                dispatcher.ac_in_when = time.time ()
+                return data, peer
+                
+        dispatcher.recvfrom = recvfrom
+
+def meter_sendto (dispatcher, when):
+        "decorate a datagram transport with an output meter"
+        dispatcher.ac_out_meter = 0
+        dispatcher.ac_out_when = when
+	metered_sendto = dispatcher.sendto
+	def sendto (self):
+		sent = metered_sendto (data, peer)
+	        dispatcher.ac_out_meter += sent
+		dispatcher.ac_out_when = time.time ()
 	        return sent
 
-	channel.sendto = async_limit_sendto
-	
-
-def FourKBps ():
-	return 4096 # ac_in_buffer_size
+	dispatcher.sendto = sendto
 
 
-def async_throttle_in (channel, when, Bps=FourKBps):
-	channel.async_limit_bytes_in = Bps ()
-	channel.async_throttle_in_when = when
-	channel.async_throttle_in_Bps = Bps
-	readable = channel.readable
-	def async_throttle_readable ():
+# Throttling
+
+def FourKBps (): return 4096
+
+
+def throttle_readable (dispatcher, when, Bps=FourKBps):
+        "decorate a metered dispatcher with an input throttle"
+	dispatcher.ac_in_throttle = Bps ()
+	dispatcher.ac_in_throttle_when = when
+	dispatcher.ac_in_throttle_Bps = Bps
+	throttled_readable = dispatcher.readable
+	def readable ():
 		return (
-			channel.async_bytes_in < channel.async_limit_bytes_in 
-			and readable ()
+			dispatcher.ac_in_meter < dispatcher.ac_in_throttle
+			and throttled_readable ()
 			)
-	channel.readable = async_throttle_readable
-	
-def async_throttle_in_defer (channel, when):
-	# when the channel exceeded its limit, allocate bandwith at a given
-	# rate for the period between "when" - approximatively but steadily
-	# "now" - and the last I/O or the last allocation, which ever comes
-	# later. in effect it grants the channel the bandwith it is entitled
-	# to for the immediate past.
-	#
-	if channel.async_bytes_in >= channel.async_limit_bytes_in:
-		channel.async_limit_bytes_in += int ((
+	dispatcher.readable = readable
+
+def throttle_in (dispatcher, when):
+        "allocate input bandiwth to a throttled dispatcher"
+        
+	if dispatcher.ac_in_meter >= dispatcher.ac_in_throttle:
+		dispatcher.async_limit_bytes_in += int ((
 			when - max (
-				channel.async_when_in,
-				channel.async_throttle_in_when
+				dispatcher.ac_in_when,
+				dispatcher.ac_in_throttle_when
 				)
-			) * channel.async_throttle_in_Bps ())
-	channel.async_throttle_in_when = when
+			) * dispatcher.ac_in_throttle_Bps ())
+	dispatcher.ac_in_throttle_when = when
+
+        #when the dispatcher exceeded its limit, allocate bandwith at a given
+        #rate for the period between "when" - approximatively but steadily
+        #"now" - and the last I/O or the last allocation, which ever comes
+        #later. in effect it grants the dispatcher the bandwith it is entitled
+        #to for the immediate past.
 	#
 	# the async_throttle_in method is supposed to be called by a
-	# periodical defered. for peers with long-lived channels it is
+	# periodical defered. for peers with long-lived dispatchers it is
 	# faster to periodically allocate bandwith than to do it whenever 
 	# we send or receive, or every time we check for readability or 
 	# writability.
 
+def unthrottle_readable (dispatcher):
+        "remove the decorated readable and the throttling rate function"
+        del dispatcher.readable, dispatcher.ac_in_throttle_Bps
 
-def async_throttle_out (channel, when, Bps=FourKBps):
-	channel.async_limit_bytes_out = Bps ()
-	channel.async_throttle_out_when = when
-	channel.async_throttle_out_Bps = Bps
-	writable = channel.writable
-	def async_throttle_writable ():
+
+def throttle_writable (dispatcher, when, Bps=FourKBps):
+        "decorate a metered dispatcher with an output throttle"
+	dispatcher.ac_out_throttle = Bps ()
+	dispatcher.ac_out_throttle_when = when
+	dispatcher.ac_out_throttle_Bps = Bps
+	throttled_writable = dispatcher.writable
+	def writable ():
 		return (
-			channel.async_bytes_out < channel.async_limit_bytes_out
-			and writable ()
+			dispatcher.ac_out_meter < dispatcher.ac_out_throttle
+			and throttled_writable ()
 			)
-	channel.writable = async_throttle_writable
-	
-def async_throttle_out_defer (channel, when):
-	if channel.async_bytes_out >= channel.async_limit_bytes_out:
-		channel.async_limit_bytes_out += int ((
+	dispatcher.writable = writable
+
+def throttle_out (dispatcher, when):
+        "allocate output bandiwth to a throttled dispatcher"
+	if dispatcher.ac_out_meter >= dispatcher.ac_out_throttle:
+		dispatcher.async_limit_bytes_out += int ((
 			when - max (
-				channel.async_when_out,
-				channel.async_throttle_out_when
+				dispatcher.ac_out_when,
+				dispatcher.ac_out_throttle_when
 				)
-			) * channel.async_throttle_out_Bps ())
-	channel.async_throttle_out_when = when	
+			) * dispatcher.ac_out_throttle_Bps ())
+	dispatcher.ac_out_throttle_when = when	
 	
+def unthrottle_writable (dispatcher):
+        "remove the decorated writable and the throttling rate function"
+        del dispatcher.writable, dispatcher.ac_out_throttle_Bps 
+        
 
 # Note about this implementation
 #
 # other kind of limits - like an absolute limit on the maximum i/o or
-# duration per channel - should be implemented in the final class.
+# duration per dispatcher - should be implemented in the final class.
 #
 #
 # The Case for Throttling

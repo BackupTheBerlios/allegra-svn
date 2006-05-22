@@ -103,8 +103,8 @@ class TCP_client (loginfo.Loginfo):
                 now = time.time ()
 		channel = self.TCP_CLIENT_CHANNEL ()
                 channel.tcp_client_key = addr
-		async_limits.async_limit_recv (channel, now)
-		async_limits.async_limit_send (channel, now)
+		async_limits.meter_recv (channel, now)
+		async_limits.meter_send (channel, now)
                 def handle_close ():
                         self.tcp_client_close (channel)
 		channel.handle_close = handle_close
@@ -132,7 +132,7 @@ class TCP_client (loginfo.Loginfo):
 	def tcp_client_inactive (self, channel, when):
 		if not channel.closing and channel.connected and (
 			when - max (
-				channel.async_when_in, channel.async_when_out
+				channel.ac_in_when, channel.ac_out_when
 				)
 			) > self.tcp_client_timeout:
 			assert None == channel.log ('inactive', 'debug')
@@ -141,8 +141,8 @@ class TCP_client (loginfo.Loginfo):
         def tcp_client_close (self, channel):
                 assert None == channel.log (
                         'in="%d" out="%d"' % (
-                                channel.async_bytes_in, 
-                                channel.async_bytes_out
+                                channel.ac_in_meter, 
+                                channel.ac_out_meter
                                 ),  'debug'
                         )
                 del channel.recv, channel.send, channel.handle_close
@@ -158,8 +158,8 @@ class TCP_client (loginfo.Loginfo):
 
 
 def tcp_client_throttle_defer (channel, when):
-	async_throttle_in_defer (channel, when)
-	async_throttle_out_defer (channel, when)
+	async_limits.throttle_in (channel, when)
+	async_limits.throttle_out (channel, when)
 	return tcp_client_inactive (channel, when)
 
 def tcp_client_throttle (
@@ -174,7 +174,7 @@ def tcp_client_throttle (
 
 
 def tcp_client_throttle_out_defer (channel, when):
-	async_throttle_out_defer (channel, when)
+	async_limits.throttle_out (channel, when)
 	return tcp_client_inactive (channel, when)
 
 def tcp_client_throttle_out (
@@ -187,7 +187,7 @@ def tcp_client_throttle_out (
 
 
 def tcp_client_throttle_in_defer (channel, when):
-	async_throttle_in_defer (channel, when)
+	async_limits.throttle_in (channel, when)
 	return tcp_client_inactive (channel, when)
 
 def tcp_client_throttle_in (

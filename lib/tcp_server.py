@@ -19,15 +19,16 @@
 
 import sys, socket, time
 
-from allegra import \
+from allegra import (
         async_loop, async_core, async_limits, async_net, async_chat
+        )
 
 
 class TCP_server_echo_net (async_net.Async_net):
         
         def async_net_continue (self, data):
                 self.log (data)
-                self.an_out_buffer += '%d:%s,' % (len (data), data)
+                self.ac_out_buffer += '%d:%s,' % (len (data), data)
                 
 
 class TCP_server_echo_line (async_chat.Async_chat):
@@ -196,8 +197,8 @@ class TCP_server_limit (TCP_server):
                         return
                         
                 channel.tcp_server_when = now = time.time ()
-                async_limits.async_limit_recv (channel, now)
-                async_limits.async_limit_send (channel, now)
+                async_limits.meter_recv (channel, now)
+                async_limits.meter_send (channel, now)
                 if (
                         self.tcp_server_precision >0 and
                         len (self.tcp_server_channels) == 1
@@ -227,7 +228,7 @@ class TCP_server_limit (TCP_server):
         def tcp_server_inactive (self, channel, when):
                 if not channel.closing and channel.connected and (
                         when - max (
-                                channel.async_when_in, channel.async_when_out
+                                channel.ac_in_when, channel.ac_out_when
                                 )
                         ) > self.tcp_server_timeout:
                         channel.log ('inactive', 'info')
@@ -235,12 +236,12 @@ class TCP_server_limit (TCP_server):
                         
         def tcp_server_handle_close (self, channel):
                 channel.log ('bytes in="%d" out="%d" seconds="%f"' % (
-                        channel.async_bytes_in, 
-                        channel.async_bytes_out,
+                        channel.ac_in_meter, 
+                        channel.ac_out_meter,
                         (time.time () - channel.tcp_server_when)
                         ), 'info')
                 TCP_server.tcp_server_handle_close (self, channel)
-                del channel.recv, channel.send
+                del channel.recv, channel.send # remove the async_limits
 
 
 class TCP_server_throttle (TCP_server_limit):
@@ -256,8 +257,8 @@ class TCP_server_throttle (TCP_server_limit):
         # and audit of I/O, this is 99% of what you want out-of-the-box
         # from a TCP server base class.
         
-        async_throttle_in_Bps = 4096 # ac_in_buffer_size
-        async_throttle_out_Bps = 4096 # ac_in_buffer_size
+        async_throttle_in_Bps = 4096 # ac_in_buffer_size?
+        async_throttle_out_Bps = 4096 # ac_in_buffer_size?
 
 	def handle_accept (self):
 		channel = TCP_server_limit.handle_accept (self)
@@ -266,10 +267,10 @@ class TCP_server_throttle (TCP_server_limit):
 
                 when = time.time ()
                 self.tcp_server_throttle ()
-                async_limits.async_throttle_in (
+                async_limits.throttle_readable (
                         channel, when, self.tcp_server_throttle_in
                         )
-                async_limits.async_throttle_out (
+                async_limits.throttle_writable (
                         channel, when, self.tcp_server_throttle_out
                         )
 		return channel
@@ -288,8 +289,8 @@ class TCP_server_throttle (TCP_server_limit):
 
         def tcp_server_defer (self, when):
                 for channel in self.tcp_server_channels:
-                        async_limits.async_throttle_in_defer (channel, when)
-                        async_limits.async_throttle_out_defer (channel, when)
+                        async_limits.throttle_in (channel, when)
+                        async_limits.throttle_out (channel, when)
                 return TCP_server_limit.tcp_server_defer (self, when)
         
 	def tcp_server_throttle_in (self):
@@ -303,8 +304,8 @@ class TCP_server_throttle (TCP_server_limit):
                 # APIs *are* a wrong coding practice!)
                 #
 		TCP_server_limit.tcp_server_handle_close (self, channel)
-                del channel.async_throttle_in_Bps
-                del channel.async_throttle_out_Bps
+                async_limits.unthrottle_readable (channel)
+                async_limits.unthrottle_writable (channel)
                 self.tcp_server_throttle ()
                 
                 
