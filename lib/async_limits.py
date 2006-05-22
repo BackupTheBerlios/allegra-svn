@@ -92,10 +92,9 @@ def throttle_readable (dispatcher, when, Bps=FourKBps):
 			and throttled_readable ()
 			)
 	dispatcher.readable = readable
-
+        
 def throttle_in (dispatcher, when):
         "allocate input bandiwth to a throttled dispatcher"
-        
 	if dispatcher.ac_in_meter >= dispatcher.ac_in_throttle:
 		dispatcher.async_limit_bytes_in += int ((
 			when - max (
@@ -149,7 +148,90 @@ def throttle_out (dispatcher, when):
 def unthrottle_writable (dispatcher):
         "remove the decorated writable and the throttling rate function"
         del dispatcher.writable, dispatcher.ac_out_throttle_Bps 
-        
+
+
+# Metering and Throttling
+
+# for stream transport
+
+def limit_recv (dispatcher, Bps):
+        "meter recv and throttle readable"
+        dispatcher.ac_in_throttled = (dispatcher.recv, dispatcher.readable)
+        when = time.time ()
+        meter_recv (dispatcher, when)
+        throttle_readable (dispatcher, when, Bps)
+
+def unlimit_recv (dispatcher):
+        "unmeter recv and unthrottle readable"
+        dispatcher.recv, dispatcher.readable = dispatcher.ac_in_throttled
+        del dispatcher.ac_in_throttled, dispatcher.ac_in_throttle_Bps 
+
+def limit_send (dispatcher, Bps):
+        "meter send and throttle writable"
+        dispatcher.ac_out_throttled = (dispatcher.send, dispatcher.writable)
+        when = time.time ()
+        meter_send (dispatcher, when)
+        throttle_writable (dispatcher, when, Bps)
+
+def unlimit_send (dispatcher):
+        "unmeter send and unthrottle writable"
+        dispatcher.send, dispatcher.writable = dispatcher.ac_out_throttled
+        del dispatcher.ac_out_throttled, dispatcher.ac_out_throttle_Bps 
+
+def limit_stream (dispatcher, inBps, outBps):
+        "meter and throttle stream I/O"
+        when = time.time ()
+        dispatcher.ac_in_throttled = (dispatcher.recv, dispatcher.readable)
+        meter_recv (dispatcher, when)
+        throttle_readable (dispatcher, when, inBps)
+        dispatcher.ac_out_throttled = (dispatcher.send, dispatcher.writable)
+        meter_send (dispatcher, when)
+        throttle_writable (dispatcher, when, inBps)
+
+def unlimit_stream (dispatcher):
+        "unmeter and unthrottle stream I/O"
+        dispatcher.recv, dispatcher.readable = dispatcher.ac_in_throttled
+        del dispatcher.ac_in_throttled, dispatcher.ac_in_throttle_Bps 
+        dispatcher.send, dispatcher.writable = dispatcher.ac_out_throttled
+        del dispatcher.ac_out_throttled, dispatcher.ac_out_throttle_Bps 
+
+# for datagram transport
+
+def limit_recvfrom (dispatcher, Bps):
+        when = time.time ()
+        meter_recvfrom (dispatcher, when)
+        throttle_readable (dispatcher, when, Bps)
+
+def unlimit_recvfrom (dispatcher):
+        del dispatcher.recvfrom
+        del dispatcher.readable, dispatcher.ac_in_throttle_Bps 
+
+def limit_sendto (dispatcher, Bps):
+        when = time.time ()
+        meter_sendto (dispatcher, when)
+        throttle_writable (dispatcher, when, Bps)
+
+def unlimit_sendto (dispatcher):
+        del dispatcher.sendto
+        del dispatcher.writable, dispatcher.ac_out_throttle_Bps 
+
+def limit_datagram (dispatcher, inBps, outBps):
+        "meter and throttle datagram I/O"
+        when = time.time ()
+        dispatcher.ac_in_throttled = (dispatcher.recv, dispatcher.readable)
+        meter_recvfrom (dispatcher, when)
+        throttle_readable (dispatcher, when, inBps)
+        dispatcher.ac_out_throttled = (dispatcher.send, dispatcher.writable)
+        meter_sendto (dispatcher, when)
+        throttle_writable (dispatcher, when, inBps)
+
+def unlimit_datagram (dispatcher):
+        "unmeter and unthrottle datagram I/O"
+        dispatcher.recvfrom, dispatcher.readable = dispatcher.ac_in_throttled
+        del dispatcher.ac_in_throttled, dispatcher.ac_in_throttle_Bps 
+        dispatcher.sendto, dispatcher.writable = dispatcher.ac_out_throttled
+        del dispatcher.ac_out_throttled, dispatcher.ac_out_throttle_Bps 
+
 
 # Note about this implementation
 #
