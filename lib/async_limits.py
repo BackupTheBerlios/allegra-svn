@@ -97,7 +97,7 @@ def inactive (dispatcher, when):
                 ) > dispatcher.ac_inactive
         
 
-# Throttling Decorators and Limits
+# Throttling Decorators
 
 def throttle_readable (dispatcher, when, Bps):
         "decorate a metered dispatcher with an input throttle"
@@ -112,32 +112,6 @@ def throttle_readable (dispatcher, when, Bps):
 			)
 	dispatcher.readable = readable
         
-def throttle_in (dispatcher, when):
-        "allocate input bandiwth to a throttled dispatcher"
-	if dispatcher.ac_in_meter >= dispatcher.ac_in_throttle:
-		dispatcher.async_limit_bytes_in += int ((
-			when - max (
-				dispatcher.ac_in_when,
-				dispatcher.ac_in_throttle_when
-				)
-			) * dispatcher.ac_in_throttle_Bps ())
-	dispatcher.ac_in_throttle_when = when
-        return False
-
-        #
-        # when the dispatcher exceeded its limit, allocate bandwith at a given
-        # rate for the period between "when" - approximatively but steadily
-        # "now" - and the last I/O or the last allocation, which ever comes
-        # later. in effect it grants the dispatcher the bandwith it is entitled
-        # to for the immediate past.
-	#
-	# the async_throttle_in method is supposed to be called by a
-	# periodical defered. for peers with long-lived dispatchers it is
-	# faster to periodically allocate bandwith than to do it whenever 
-	# we send or receive, or every time we check for readability or 
-	# writability.
-
-
 def throttle_writable (dispatcher, when, Bps):
         "decorate a metered dispatcher with an output throttle"
 	dispatcher.ac_out_throttle = Bps ()
@@ -150,6 +124,34 @@ def throttle_writable (dispatcher, when, Bps):
 			and throttled_writable ()
 			)
 	dispatcher.writable = writable
+
+
+# Throttling limits
+
+def throttle_in (dispatcher, when):
+        "allocate input bandiwth to a throttled dispatcher"
+        if dispatcher.ac_in_meter >= dispatcher.ac_in_throttle:
+                dispatcher.async_limit_bytes_in += int ((
+                        when - max (
+                                dispatcher.ac_in_when,
+                                dispatcher.ac_in_throttle_when
+                                )
+                        ) * dispatcher.ac_in_throttle_Bps ())
+        dispatcher.ac_in_throttle_when = when
+        return False
+
+        #
+        # when the dispatcher exceeded its limit, allocate bandwith at a given
+        # rate for the period between "when" - approximatively but steadily
+        # "now" - and the last I/O or the last allocation, which ever comes
+        # later. in effect it grants the dispatcher the bandwith it is entitled
+        # to for the immediate past.
+        #
+        # the async_throttle_in method is supposed to be called by a
+        # periodical defered. for peers with long-lived dispatchers it is
+        # faster to periodically allocate bandwith than to do it whenever 
+        # we send or receive, or every time we check for readability or 
+        # writability.
 
 def throttle_out (dispatcher, when):
         "allocate output bandiwth to a throttled dispatcher"
@@ -195,9 +197,8 @@ def limit_schedule (dispatcher, when, interval, limit, unlimit):
 
         # I like that one (nested namespaces rule ,-)
 
-# Conveniences: ready-made metering and throttling
 
-# a few more limits
+# Conveniences: ready-made metering, inactivity check and throttling
 
 def limit_in (dispatcher, when):
         return (
@@ -324,6 +325,7 @@ def unlimit_datagram (dispatcher):
         del dispatcher.ac_in_throttled, dispatcher.ac_in_throttle_Bps 
         dispatcher.sendto, dispatcher.writable = dispatcher.ac_out_throttled
         del dispatcher.ac_out_throttled, dispatcher.ac_out_throttle_Bps 
+
 
 # Note about this implementation
 #
