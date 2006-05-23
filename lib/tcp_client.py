@@ -22,6 +22,8 @@ import sys, socket, time, collections
 from allegra import (
 	loginfo, async_loop, async_limits, async_net, async_chat
         )
+        
+def FourKBps (): return 4096
 
 
 class TCP_client_channel (object):
@@ -164,8 +166,8 @@ def tcp_client_throttle_defer (channel, when):
 
 def tcp_client_throttle (
 	channel, 
-	throttle_in=async_limits.FourKBps, 
-	throttle_out=async_limits.FourKBps, 
+	throttle_in=FourKBps, 
+	throttle_out=FourKBps, 
 	inactive=60, precision=10
 	):
 	TCP_client_limit (channel, inactive, precision)
@@ -178,7 +180,7 @@ def tcp_client_throttle_out_defer (channel, when):
 	return tcp_client_inactive (channel, when)
 
 def tcp_client_throttle_out (
-	channel, Bps=async_limits.FourKBps, inactive=60, precision=10
+	channel, Bps=FourKBps, inactive=60, precision=10
 	):
 	tcp_client_limit (channel, inactive, precision)
 	channel.async_throttle_out_Bps = Bps
@@ -191,7 +193,7 @@ def tcp_client_throttle_in_defer (channel, when):
 	return tcp_client_inactive (channel, when)
 
 def tcp_client_throttle_in (
-	channel, Bps=async_limits.FourKBps, inactive=60, precision=10
+	channel, Bps=FourKBps, inactive=60, precision=10
 	):
 	tcp_client_limit (channel, inactive, precision)
 	channel.async_throttle_in_Bps = Bps
