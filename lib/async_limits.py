@@ -134,7 +134,7 @@ def throttle_writable (dispatcher, when, Bps):
 def throttle_in (dispatcher, when):
         "allocate input bandiwth to a throttled dispatcher"
         if dispatcher.ac_in_meter >= dispatcher.ac_in_throttle:
-                dispatcher.async_limit_bytes_in += int ((
+                dispatcher.ac_in_throttle += int ((
                         when - max (
                                 dispatcher.ac_in_when,
                                 dispatcher.ac_in_throttle_when
@@ -159,7 +159,7 @@ def throttle_in (dispatcher, when):
 def throttle_out (dispatcher, when):
         "allocate output bandiwth to a throttled dispatcher"
 	if dispatcher.ac_out_meter >= dispatcher.ac_out_throttle:
-		dispatcher.async_limit_bytes_out += int ((
+		dispatcher.ac_out_throttle += int ((
 			when - max (
 				dispatcher.ac_out_when,
 				dispatcher.ac_out_throttle_when
