@@ -77,12 +77,29 @@ def meter_sendto (dispatcher, when):
 	dispatcher.sendto = sendto
 
 
-# Throttling
+# Inactivity Limits
 
-def FourKBps (): return 4096
+def inactive_in (dispatcher, when):
+        return not dispatcher.closing and dispatcher.connected and (
+                when - dispatcher.ac_in_when
+                ) > dispatcher.ac_inactive
+        
+def inactive_out (dispatcher, when):
+        return not dispatcher.closing and dispatcher.connected and (
+                when - dispatcher.ac_out_when
+                ) > dispatcher.ac_inactive
+        
+def inactive (dispatcher, when):
+        return not dispatcher.closing and dispatcher.connected and (
+                when - max (
+                        dispatcher.ac_in_when, dispatcher.ac_out_when
+                        )
+                ) > dispatcher.ac_inactive
+        
 
+# Throttling Decorators and Limits
 
-def throttle_readable (dispatcher, when, Bps=FourKBps):
+def throttle_readable (dispatcher, when, Bps):
         "decorate a metered dispatcher with an input throttle"
 	dispatcher.ac_in_throttle = Bps ()
 	dispatcher.ac_in_throttle_when = when
@@ -105,12 +122,14 @@ def throttle_in (dispatcher, when):
 				)
 			) * dispatcher.ac_in_throttle_Bps ())
 	dispatcher.ac_in_throttle_when = when
+        return False
 
-        #when the dispatcher exceeded its limit, allocate bandwith at a given
-        #rate for the period between "when" - approximatively but steadily
-        #"now" - and the last I/O or the last allocation, which ever comes
-        #later. in effect it grants the dispatcher the bandwith it is entitled
-        #to for the immediate past.
+        #
+        # when the dispatcher exceeded its limit, allocate bandwith at a given
+        # rate for the period between "when" - approximatively but steadily
+        # "now" - and the last I/O or the last allocation, which ever comes
+        # later. in effect it grants the dispatcher the bandwith it is entitled
+        # to for the immediate past.
 	#
 	# the async_throttle_in method is supposed to be called by a
 	# periodical defered. for peers with long-lived dispatchers it is
@@ -119,7 +138,7 @@ def throttle_in (dispatcher, when):
 	# writability.
 
 
-def throttle_writable (dispatcher, when, Bps=FourKBps):
+def throttle_writable (dispatcher, when, Bps):
         "decorate a metered dispatcher with an output throttle"
 	dispatcher.ac_out_throttle = Bps ()
 	dispatcher.ac_out_throttle_when = when
@@ -142,41 +161,73 @@ def throttle_out (dispatcher, when):
 				)
 			) * dispatcher.ac_out_throttle_Bps ())
 	dispatcher.ac_out_throttle_when = when	
+        return False
 	
 
 def throttle (dispatcher, when):
         "allocate I/O bandiwth to a throttled dispatcher"
         throttle_in (dispatcher, when)
         throttle_out (dispatcher, when)
+        return False
 
 
 # Limit recurrence factory
 
 def limit_schedule (dispatcher, when, interval, limit, unlimit):
+        # set the limit flag down
         dispatcher.limit_stop = False
         def scheduled (when):
                 if dispatcher.closing or dispatcher.limit_stop:
+                        # closing or limit flag raised, remove
                         unlimit (dispatcher)
                         return
                 
-                limit (dispatcher, when)
+                if limit (dispatcher, when):
+                        # limit overflowed, remove and handle close
+                        unlimit (dispatcher)
+                        dispatcher.handle_close ()
+                        return
+                
+                # recur at interval
                 return (when + interval, scheduled)
         
-        async_loop.async_schedule ((when + interval, scheduled))
+        async_loop.async_schedule (when + interval, scheduled)
 
+        # I like that one (nested namespaces rule ,-)
 
 # Conveniences: ready-made metering and throttling
 
+# a few more limits
+
+def limit_in (dispatcher, when):
+        return (
+                inactive_in (dispatcher, when) or 
+                throttle_in (dispatcher, when)
+                )
+
+def limit_out (dispatcher, when):
+        return (
+                inactive_out (dispatcher, when) or 
+                throttle_out (dispatcher, when)
+                )
+
+def limit (dispatcher, when):
+        return (
+                inactive (dispatcher, when) or 
+                throttle (dispatcher, when)
+                )
+                
 # for stream transport
 
-def limit_recv (dispatcher, interval, Bps, interval):
+def limit_recv (dispatcher, interval, timeout, Bps):
         "meter recv and throttle readable, schedule throttling in"
-        dispatcher.ac_in_throttled = (dispatcher.recv, dispatcher.readable)
         when = time.time ()
+        dispatcher.ac_inactive = timeout
+        dispatcher.ac_in_throttled = (dispatcher.recv, dispatcher.readable)
         meter_recv (dispatcher, when)
         throttle_readable (dispatcher, when, Bps)
         limit_schedule (
-                dispatcher, when, interval, throttle_in, unlimit_recv
+                dispatcher, when, interval, limit_in, unlimit_recv
                 )
 
 def unlimit_recv (dispatcher):
@@ -184,14 +235,15 @@ def unlimit_recv (dispatcher):
         dispatcher.recv, dispatcher.readable = dispatcher.ac_in_throttled
         del dispatcher.ac_in_throttled, dispatcher.ac_in_throttle_Bps 
 
-def limit_send (dispatcher, interval, Bps):
+def limit_send (dispatcher, interval, timeout, Bps):
         "meter send and throttle writable, schedule throttling out"
-        dispatcher.ac_out_throttled = (dispatcher.send, dispatcher.writable)
         when = time.time ()
+        dispatcher.ac_inactive = timeout
+        dispatcher.ac_out_throttled = (dispatcher.send, dispatcher.writable)
         meter_send (dispatcher, when)
         throttle_writable (dispatcher, when, Bps)
         limit_schedule (
-                dispatcher, when, interval, throttle_out, unlimit_send
+                dispatcher, when, interval, limit_out, unlimit_send
                 )
 
 def unlimit_send (dispatcher):
@@ -199,9 +251,10 @@ def unlimit_send (dispatcher):
         dispatcher.send, dispatcher.writable = dispatcher.ac_out_throttled
         del dispatcher.ac_out_throttled, dispatcher.ac_out_throttle_Bps 
 
-def limit_stream (dispatcher, interval, inBps, outBps):
+def limit_stream (dispatcher, interval, timeout, inBps, outBps):
         "meter and throttle stream I/O, schedule throttling"
         when = time.time ()
+        dispatcher.ac_inactive = timeout
         dispatcher.ac_in_throttled = (dispatcher.recv, dispatcher.readable)
         meter_recv (dispatcher, when)
         throttle_readable (dispatcher, when, inBps)
@@ -209,7 +262,7 @@ def limit_stream (dispatcher, interval, inBps, outBps):
         meter_send (dispatcher, when)
         throttle_writable (dispatcher, when, inBps)
         limit_schedule (
-                dispatcher, when, interval, throttle, unlimit_stream
+                dispatcher, when, interval, limit, unlimit_stream
                 )
 
 def unlimit_stream (dispatcher):
@@ -221,37 +274,40 @@ def unlimit_stream (dispatcher):
 
 # for datagram transport
 
-def limit_recvfrom (dispatcher, interval, Bps):
+def limit_recvfrom (dispatcher, interval, timeout, Bps):
         "meter recvfrom and throttle readable, schedule throttling in"
         when = time.time ()
+        dispatcher.ac_inactive = timeout
         meter_recvfrom (dispatcher, when)
         throttle_readable (dispatcher, when, Bps)
         limit_schedule (
-                dispatcher, when, interval, throttle_in, unlimit_recvfrom
+                dispatcher, when, interval, limit_in, unlimit_recvfrom
                 )
 
 def unlimit_recvfrom (dispatcher):
         "unmeter recvfrom and unthrottle readable"
-        del dispatcher.recvfrom
-        del dispatcher.readable, dispatcher.ac_in_throttle_Bps 
+        dispatcher.recvfrom, dispatcher.readable = dispatcher.ac_out_throttled
+        del dispatcher.ac_in_throttled, dispatcher.ac_in_throttle_Bps 
 
-def limit_sendto (dispatcher, interval, Bps):
+def limit_sendto (dispatcher, interval, timeout, Bps):
         "meter sendto and throttle writable, schedule throttling out"
         when = time.time ()
+        dispatcher.ac_inactive = timeout
         meter_sendto (dispatcher, when)
         throttle_writable (dispatcher, when, Bps)
         limit_schedule (
-                dispatcher, when, interval, throttle_out, unlimit_sendto
+                dispatcher, when, interval, limit_out, unlimit_sendto
                 )
 
 def unlimit_sendto (dispatcher):
         "unmeter sendto and unthrottle writable"
-        del dispatcher.sendto
-        del dispatcher.writable, dispatcher.ac_out_throttle_Bps 
+        dispatcher.sendto, dispatcher.writable = dispatcher.ac_out_throttled
+        del dispatcher.ac_out_throttled, dispatcher.ac_out_throttle_Bps 
 
-def limit_datagram (dispatcher, interval, inBps, outBps):
+def limit_datagram (dispatcher, interval, timeout, inBps, outBps):
         "meter and throttle datagram I/O, schedule throttling"
         when = time.time ()
+        dispatcher.ac_inactive = timeout
         dispatcher.ac_in_throttled = (dispatcher.recv, dispatcher.readable)
         meter_recvfrom (dispatcher, when)
         throttle_readable (dispatcher, when, inBps)
@@ -259,7 +315,7 @@ def limit_datagram (dispatcher, interval, inBps, outBps):
         meter_sendto (dispatcher, when)
         throttle_writable (dispatcher, when, inBps)
         limit_schedule (
-                dispatcher, when, interval, throttle, unlimit_datagram
+                dispatcher, when, interval, limit, unlimit_datagram
                 )
 
 def unlimit_datagram (dispatcher):
@@ -268,7 +324,6 @@ def unlimit_datagram (dispatcher):
         del dispatcher.ac_in_throttled, dispatcher.ac_in_throttle_Bps 
         dispatcher.sendto, dispatcher.writable = dispatcher.ac_out_throttled
         del dispatcher.ac_out_throttled, dispatcher.ac_out_throttle_Bps 
-
 
 # Note about this implementation
 #
