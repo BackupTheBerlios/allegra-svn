@@ -114,7 +114,7 @@ class Manager (loginfo.Loginfo):
                 self.client_timeout = timeout
                 self.client_precision = precision
                 self.client_family = family
-                unresolved (self)
+                resolved (self)
                 inactive (self, timeout)
                 
         def client_connect (self, dispatcher, name):
@@ -198,7 +198,7 @@ class Cache (Manager):
                 self.client_timeout = timeout
                 self.client_precision = precision
                 self.client_family = family
-                unresolved (self)
+                resolved (self)
                 inactive (self, timeout)
                 
         def __call__ (self, name):
@@ -235,7 +235,7 @@ class Pool (Manager):
                 self.client_timeout = timeout
                 self.client_precision = precision
                 self.client_family = family
-                unresolved (self)
+                resolved (self)
                 inactive (self, timeout)
                 
         def __call__ (self):
@@ -266,7 +266,7 @@ class Pool (Manager):
 
 # unresolved name
 
-def unresolved (manager):
+def resolved (manager):
         "allways resolved for unresolved dispatcher address"
         manager.client_resolved = (lambda name: True)
         manager.client_resolve = None
@@ -320,50 +320,49 @@ def inactive (manager, timeout):
 
 # metered and throttled I/O with inactive limit
 
-def unthrottle (dispatcher):
-        "remove limit decorators from a client dispatcher"
-        (
-                dispatcher.recv, 
-                dispatcher.send, 
-                dispatcher.readable,
-                dispatcher.writable,
-                dispatcher.handle_close
-                ) = dispatcher.client_decorated
-        dispatcher.client_decorated = None
-        
-def throttle (dispatcher, when):
-        "decorate a client dispatcher with stream limits"
-        dispatcher.client_decorated = (
-                dispatcher.recv, 
-                dispatcher.send, 
-                dispatcher.readable,
-                dispatcher.writable,
-                dispatcher.handle_close
-                )
-        async_limits.meter_recv (dispatcher, when)
-        async_limits.meter_send (dispatcher, when)
-        dispatcher.limit_inactive = timeout
-        async_limits.throttle_readable (dispatcher, when, inBps)
-        async_limits.throttle_writable (dispatcher, when, outBps)
-        def handle_close ():
-                assert None == dispatcher.log (
-                        'in="%d" out="%d"' % (
-                                dispatcher.ac_in_meter, 
-                                dispatcher.ac_out_meter
-                                ),  'debug'
-                        )
-                unthrottle (dispatcher)
-                dispatcher.handle_close ()
-                manager = dispatcher.client_manager
-                manager.ac_in_meter += dispatcher.ac_in_meter
-                manager.ac_out_meter += dispatcher.ac_out_meter
-                manager.client_close (dispatcher)
-                
-        dispatcher.handle_close = handle_close
-
-
 def limited (manager, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for client streams"
+        def unthrottle (dispatcher):
+                "remove limit decorators from a client dispatcher"
+                (
+                        dispatcher.recv, 
+                        dispatcher.send, 
+                        dispatcher.readable,
+                        dispatcher.writable,
+                        dispatcher.handle_close
+                        ) = dispatcher.client_decorated
+                dispatcher.client_decorated = None
+                
+        def throttle (dispatcher, when):
+                "decorate a client dispatcher with stream limits"
+                dispatcher.client_decorated = (
+                        dispatcher.recv, 
+                        dispatcher.send, 
+                        dispatcher.readable,
+                        dispatcher.writable,
+                        dispatcher.handle_close
+                        )
+                async_limits.meter_recv (dispatcher, when)
+                async_limits.meter_send (dispatcher, when)
+                dispatcher.limit_inactive = timeout
+                async_limits.throttle_readable (dispatcher, when, inBps)
+                async_limits.throttle_writable (dispatcher, when, outBps)
+                def handle_close ():
+                        assert None == dispatcher.log (
+                                'in="%d" out="%d"' % (
+                                        dispatcher.ac_in_meter, 
+                                        dispatcher.ac_out_meter
+                                        ),  'debug'
+                                )
+                        unthrottle (dispatcher)
+                        dispatcher.handle_close ()
+                        m = dispatcher.client_manager
+                        m.ac_in_meter += dispatcher.ac_in_meter
+                        m.ac_out_meter += dispatcher.ac_out_meter
+                        m.client_close (dispatcher)
+                        
+                dispatcher.handle_close = handle_close
+
         manager.client_decorate = throttle
         manager.client_limit = async_limits.limit
 
