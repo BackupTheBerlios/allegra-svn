@@ -104,11 +104,11 @@ class Dispatcher (object):
 class Manager (loginfo.Loginfo):
         
         "a connection manager base abstraction for dispatcher"
-        
-        client_when = client_dispatched = 0
+
         ac_in_meter = ac_in_meter = 0
+        client_when = client_dispatched = 0
         
-        def __init__ (self, timeout, precision, family):
+        def __init__ (self, timeout, precision, family=socket.AF_INET):
                 "initialize a new client manager"
                 self.client_managed = {}
                 self.client_timeout = timeout
@@ -177,9 +177,14 @@ class Manager (loginfo.Loginfo):
 
         def client_stop (self, when):
                 "handle the client management stop"
-                assert None == self.log ('stop %f sec' % (
-                        when - self.client_when
-                        ), 'debug')
+                assert None == self.log (
+                        'stop dispatched="%d"'
+                        ' seconds="%f" in="%d" out="%d"' % (
+                                self.client_dispatched,
+                                (when - self.client_when),
+                                self.ac_in_meter,
+                                self.ac_out_meter
+                                ), 'debug')
 
         def client_shutdown (self):
                 "close all client dispatchers when done"
@@ -370,9 +375,16 @@ def limited (manager, timeout, inBps, outBps):
 # metered and rationated I/O with inactive limit
 
 def rationed (manager, timeout, inBps, outBps):
-        managed = manager.client_managed
-        limited (
-                client, timeout, 
-                (lambda: int (inBps ()/len (managed))),
-                (lambda: int (outBps ()/len (managed)))
-                )
+        manager.ac_in_throttle_Bps = inBps
+        manager.ac_out_throttle_Bps = outBps
+        def throttle_in ():
+                return int (manager.ac_in_throttle_Bps / len (
+                        manager.client_managed
+                        ))
+
+        def throttle_out ():
+                return int (manager.ac_out_throttle_Bps / len (
+                        manager.client_managed
+                        ))
+
+        limited (client, timeout, throttle_in, throttle_out)
