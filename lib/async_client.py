@@ -24,7 +24,7 @@ from allegra import loginfo, async_loop, async_limits
 
 class Dispatcher (object):
         
-        "client mix-in for stream dispatcher"
+        "client mix-in for SOCK_STREAM dispatcher"
         
         client_when = 0
 
@@ -55,11 +55,10 @@ class Dispatcher (object):
                                 )
                         self.handle_close ()
 
-# A manager abstraction for limited client dispatchers
 
 class Manager (loginfo.Loginfo):
         
-        "a connection manager base abstraction for dispatcher"
+        "a connection manager for async_client.Dispatcher instances"
 
         ac_in_meter = ac_out_meter = 0
         client_when = client_dispatched = 0
@@ -241,15 +240,11 @@ class Pool (Manager):
                 dispatcher.client_manager = None
 
 
-# unresolved name
-
 def resolved (manager):
         "allways resolved for unresolved dispatcher address"
         manager.client_resolved = (lambda name: True)
         manager.client_resolve = None
 
-
-# metered I/O with inactive limit
 
 def unmeter (dispatcher):
         "remove stream decorators from a client dispatcher"
@@ -257,16 +252,10 @@ def unmeter (dispatcher):
                 dispatcher.recv, 
                 dispatcher.send, 
                 dispatcher.handle_close
-                ) # = dispatcher.client_decorated
-        # dispatcher.client_decorated = None
+                )
 
 def meter (dispatcher, when):
         "decorate a client dispatcher with stream meters"
-        #dispatcher.client_decorated = (
-        #        dispatcher.recv, 
-        #        dispatcher.send, 
-        #        dispatcher.handle_close
-        #        )
         async_limits.meter_recv (dispatcher, when)
         async_limits.meter_send (dispatcher, when)
         def handle_close ():
@@ -295,8 +284,6 @@ def inactive (manager, timeout):
         manager.client_limit = async_limits.inactive
 
 
-# metered and throttled I/O with inactive limit
-
 def limited (manager, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for client streams"
         def unthrottle (dispatcher):
@@ -307,18 +294,10 @@ def limited (manager, timeout, inBps, outBps):
                         dispatcher.readable,
                         dispatcher.writable,
                         dispatcher.handle_close
-                        ) # = dispatcher.client_decorated
-                # dispatcher.client_decorated = None
+                        )
                 
         def throttle (dispatcher, when):
                 "decorate a client dispatcher with stream limits"
-                #dispatcher.client_decorated = (
-                #        dispatcher.recv, 
-                #        dispatcher.send, 
-                #        dispatcher.readable,
-                #        dispatcher.writable,
-                #        dispatcher.handle_close
-                #        )
                 async_limits.meter_recv (dispatcher, when)
                 async_limits.meter_send (dispatcher, when)
                 dispatcher.limit_inactive = timeout
@@ -344,8 +323,6 @@ def limited (manager, timeout, inBps, outBps):
         manager.client_limit = async_limits.limit
 
 
-# metered and rationated I/O with inactive limit
-
 def rationed (manager, timeout, inBps, outBps):
         manager.ac_in_throttle_Bps = inBps
         manager.ac_out_throttle_Bps = outBps
@@ -361,8 +338,6 @@ def rationed (manager, timeout, inBps, outBps):
 
         limited (manager, timeout, throttle_in, throttle_out)
 
-
-# a pipeline mix-in
 
 class Pipeline (object):
         
