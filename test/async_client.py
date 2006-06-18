@@ -58,25 +58,28 @@ loginfo.log ('test_managed')
 
 test_manager (manager, hosts)
 async_loop.dispatch ()
-
 test_cache (cache, hosts)
 async_loop.dispatch ()
-
 test_pool (pool)
 async_loop.dispatch ()
 
-"""
 loginfo.log ('test_limited')
 
 for client in (manager, cache, pool):
         async_client.limited (client, 3, (lambda: 1024), (lambda: 1024))
 test_manager (manager, hosts)
+async_loop.dispatch ()
 test_cache (cache, hosts)
-test_pool (pool, 2)
+async_loop.dispatch ()
+test_pool (pool)
+async_loop.dispatch ()
 
 for client in (manager, cache, pool):
         async_client.rationed (client, 3, 1024, 1024)
 test_manager (manager, hosts)
+async_loop.dispatch ()
 test_cache (cache, hosts)
-test_pool (pool, 2)
-"""
+async_loop.dispatch ()
+test_pool (pool)
+async_loop.dispatch ()
+

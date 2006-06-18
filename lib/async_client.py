@@ -387,13 +387,13 @@ def rationed (manager, timeout, inBps, outBps):
         manager.ac_in_throttle_Bps = inBps
         manager.ac_out_throttle_Bps = outBps
         def throttle_in ():
-                return int (manager.ac_in_throttle_Bps / len (
+                return int (manager.ac_in_throttle_Bps / max (len (
                         manager.client_managed
-                        ))
+                        ), 1))
 
         def throttle_out ():
-                return int (manager.ac_out_throttle_Bps / len (
+                return int (manager.ac_out_throttle_Bps / max (len (
                         manager.client_managed
-                        ))
+                        ), 1))
 
-        limited (client, timeout, throttle_in, throttle_out)
+        limited (manager, timeout, throttle_in, throttle_out)
