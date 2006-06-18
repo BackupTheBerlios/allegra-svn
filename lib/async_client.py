@@ -105,7 +105,7 @@ class Manager (loginfo.Loginfo):
         
         "a connection manager base abstraction for dispatcher"
 
-        ac_in_meter = ac_in_meter = 0
+        ac_in_meter = ac_out_meter = 0
         client_when = client_dispatched = 0
         
         def __init__ (self, timeout, precision, family=socket.AF_INET):
@@ -117,8 +117,19 @@ class Manager (loginfo.Loginfo):
                 resolved (self)
                 inactive (self, timeout)
                 
+        def __call__ (self, dispatcher, name):
+                now = time.time ()
+                dispatcher.client_manager = self
+                self.client_decorate (dispatcher, now)
+                key = id (dispatcher)
+                self.client_managed[key] = dispatcher
+                dispatcher.client_key = key
+                if len (self.client_managed) == 1:
+                        self.client_start (now)
+                self.client_connect (dispatcher, name)
+                return dispatcher
+                
         def client_connect (self, dispatcher, name):
-                dispatcher.client_key = name
                 if self.client_resolved (name):
                         if not dispatcher.client_connect (
                                 name, self.client_timeout,
@@ -172,7 +183,7 @@ class Manager (loginfo.Loginfo):
         def client_close (self, dispatcher):
                 "remove the dispatcher from cache and increment dispatched"
                 self.client_dispatched += 1
-                del self.client_managed[dispatcher.client_name]
+                del self.client_managed[dispatcher.client_key]
                 dispatcher.client_manager = None
 
         def client_stop (self, when):
@@ -194,19 +205,15 @@ class Manager (loginfo.Loginfo):
 
 class Cache (Manager):
 
-        def __init__ (
-                self, Dispatcher, timeout, precision, 
-                family=socket.AF_INET
-                ):
+        def __init__ (self, timeout, precision, family=socket.AF_INET):
                 self.client_managed = {}
-                self.Client_dispatcher = Dispatcher
                 self.client_timeout = timeout
                 self.client_precision = precision
                 self.client_family = family
                 resolved (self)
                 inactive (self, timeout)
                 
-        def __call__ (self, name):
+        def __call__ (self, Dispatcher, name):
                 """return a cached or a new dispatcher, maybe resolving and
                 connecting it first, closing it on connection error or if
                 it's socket address cannot be resolved"""
@@ -216,12 +223,13 @@ class Cache (Manager):
                 except KeyError:
                         pass
                 now = time.time ()
-                dispatcher = self.Client_dispatcher ()
+                dispatcher = Dispatcher ()
                 dispatcher.client_manager = self
                 self.client_decorate (dispatcher, now)
                 self.client_managed[name] = dispatcher
+                dispatcher.client_key = name
                 self.client_connect (dispatcher, name)
-                if len (self.client_cache) == 1:
+                if len (self.client_managed) == 1:
                         self.client_start (now)
                 return dispatcher
 
