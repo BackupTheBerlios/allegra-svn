@@ -22,50 +22,6 @@ import time, socket, collections
 from allegra import loginfo, async_loop, async_limits
         
 
-# a pipeline mix-in
-
-class Pipeline (object):
-        
-        "a pipeline mix-in for dispatcher"
-
-        pipeline_sleeping = False
-        pipeline_keep_alive = False
-
-        def __init__ (self, requests=None, responses=None):
-                self.pipeline_requests = requests or collections.deque ()
-                self.pipeline_responses = responses or collections.deque ()
-
-        def pipeline (self, request):
-                self.pipeline_requests.append (request)
-                if self.pipeline_sleeping:
-                        self.pipeline_sleeping = False
-                        self.pipeline_wake_up ()
-
-        def pipeline_wake_up (self):
-                # pipelining protocols, like HTTP/1.1 or ESMPT
-                requests = self.pipeline_requests
-                if self.pipeline_requests:
-                        while self.pipeline_requests:
-                                reactor = self.pipeline_requests.popleft ()
-                                self.pipeline_push (reactor)
-                                self.pipeline_responses.append (reactor)
-                self.pipeline_sleeping = True
-
-        def pipeline_wake_up_once (self):
-                # synchronous protocols, like HTTP/1.0 or SMTP
-                if self.pipeline_requests:
-                        reactor = self.pipeline_requests.popleft ()
-                        self.pipeline_push (reactor)
-                        self.pipeline_responses.append (reactor)
-                        self.pipeline_sleeping = False
-                else:
-                        self.pipeline_sleeping = True
-                        
-        def pipeline_push (self, reactor):
-                assert None == loginfo.log (
-                        '%r' % reactor, 'pipeline_push'
-                        )
-
 class Dispatcher (object):
         
         "client mix-in for stream dispatcher"
@@ -210,7 +166,9 @@ class Manager (loginfo.Loginfo):
 
 class Cache (Manager):
 
-        def __init__ (self, timeout, precision, family=socket.AF_INET):
+        def __init__ (
+                self, timeout=3, precision=1, family=socket.AF_INET
+                ):
                 self.client_managed = {}
                 self.client_timeout = timeout
                 self.client_precision = precision
@@ -242,8 +200,8 @@ class Cache (Manager):
 class Pool (Manager):
         
         def __init__ (
-                self, Dispatcher, name, pool, timeout, precision, 
-                family=socket.AF_INET
+                self, Dispatcher, name, 
+                pool=2, timeout=3, precision=1, family=socket.AF_INET
                 ):
                 assert pool > 1
                 self.client_managed = []
@@ -402,3 +360,28 @@ def rationed (manager, timeout, inBps, outBps):
                         ), 1))
 
         limited (manager, timeout, throttle_in, throttle_out)
+
+
+# a pipeline mix-in
+
+class Pipeline (object):
+        
+        "a pipeline mix-in for dispatcher"
+
+        pipeline_sleeping = False
+        pipeline_keep_alive = False
+
+        def pipeline_set (self, requests=None, responses=None):
+                self.pipeline_requests = requests or collections.deque ()
+                self.pipeline_responses = responses or collections.deque ()
+
+        def pipeline (self, request):
+                self.pipeline_requests.append (request)
+                if self.pipeline_sleeping:
+                        self.pipeline_sleeping = False
+                        self.pipeline_wake_up ()
+
+        def pipeline_wake_up (self):
+                assert None == self.log (
+                        'pipeline_wake_up', 'unimplemented'
+                        )
