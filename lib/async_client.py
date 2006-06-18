@@ -240,6 +240,7 @@ class Pool (Manager):
                 self, Dispatcher, name, pool, timeout, precision, 
                 family=socket.AF_INET
                 ):
+                assert pool > 1
                 self.client_managed = []
                 self.client_pool = pool
                 self.client_name = name
@@ -252,8 +253,8 @@ class Pool (Manager):
                 inactive (self, timeout)
                 
         def __call__ (self):
-                size = self.client_pool
-                if len (self.client_managed) + 1 == size:
+                size = len (self.client_managed)
+                if size == self.client_pool:
                         self.client_called += 1
                         return self.client_managed[self.client_called % size]
                 
@@ -263,7 +264,7 @@ class Pool (Manager):
                 self.client_decorate (dispatcher, now)
                 self.client_managed.append (dispatcher)
                 self.client_connect (dispatcher, self.client_name)
-                if len (self.client_pool) == 1:
+                if len (self.client_managed) == 1:
                         self.client_start (now)
                 return dispatcher
 
