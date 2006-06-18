@@ -140,15 +140,20 @@ class Manager (loginfo.Loginfo):
 
                 assert self.client_resolve != None
                 def resolve (addr):
-                        if (
-                                addr == None or not
-                                dispatcher.client_connect (
-                                        addr, self.client_timeout,
-                                        self.client_family
-                                        )
+                        if addr == None:
+                                self.client_unresolved (dispatcher, name)
+                        elif not dispatcher.client_connect (
+                                addr, self.client_timeout,
+                                self.client_family
                                 ):
                                 dispatcher.handle_close ()
                 self.client_resolve (name, resolve)
+                
+        def client_unresolved (self, dispatcher, name):
+                assert None == dispatcher.log (
+                        '%r unresolved' % name, 'debug'
+                        )
+                dispatcher.handle_close ()
 
         def client_start (self, when):
                 "handle the client management startup"
@@ -290,20 +295,20 @@ def resolved (manager):
 
 def unmeter (dispatcher):
         "remove stream decorators from a client dispatcher"
-        (
+        del (
                 dispatcher.recv, 
                 dispatcher.send, 
                 dispatcher.handle_close
-                ) = dispatcher.client_decorated
-        dispatcher.client_decorated = None
+                ) # = dispatcher.client_decorated
+        # dispatcher.client_decorated = None
 
 def meter (dispatcher, when):
         "decorate a client dispatcher with stream meters"
-        dispatcher.client_decorated = (
-                dispatcher.recv, 
-                dispatcher.send, 
-                dispatcher.handle_close
-                )
+        #dispatcher.client_decorated = (
+        #        dispatcher.recv, 
+        #        dispatcher.send, 
+        #        dispatcher.handle_close
+        #        )
         async_limits.meter_recv (dispatcher, when)
         async_limits.meter_send (dispatcher, when)
         def handle_close ():
@@ -338,24 +343,24 @@ def limited (manager, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for client streams"
         def unthrottle (dispatcher):
                 "remove limit decorators from a client dispatcher"
-                (
+                del (
                         dispatcher.recv, 
                         dispatcher.send, 
                         dispatcher.readable,
                         dispatcher.writable,
                         dispatcher.handle_close
-                        ) = dispatcher.client_decorated
-                dispatcher.client_decorated = None
+                        ) # = dispatcher.client_decorated
+                # dispatcher.client_decorated = None
                 
         def throttle (dispatcher, when):
                 "decorate a client dispatcher with stream limits"
-                dispatcher.client_decorated = (
-                        dispatcher.recv, 
-                        dispatcher.send, 
-                        dispatcher.readable,
-                        dispatcher.writable,
-                        dispatcher.handle_close
-                        )
+                #dispatcher.client_decorated = (
+                #        dispatcher.recv, 
+                #        dispatcher.send, 
+                #        dispatcher.readable,
+                #        dispatcher.writable,
+                #        dispatcher.handle_close
+                #        )
                 async_limits.meter_recv (dispatcher, when)
                 async_limits.meter_send (dispatcher, when)
                 dispatcher.limit_inactive = timeout
