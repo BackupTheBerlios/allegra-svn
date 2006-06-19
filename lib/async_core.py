@@ -52,6 +52,8 @@ from allegra import loginfo, async_loop, finalization
 
 
 class Dispatcher (loginfo.Loginfo, finalization.Finalization):
+        
+        async_map = async_loop.async_map
     
         connected = accepting = closing = 0
 
@@ -78,13 +80,13 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def add_channel (self):
                 "add the dispatcher to the asynchronous I/O map"
-                async_loop.async_map[self._fileno] = self
+                self.async_map[self._fileno] = self
 
         def del_channel (self):
                 "removes the dispatcher from the asynchronous I/O map"
                 fd = self._fileno
-                if async_loop.async_map.has_key (fd):
-                        del async_loop.async_map[fd]
+                if self.async_map.has_key (fd):
+                        del self.async_map[fd]
 
         def create_socket (self, family, type):
                 "create a socket and add the dispatcher to the I/O map"
@@ -316,7 +318,7 @@ if os.name == 'posix':
 
         class Async_file (Dispatcher):
                 
-                "An asyncore dispatcher for UNIX pipe and stdandard I/O."
+                "dispatcher for non-blocking UNIX file descriptors"
                 
                 def __init__ (self, fd):
                         Async_dispatcher.__init__ (self)

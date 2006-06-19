@@ -63,20 +63,13 @@ async_map = {}
 ASYNC_SELECT_LIMIT = 511
 
 def poll1 (map, timeout=0.0):
-        r = []; w = []; e = []
-        for fd, obj in map.items ():
-                if obj.readable ():
+        r = []
+        w = []
+        for fd, dispatcher in map.items ():
+                if dispatcher.readable ():
                         r.append (fd)
-                if obj.writable ():
+                if dispatcher.writable ():
                         w.append (fd)
-                #is_r = obj.readable ()
-                #is_w = obj.writable ()
-                #if is_r:
-                #        r.append (fd)
-                #if is_w:
-                #        w.append (fd)
-                #if is_r or is_w:
-                #        e.append (fd)
                 if max (len (r), len (w)) > ASYNC_SELECT_LIMIT:
                         # Default limit set to 512 in _select.pyd, no upper
                         # bound for NT, something in the many thousands for
@@ -98,7 +91,7 @@ def poll1 (map, timeout=0.0):
                 return
         
         try:
-                r, w, e = select.select (r, w, e, timeout)
+                r, w, e = select.select (r, w, [], timeout)
         except select.error, err:
                 if err[0] != errno.EINTR:
                     raise
@@ -108,92 +101,67 @@ def poll1 (map, timeout=0.0):
 
         for fd in r:
                 try:
-                        obj = map[fd]
+                        dispatcher = map[fd]
                 except KeyError:
                         continue
 
                 try:
-                        obj.handle_read_event ()
+                        dispatcher.handle_read_event ()
                 except async_Exception:
                         raise async_Exception
                         
                 except:
-                        obj.handle_error ()
+                        dispatcher.handle_error ()
 
         for fd in w:
                 try:
-                        obj = map[fd]
+                        dispatcher = map[fd]
                 except KeyError:
                         continue
 
                 try:
-                        obj.handle_write_event ()
+                        dispatcher.handle_write_event ()
                 except async_Exception:
                         raise async_Exception 
                         
                 except:
-                        obj.handle_error ()
-
-        #for fd in e:
-        #        try:
-        #                obj = map[fd]
-        #        except KeyError:
-        #                continue
-        #
-        #        try:
-        #                obj.handle_expt_event ()
-        #        except async_Exception:
-        #                raise async_Exception 
-        #                
-        #        except:
-        #                obj.handle_error ()
+                        dispatcher.handle_error ()
 
 
 def poll3 (map, timeout=0.0):
         timeout = int (timeout*1000)
         pollster = select.poll ()
-        for fd, obj in map.items():
+        for fd, dispatcher in map.items():
                 flags = 0
-                if obj.readable ():
+                if dispatcher.readable ():
                         flags |= select.POLLIN | select.POLLPRI
-                if obj.writable ():
+                if dispatcher.writable ():
                         flags |= select.POLLOUT
                 if flags:
-                        #flags |= (
-                        #        select.POLLERR | 
-                        #        select.POLLHUP | 
-                        #        select.POLLNVAL
-                        #        )
                         pollster.register (fd, flags)
         try:
-                r = pollster.poll (timeout)
+                p = pollster.poll (timeout)
         except select.error, err:
                 if err[0] != errno.EINTR:
                         raise
                         
-                r = []
-        for fd, flags in r:
-                try:
-                        obj = map[fd]
-                except KeyError:
-                        continue
-
-                try:
-                        if flags & (select.POLLIN | select.POLLPRI):
-                                obj.handle_read_event()
-                        if flags & select.POLLOUT:
-                                obj.handle_write_event()
-                        #if flags & (
-                        #        select.POLLERR | 
-                        #        select.POLLHUP | 
-                        #        select.POLLNVAL
-                        #        ):
-                        #        obj.handle_expt_event()
-                except async_Exception:
-                        raise async_Exception 
-                        
-                except:
-                        obj.handle_error()
+        else:
+                for fd, flags in p:
+                        try:
+                                dispatcher = map[fd]
+                        except KeyError:
+                                continue
+        
+                        try:
+                                if flags & (select.POLLIN | select.POLLPRI):
+                                        dispatcher.handle_read_event()
+                                if flags & select.POLLOUT:
+                                        dispatcher.handle_write_event()
+                        except async_Exception:
+                                raise async_Exception 
+                                
+                        except:
+                                dispatcher.handle_error()
 
 
 # Select the best poll function available for this system
