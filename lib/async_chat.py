@@ -226,7 +226,7 @@ class Dispatcher (async_core.Dispatcher):
                                 self, self.ac_in_buffer
                                 )
 
-        terminator = '\n'
+        terminator = None
 
         def set_terminator (self, terminator):
                 "set the channel's terminator"
