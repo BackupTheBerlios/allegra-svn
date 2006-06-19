@@ -208,12 +208,12 @@ class Python_prompt (Sync_prompt):
 		if method == 'excp':
 			self.loginfo_traceback (result)
 		elif result != None:
-			# self.async_stderr ('%r\n' % (result,))
-                        self.select_trigger ((
-                                loginfo.log, (
+                        if __debug__:
+			        self.async_stderr ('%r\n' % (result,))
+                        else:
+                                self.select_trigger ((loginfo.log, (
                                         '%r' % (result, ), self.loginfo_info
-                                        )
-                                ))
+                                        )))
                 if self.async_loop_catch != None: 
 		        self.thread_loop_queue ((self.sync_stdin, ()))
 
