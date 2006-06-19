@@ -270,7 +270,7 @@ class PNS_client (async_client.Cache): #tcp_client.TCP_client):
         #                        self, channel, when
         #                        )
         
-        def client_overflow (self, dispatcher, when):
+        def client_overflow (self, dispatcher):
                 "close inactive channels without subscriptions"
                 if not dispatcher.pns_subscribed:
                         dispatcher.handle_close ()
