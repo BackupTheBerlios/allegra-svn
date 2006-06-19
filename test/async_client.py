@@ -4,7 +4,7 @@ from allegra import (
         loginfo, async_loop, finalization, async_chat, async_client
         )
 
-class Chat (async_chat.Async_chat, async_client.Dispatcher):
+class Chat (async_chat.Dispatcher, async_client.Dispatcher):
         terminator = None
         
 # test unmanaged client dispatcher

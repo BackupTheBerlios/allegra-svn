@@ -71,13 +71,13 @@ def collect_net (next, buffer, collect, terminate):
         return 0, '', False # buffer consumed.
 
 
-class Async_net (async_core.Async_dispatcher):
+class Async_net (async_core.Dispatcher):
 
         def __init__ (self, conn=None):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
                 self.output_fifo = collections.deque ()
-                async_core.Async_dispatcher.__init__ (self, conn)
+                async_core.Dispatcher.__init__ (self, conn)
 
         def __repr__ (self):
                 return 'async-net id="%x"' % id (self)

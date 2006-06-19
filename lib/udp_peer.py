@@ -22,12 +22,12 @@ import sys, socket, random #, asyncore, errno
 from allegra import async_core
 
 
-class UDP_dispatcher (async_core.Async_dispatcher):
+class UDP_dispatcher (async_core.Dispatcher):
 
 	udp_datagram_size = 512
 
 	def __init__ (self, ip, port=None):
-		async_core.Async_dispatcher.__init__ (self)
+		async_core.Dispatcher.__init__ (self)
 		self.create_socket (socket.AF_INET, socket.SOCK_DGRAM)
 		# binds a channel to a given ip address, pick a random port
 		# above 8192 if none provided, and handle error.

@@ -31,7 +31,7 @@ class TCP_server_echo_net (async_net.Async_net):
                 self.ac_out_buffer += '%d:%s,' % (len (data), data)
                 
 
-class TCP_server_echo_line (async_chat.Async_chat):
+class TCP_server_echo_line (async_chat.Dispatcher):
         
         echo_line = ''
 
@@ -44,7 +44,7 @@ class TCP_server_echo_line (async_chat.Async_chat):
                 self.echo_line = ''
                 
 
-class TCP_server (async_core.Async_dispatcher):
+class TCP_server (async_core.Dispatcher):
         
         # A simple TCP server, usefull for any peer with unrestricted 
         # bandwith use and many single clients. practically, that's the
@@ -61,7 +61,7 @@ class TCP_server (async_core.Async_dispatcher):
         def __init__ (self, addr):
                 self.tcp_server_clients = {}
                 self.tcp_server_channels = []
-                async_core.Async_dispatcher.__init__ (self)
+                async_core.Dispatcher.__init__ (self)
                 self.create_socket (socket.AF_INET, socket.SOCK_STREAM)
                 self.set_reuse_addr ()
                 self.bind (addr)

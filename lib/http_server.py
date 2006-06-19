@@ -47,7 +47,7 @@ class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
 HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)[?]?([^#]+)?(#.+)?')
 
 class HTTP_server_channel (
-        async_chat.Async_chat, mime_reactor.MIME_collector
+        async_chat.Dispatcher, mime_reactor.MIME_collector
         ):
 
         ac_in_buffer_size = 4096 # 4KB input buffer
@@ -56,7 +56,7 @@ class HTTP_server_channel (
 	http_version = '1.0'
 
 	def __init__ (self, conn):
-		async_chat.Async_chat.__init__ (self, conn)
+		async_chat.Dispatcher.__init__ (self, conn)
                 self.set_terminator ('\r\n\r\n')
 
         def __repr__ (self):

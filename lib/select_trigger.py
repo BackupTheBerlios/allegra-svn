@@ -105,7 +105,7 @@ elif os.name == 'nt':
 
 	# win32-safe version
 
-	class Trigger (async_core.Async_dispatcher):
+	class Trigger (async_core.Dispatcher):
                 
                 "Thunk back safely from threads into the asynchronous loop"
 
@@ -129,7 +129,7 @@ elif os.name == 'nt':
 			w.setblocking (1)
 			self.trigger = w
 
-			async_core.Async_dispatcher.__init__ (self, r)
+			async_core.Dispatcher.__init__ (self, r)
 			self.lock = thread.allocate_lock ()
 			self.thunks = []
 			self._trigger_connected = 0

@@ -109,7 +109,7 @@ class SMTP_client_reactor (finalization.Finalization):
 
 
 class SMTP_client_channel (
-        tcp_client.Pipeline, tcp_client.TCP_client, async_chat.Async_chat, 
+        tcp_client.Pipeline, tcp_client.TCP_client, async_chat.Dispatcher, 
         ):
 
         # This SMTP client waits for 220 to wake up the pipeline, then uses 
@@ -120,7 +120,7 @@ class SMTP_client_channel (
         def __init__ (self):
                 self.smtp_response = ''
                 tcp_client.Pipeline.__init__ (self)
-                async_chat.Async_chat.__init__ (self)
+                async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n')
                 
         def collect_incoming_data (self, data):

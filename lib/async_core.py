@@ -51,7 +51,7 @@ from errno import (
 from allegra import loginfo, async_loop, finalization
 
 
-class Async_dispatcher (loginfo.Loginfo, finalization.Finalization):
+class Dispatcher (loginfo.Loginfo, finalization.Finalization):
     
         connected = accepting = closing = 0
 
@@ -314,7 +314,7 @@ if os.name == 'posix':
                         return self.fd
                         
 
-        class Async_file (Async_dispatcher):
+        class Async_file (Dispatcher):
                 
                 "An asyncore dispatcher for UNIX pipe and stdandard I/O."
                 

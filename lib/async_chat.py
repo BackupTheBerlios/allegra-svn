@@ -103,7 +103,7 @@ def collect_chat (c, buffer):
         return buffer
 
 
-class Async_chat (async_core.Async_dispatcher):
+class Dispatcher (async_core.Dispatcher):
 
         ac_in_buffer_size = ac_out_buffer_size = 4096
         
@@ -111,7 +111,7 @@ class Async_chat (async_core.Async_dispatcher):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
                 self.output_fifo = collections.deque ()
-                async_core.Async_dispatcher.__init__ (self, conn)
+                async_core.Dispatcher.__init__ (self, conn)
 
         def __repr__ (self):
                 return 'async-chat id="%x"' % id (self)

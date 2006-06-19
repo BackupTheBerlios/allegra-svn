@@ -457,6 +457,35 @@ class TCP_client_DNS (tcp_client.TCP_client):
                 
         def tcp_client_dns_error (self, channel, addr):
                 assert None == channel.log ('DNS error', 'debug')
+     
+     
+# The new client ...
+                
+def ip_resolved (name):
+        try:
+                return len ([
+                        n for n in host[0].split ('.') 
+                        if -1 < int (n) < 255
+                        ]) == 4
+                                
+        except:
+                return False
+                
+def client_resolution (manager, resolver=None, predicate='A'):
+        if resolver == None:
+                resolver = DNS_client (dns_servers ())
+        def client_resolve (name, resolve):
+                def dns_resolve (resolved):
+                        if resolved.dns_resources:
+                                resolve (resolved.dns_resources[0])
+                        else:
+                                resolve (None)
+                resolver.dns_resolve ((name[0], predicate), dns_resolve)
+        
+        manager.client_resolved = ip_resolved
+        manager.client_resolve = client_resolve
+     
+# ...
 
 
 if __name__ == '__main__':

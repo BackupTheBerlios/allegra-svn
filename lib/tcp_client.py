@@ -62,7 +62,7 @@ class TCP_client_net (async_net.Async_net, TCP_client_channel):
 	"The simplest netstring client, a netline logger."
 
 
-class TCP_client_line (async_chat.Async_chat, TCP_client_channel):
+class TCP_client_line (async_chat.Dispatcher, TCP_client_channel):
 	
 	"The simplest asynchat client, a netline logger."
 

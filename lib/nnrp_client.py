@@ -29,11 +29,11 @@ class NNRP_client_channel (
         tcp_client.Pipeline,
         mime_reactor.MIME_collector,
         tcp_client.TCP_client_channel, 
-        async_chat.Async_chat
+        async_chat.Dispatcher
         ):
                 
         def __init__ (self):
-                async_chat.Async_chat.__init__ (self)
+                async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n')
                 
         def mime_collector_continue (self):

@@ -19,7 +19,7 @@
 
 import collections, subprocess
 
-from allegra import loginfo, thread_loop 
+from allegra import loginfo, finalization, thread_loop 
 
 
 # Methods attributed to a synchronized file type
@@ -126,6 +126,24 @@ class Synchronized_open (object):
                 self.async_closed = True
                 thread_loop.desynchronize (self)
                                 
+
+class File_producer (Synchronized_open, finalization.Finalization):
+
+        synchronizer_size = 16
+        
+        def __init__ (self, filename, mode='rb'):
+                assert mode.startswith ('r')
+                Synchronized_open.__init__ (self, filename, mode)
+
+
+class File_collector (Synchronized_open, finalization.Finalization):
+
+        synchronizer_size = 8
+
+        def __init__ (self, filename, chunk=1<<14, mode='wb'):
+                assert not mode.startswith ('r')
+                Synchronized_open.__init__ (self, filename, mode, chunk)
+
                                 
 # Methods attributed to a synchronized subprocess type
                                 
@@ -200,9 +218,8 @@ def sync_wait (self):
                                 )
                         ))
         else:
-                self.select_trigger ((
-                        self.async_return, (self.subproces.wait (), )
-                        ))
+                code = self.subproces.wait ()
+                self.select_trigger ((self.async_return, (code, )))
 
 
 class Synchronized_popen (object):
@@ -256,6 +273,7 @@ class Synchronized_popen (object):
                 
         def async_return (self, code):
                 self.async_code = code
+                thread_loop.desynchronize (self)
                 assert None == loginfo.log ('%r' % code, 'debug')
         
         # The rational is that you want to produce STDOUT not STDERR.
@@ -277,7 +295,24 @@ class Synchronized_popen (object):
         # Further processing of the reactor's output or input can be
         # implemented by chaining the ad-hoc type of collector and/or 
         # producer instances.
+
+
+class Pipe_reactor (Synchronized_popen, finalization.Finalization):
+
+        synchronizer_size = 16
         
+        def __init__ (self, args):
+                Synchronized_popen.__init__ (
+                        self, args, 0, None, 
+                        subprocess.PIPE, subprocess.PIPE, None
+                        )
+
+        #
+        # Uses up to 16 threads to synchronize subprocess with the
+        # asynchronous collector and producer interfaces, piping
+        # in collected data, producing the subprocess STDOUT and
+        # not even looking at STDERR.
+
 
 # Synchronized file and process reactors
 #

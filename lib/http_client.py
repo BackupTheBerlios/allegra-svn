@@ -21,7 +21,8 @@ import re
 
 from allegra import (
 	loginfo, finalization, async_chat, producer, collector, 
-        tcp_client, dns_client, mime_headers, mime_reactor, http_reactor
+        async_client, #tcp_client, 
+        dns_client, mime_headers, mime_reactor, http_reactor
         )
 
 
@@ -50,10 +51,10 @@ class HTTP_client_reactor (
 # HTTP_RESPONSE_RE = re.compile ('.+?/([0-9.]+) ([0-9]{3}) (.*)')
 
 class HTTP_client_pipeline (
-	tcp_client.Pipeline, 
         mime_reactor.MIME_collector,
-        tcp_client.TCP_client_channel,
-	async_chat.Async_chat
+        # tcp_client.TCP_client_channel, tcp_client.Pipeline, 
+	async_chat.Dispatcher, 
+        async_client.Dispatcher, async_client.Pipeline
 	):
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
@@ -64,14 +65,16 @@ class HTTP_client_pipeline (
         #       HTTP/1.1 pipelining works very-well, thank you ;-)
 
         def __init__ (self):
-                async_chat.Async_chat.__init__ (self)
+                async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n\r\n')
-                tcp_client.Pipeline.__init__ (self)
+                # tcp_client.Pipeline.__init__ (self)
+                self.pipeline_set ()
                 
         def __repr__ (self):
                 return 'http-client-pipeline id="%x"' % id (self)
 
-        __call__ = tcp_client.Pipeline.pipeline
+        #__call__ = tcp_client.Pipeline.pipeline
+        __call__ = async_client.Pipeline.pipeline
 
 	# Asynchat
         
@@ -100,7 +103,13 @@ class HTTP_client_pipeline (
 			# broken connection ...
 			tcp_pipeline.Pipeline.pipeline_error (self)
 			
-	def pipeline_wake_up (self):
+        def pipeline_wake_up (self):
+                if self.http_version == '1.1':
+                        self.pipeline_wake_up_11 ()
+                else:
+                        self.pipeline_wake_up_10 ()
+                        
+	def pipeline_wake_up_10 (self):
 		# HTTP/1.0, push one at a time, maybe keep-alive or close
 		# when done ...
 		#
@@ -168,14 +177,15 @@ class HTTP_client_pipeline (
 			self.http_collector_error ()
 			return True
 
-                version = http_version[-3:]
-                if (
-                        version == '1.1' and 
-                        self.pipeline_wake_up != self.pipeline_wake_up_11
-                        ):
-			self.pipeline_wake_up = self.pipeline_wake_up_11
-                elif self.http_version != '1.0':
-		        self.http_version = '1.0'
+                self.http_version = http_version[-3:]
+                #version = http_version[-3:]
+                #if (
+                #        version == '1.1' and 
+                #        self.pipeline_wake_up != self.pipeline_wake_up_11
+                #        ):
+		#	self.pipeline_wake_up = self.pipeline_wake_up_11
+                #elif self.http_version != '1.0':
+		#        self.http_version = '1.0'
 		reactor.mime_collector_headers = \
 			self.mime_collector_headers = \
 			mime_headers.map (self.mime_collector_lines)
@@ -212,7 +222,7 @@ class HTTP_client_pipeline (
 
 	http_collector_continue = http_reactor.http_collector_continue
 
-	http_collector_error = async_chat.Async_chat.handle_close
+	http_collector_error = async_chat.Dispatcher.handle_close
         
         http_requests = http_responses = 0
 
@@ -257,13 +267,18 @@ class HTTP_client_pipeline (
                 # ready to send.
                 
 
-class HTTP_client (dns_client.TCP_client_DNS):
+class Cache (async_client.Cache): #dns_client.TCP_client_DNS):
 
-	TCP_CLIENT_CHANNEL = HTTP_client_pipeline
-
+	#TCP_CLIENT_CHANNEL = HTTP_client_pipeline
+        
 	def __call__ (self, host, port=80, version='1.1'):
-		channel = self.tcp_client ((host, port))
-                if channel == None:
+		#channel = self.tcp_client ((host, port))
+                #if channel == None:
+                #        return
+                channel = async_client.Cache.__call__ (
+                        HTTP_client_pipeline, (host, port)
+                        )
+                if channel.closing:
                         return
 
                 if port == 80:
@@ -273,7 +288,8 @@ class HTTP_client (dns_client.TCP_client_DNS):
                 channel.http_version = version
                 return channel
 
-        def tcp_client_close (self, channel):
+        #def tcp_client_close (self, channel):
+        def client_close (self, channel):
                 assert None == channel.log (
                         'requests="%d" responses="%d" '
                         'pending="%d" failed="%d"' % (
@@ -283,7 +299,14 @@ class HTTP_client (dns_client.TCP_client_DNS):
                                 len (channel.pipeline_responses)
                                 ), 'debug'
                         )
-                dns_client.TCP_client_DNS.tcp_client_close (self, channel)
+                #dns_client.TCP_client_DNS.tcp_client_close (self, channel)
+                async_client.Cache.client_close (self, channel)
+
+
+def HTTP_client (timeout, precision, resolver=None):
+        client = Cache (timeout, precision)
+        dns_client.client_resolution (client, resolver)
+        return client
         
 
 def GET (pipeline, url, headers=None):
