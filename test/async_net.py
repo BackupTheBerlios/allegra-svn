@@ -4,11 +4,11 @@
 import collections
 
 from allegra.async_loop import dispatch
-from allegra.async_net import Async_net
+from allegra.async_net import Dispatcher
 from allegra.tcp_client import TCP_client_channel
 
 
-class QMTP_client_channel (Async_net, TCP_client_channel):
+class QMTP_client_channel (Dispatcher, TCP_client_channel):
             
     ac_in_buffer_size = 1024
     ac_out_buffer_size = 1<<14
@@ -40,7 +40,7 @@ if qmtp.tcp_connect (('127.0.0.1', 209)):
     dispatch ()
 
     
-class PIRP_client_channel (Async_net, TCP_client_channel):
+class PIRP_client_channel (Dispatcher, TCP_client_channel):
             
     ac_in_buffer_size = 1<<14
     ac_out_buffer_size = 2048

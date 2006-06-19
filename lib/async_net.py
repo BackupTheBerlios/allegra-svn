@@ -71,7 +71,7 @@ def collect_net (next, buffer, collect, terminate):
         return 0, '', False # buffer consumed.
 
 
-class Async_net (async_core.Dispatcher):
+class Dispatcher (async_core.Dispatcher):
 
         def __init__ (self, conn=None):
                 self.ac_in_buffer = ''

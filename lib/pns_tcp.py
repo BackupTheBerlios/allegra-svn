@@ -20,11 +20,11 @@
 from allegra import netstring, async_net, tcp_server, pns_model
 
 
-class PNS_session (async_net.Async_net):
+class PNS_session (async_net.Dispatcher):
 	
 	def __init__ (self, conn):
 		self.pns_subscribed = []
-		async_net.Async_net.__init__ (self, conn)
+		async_net.Dispatcher.__init__ (self, conn)
 
 	def __repr__ (self):
 		return 'session id="%x"' % id (self)

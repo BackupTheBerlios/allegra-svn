@@ -24,7 +24,7 @@ from allegra import (
         )
 
 
-class TCP_server_echo_net (async_net.Async_net):
+class TCP_server_echo_net (async_net.Dispatcher):
         
         def async_net_continue (self, data):
                 self.log (data)

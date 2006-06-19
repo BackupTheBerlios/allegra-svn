@@ -57,7 +57,7 @@ class TCP_client_channel (object):
 			self.handle_close ()
 
 
-class TCP_client_net (async_net.Async_net, TCP_client_channel):
+class TCP_client_net (async_net.Dispatcher, TCP_client_channel):
 	
 	"The simplest netstring client, a netline logger."
 

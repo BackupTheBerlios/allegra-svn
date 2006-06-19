@@ -21,7 +21,7 @@ from allegra import netstring, loginfo, async_net, async_client #tcp_client
 
 
 class PNS_client_channel (
-        async_net.Async_net, async_client.Dispatcher 
+        async_net.Dispatcher, async_client.Dispatcher 
         #tcp_client.TCP_client_channel
         ):
         
@@ -31,7 +31,7 @@ class PNS_client_channel (
                 self.pns_commands = {}
                 self.pns_contexts = {}
                 self.pns_subscribed = {}
-                async_net.Async_net.__init__ (self)
+                async_net.Dispatcher.__init__ (self)
                 
         def __repr__ (self):
                 return 'pns-client id="%x"' % id (self)
