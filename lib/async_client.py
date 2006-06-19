@@ -278,9 +278,10 @@ def inactive (manager, timeout):
         "meter I/O and limit inactivity for client streams"
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
-                dispatcher.limit_inactive = timeout
+                dispatcher.limit_inactive = manager.client_inactive
                 
         manager.client_decorate = decorate
+        manager.client_inactive = timeout
         manager.client_limit = async_limits.inactive
 
 
@@ -301,8 +302,12 @@ def limited (manager, timeout, inBps, outBps):
                 async_limits.meter_recv (dispatcher, when)
                 async_limits.meter_send (dispatcher, when)
                 dispatcher.limit_inactive = timeout
-                async_limits.throttle_readable (dispatcher, when, inBps)
-                async_limits.throttle_writable (dispatcher, when, outBps)
+                async_limits.throttle_readable (
+                        dispatcher, when, manager.ac_in_throttle_Bps
+                        )
+                async_limits.throttle_writable (
+                        dispatcher, when, manager.ac_out_throttle_Bps
+                        )
                 def handle_close ():
                         assert None == dispatcher.log (
                                 'in="%d" out="%d"' % (
@@ -320,19 +325,21 @@ def limited (manager, timeout, inBps, outBps):
                 dispatcher.handle_close = handle_close
 
         manager.client_decorate = throttle
+        manager.ac_in_throttle_Bps = inBps
+        manager.ac_out_throttle_Bps = outBps
         manager.client_limit = async_limits.limit
 
 
 def rationed (manager, timeout, inBps, outBps):
-        manager.ac_in_throttle_Bps = inBps
-        manager.ac_out_throttle_Bps = outBps
+        manager.ac_in_ration_Bps = inBps
+        manager.ac_out_ration_Bps = outBps
         def throttle_in ():
-                return int (manager.ac_in_throttle_Bps / max (len (
+                return int (manager.ac_in_ration_Bps / max (len (
                         manager.client_managed
                         ), 1))
 
         def throttle_out ():
-                return int (manager.ac_out_throttle_Bps / max (len (
+                return int (manager.ac_out_ration_Bps / max (len (
                         manager.client_managed
                         ), 1))
 
