@@ -73,6 +73,7 @@ class Manager (loginfo.Loginfo):
                 inactive (self, timeout)
                 
         def __call__ (self, dispatcher, name):
+                "registed, decorate and connect a new dispatcher"
                 now = time.time ()
                 dispatcher.client_manager = self
                 self.client_decorate (dispatcher, now)
@@ -85,6 +86,7 @@ class Manager (loginfo.Loginfo):
                 return dispatcher
                 
         def client_connect (self, dispatcher, name):
+                "resolve and/or connect a dispatcher"
                 if self.client_resolved (name):
                         if not dispatcher.client_connect (
                                 name, self.client_timeout,
@@ -105,6 +107,7 @@ class Manager (loginfo.Loginfo):
                 self.client_resolve (name, resolve)
                 
         def client_unresolved (self, dispatcher, name):
+                "assert debug log and close an unresolved dispatcher"
                 assert None == dispatcher.log (
                         '%r unresolved' % name, 'debug'
                         )
@@ -133,6 +136,7 @@ class Manager (loginfo.Loginfo):
                 return None
         
         def client_dispatchers (self):
+                "return a list of managed dispatchers"
                 return self.client_managed.values ()
                         
         def client_overflow (self, dispatcher):
@@ -141,6 +145,7 @@ class Manager (loginfo.Loginfo):
                 dispatcher.handle_close ()
                 
         def client_meter (self, dispatcher):
+                "assert debug log and account I/O meters of a dispatcher"
                 assert None == dispatcher.log (
                         'in="%d" out="%d"' % (
                                 dispatcher.ac_in_meter, 
@@ -178,9 +183,12 @@ class Manager (loginfo.Loginfo):
 
 class Cache (Manager):
 
+        "a cache of managed connections"
+
         def __init__ (
                 self, timeout=3, precision=1, family=socket.AF_INET
                 ):
+                "initialize a new client cache"
                 self.client_managed = {}
                 self.client_timeout = timeout
                 self.client_precision = precision
@@ -211,10 +219,13 @@ class Cache (Manager):
 
 class Pool (Manager):
         
+        "a pool of managed connections"
+        
         def __init__ (
                 self, Dispatcher, name, 
                 pool=2, timeout=3, precision=1, family=socket.AF_INET
                 ):
+                "initialize a new client pool"
                 assert pool > 1
                 self.client_managed = []
                 self.client_pool = pool
@@ -228,6 +239,10 @@ class Pool (Manager):
                 inactive (self, timeout)
                 
         def __call__ (self):
+                """return the next dispatcher pooled or instanciate a new
+                one, maybe resolving and connecting it first, closing it on 
+                connection error or if it's socket address cannot be 
+                resolved"""
                 size = len (self.client_managed)
                 if size >= self.client_pool:
                         self.client_called += 1
@@ -244,6 +259,7 @@ class Pool (Manager):
                 return dispatcher
 
         def client_dispatchers (self):
+                "return a list of dispatchers pooled"
                 return list (self.client_managed)
                         
         def client_close (self, dispatcher):
@@ -290,7 +306,7 @@ def inactive (manager, timeout):
 
 
 def limited (manager, timeout, inBps, outBps):
-        "throttle I/O and limit inactivity for client streams"
+        "throttle I/O and limit inactivity for managed client streams"
         def unthrottle (dispatcher):
                 "remove limit decorators from a client dispatcher"
                 del (
@@ -332,6 +348,7 @@ def limited (manager, timeout, inBps, outBps):
 
 
 def rationed (manager, timeout, inBps, outBps):
+        "ration I/O and limit inactivity for managed client streams"
         manager.ac_in_ration_Bps = inBps
         manager.ac_out_ration_Bps = outBps
         def throttle_in ():
@@ -355,10 +372,12 @@ class Pipeline (object):
         pipeline_keep_alive = False
 
         def pipeline_set (self, requests=None, responses=None):
+                "set new requests and responses deque"
                 self.pipeline_requests = requests or collections.deque ()
                 self.pipeline_responses = responses or collections.deque ()
 
         def pipeline (self, request):
+                "pipeline a new request, wake up if sleeping"
                 self.pipeline_requests.append (request)
                 if self.pipeline_sleeping:
                         self.pipeline_sleeping = False
