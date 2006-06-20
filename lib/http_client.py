@@ -291,8 +291,9 @@ class Cache (async_client.Cache): #dns_client.TCP_client_DNS):
         #def tcp_client_close (self, channel):
         def client_close (self, channel):
                 assert None == channel.log (
-                        'requests="%d" responses="%d" '
-                        'pending="%d" failed="%d"' % (
+                        'pipelined '
+                        ' requests="%d" responses="%d"'
+                        ' pending="%d" failed="%d"' % (
                                 channel.http_requests, 
                                 channel.http_responses,
                                 len (channel.pipeline_requests),

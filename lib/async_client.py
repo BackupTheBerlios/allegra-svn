@@ -139,10 +139,21 @@ class Manager (loginfo.Loginfo):
                 "assert debug log and close an overflowed dispatcher"
                 assert None == dispatcher.log ('limit overflow', 'debug')
                 dispatcher.handle_close ()
+                
+        def client_meter (self, dispatcher):
+                assert None == dispatcher.log (
+                        'in="%d" out="%d"' % (
+                                dispatcher.ac_in_meter, 
+                                dispatcher.ac_out_meter
+                                ),  'debug'
+                        )
+                self.ac_in_meter += dispatcher.ac_in_meter
+                self.ac_out_meter += dispatcher.ac_out_meter
+                self.client_dispatched += 1
 
         def client_close (self, dispatcher):
                 "remove the dispatcher from cache and increment dispatched"
-                self.client_dispatched += 1
+                self.client_meter (dispatcher)
                 del self.client_managed[dispatcher.client_key]
                 dispatcher.client_manager = None
 
@@ -156,6 +167,8 @@ class Manager (loginfo.Loginfo):
                                 self.ac_in_meter,
                                 self.ac_out_meter
                                 ), 'debug')
+                self.client_dispatched = \
+                        self.ac_in_meter = self.ac_out_meter = 0
 
         def client_shutdown (self):
                 "close all client dispatchers when done"
@@ -216,7 +229,7 @@ class Pool (Manager):
                 
         def __call__ (self):
                 size = len (self.client_managed)
-                if size == self.client_pool:
+                if size >= self.client_pool:
                         self.client_called += 1
                         return self.client_managed[self.client_called % size]
                 
@@ -235,7 +248,7 @@ class Pool (Manager):
                         
         def client_close (self, dispatcher):
                 "remove the dispatcher from pool and increment dispatched"
-                self.client_dispatched += 1
+                self.client_meter (dispatcher)
                 self.client_managed.remove (dispatcher)
                 dispatcher.client_manager = None
 
@@ -259,18 +272,9 @@ def meter (dispatcher, when):
         async_limits.meter_recv (dispatcher, when)
         async_limits.meter_send (dispatcher, when)
         def handle_close ():
-                assert None == dispatcher.log (
-                        'in="%d" out="%d"' % (
-                                dispatcher.ac_in_meter, 
-                                dispatcher.ac_out_meter
-                                ),  'debug'
-                        )
                 unmeter (dispatcher)
                 dispatcher.handle_close ()
-                manager = dispatcher.client_manager
-                manager.ac_in_meter += dispatcher.ac_in_meter
-                manager.ac_out_meter += dispatcher.ac_out_meter
-                manager.client_close (dispatcher)
+                dispatcher.client_manager.client_close (dispatcher)
                 
         dispatcher.handle_close = handle_close
 
@@ -317,10 +321,7 @@ def limited (manager, timeout, inBps, outBps):
                                 )
                         unthrottle (dispatcher)
                         dispatcher.handle_close ()
-                        m = dispatcher.client_manager
-                        m.ac_in_meter += dispatcher.ac_in_meter
-                        m.ac_out_meter += dispatcher.ac_out_meter
-                        m.client_close (dispatcher)
+                        dispatcher.client_manager.client_close (dispatcher)
                         
                 dispatcher.handle_close = handle_close
 
