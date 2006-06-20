@@ -75,7 +75,7 @@ class Manager (loginfo.Loginfo):
         def __call__ (self, dispatcher, name):
                 "registed, decorate and connect a new dispatcher"
                 now = time.time ()
-                dispatcher.client_manager = self
+                dispatcher.async_client = self
                 self.client_decorate (dispatcher, now)
                 key = id (dispatcher)
                 self.client_managed[key] = dispatcher
@@ -160,7 +160,7 @@ class Manager (loginfo.Loginfo):
                 "remove the dispatcher from cache and increment dispatched"
                 self.client_meter (dispatcher)
                 del self.client_managed[dispatcher.client_key]
-                dispatcher.client_manager = None
+                dispatcher.async_client = None
 
         def client_stop (self, when):
                 "handle the client management stop"
@@ -207,7 +207,7 @@ class Cache (Manager):
                         pass
                 now = time.time ()
                 dispatcher = Dispatcher ()
-                dispatcher.client_manager = self
+                dispatcher.async_client = self
                 self.client_decorate (dispatcher, now)
                 self.client_managed[name] = dispatcher
                 dispatcher.client_key = name
@@ -250,7 +250,7 @@ class Pool (Manager):
                 
                 now = time.time ()
                 dispatcher = self.Client_dispatcher ()
-                dispatcher.client_manager = self
+                dispatcher.async_client = self
                 self.client_decorate (dispatcher, now)
                 self.client_managed.append (dispatcher)
                 self.client_connect (dispatcher, self.client_name)
@@ -266,7 +266,7 @@ class Pool (Manager):
                 "remove the dispatcher from pool and increment dispatched"
                 self.client_meter (dispatcher)
                 self.client_managed.remove (dispatcher)
-                dispatcher.client_manager = None
+                dispatcher.async_client = None
 
 
 def resolved (manager):
@@ -290,7 +290,7 @@ def meter (dispatcher, when):
         def handle_close ():
                 unmeter (dispatcher)
                 dispatcher.handle_close ()
-                dispatcher.client_manager.client_close (dispatcher)
+                dispatcher.async_client.client_close (dispatcher)
                 
         dispatcher.handle_close = handle_close
 
@@ -337,7 +337,7 @@ def limited (manager, timeout, inBps, outBps):
                                 )
                         unthrottle (dispatcher)
                         dispatcher.handle_close ()
-                        dispatcher.client_manager.client_close (dispatcher)
+                        dispatcher.async_client.client_close (dispatcher)
                         
                 dispatcher.handle_close = handle_close
 
