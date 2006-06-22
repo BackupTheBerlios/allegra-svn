@@ -40,29 +40,33 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
                 return 'presto-http-cache path="%s"' % self.presto_path
                 
         def http_continue (self, reactor):
+                # try to route and continue immediately to a component cached
                 reactor.presto_path = urllib.unquote (reactor.http_uri[2])
                 if self.presto_route (reactor):
-                        self.presto_continue_http (reactor)
+                        self.presto_continue (reactor)
                         return False
                 
+                # or try to stat a regular document to load 
                 filename = self.presto_path + reactor.presto_path
                 try:
                         result = os.stat (filename)
                 except:
                         result = None
                 if result == None or not stat.S_ISREG (result[0]):
-                        reactor.http_response = 404
+                        reactor.http_response = 404 # Not Found.
                         return False
 
-                self.presto_dom (reactor)
+                # cache any valid file found and continue ...
+                self.presto_cache (
+                        reactor.presto_path, (
+                                self.presto_continue, (reactor, )
+                                ), reactor
+                        )
                 return False
 
-        def http_finalize (self, reactor):
-                if reactor.mime_collector_body != None:
-                        self.presto_continue_http (reactor)
-                http_server.http_log (self, reactor)
-                
-        def presto_continue_http (self, reactor):
+        http_finalize = http_server.http_log
+        
+        def presto_continue (self, reactor):
                 dom = reactor.presto_dom
                 reactor.presto_vector = {
                         u'presto-path': unicode (dom.presto_path, 'UTF-8')
@@ -244,6 +248,7 @@ def post_rest (component, reactor, POST_LIMIT=1<<16):
                         reactor.mime_collector_body = \
                                 collector.Limited_collector (POST_LIMIT)
                         reactor.http_response = 200
+                        reactor.http_continuation = component.presto
                 else:
                         reactor.http_response = 405 # Method Not Allowed
                 return
@@ -294,6 +299,7 @@ def form_rest (component, reactor, POST_LIMIT=1<<16):
                 reactor.mime_collector_body = \
                         collector.Limited_collector (POST_LIMIT)
                 reactor.http_response = 200
+                reactor.http_continuation = component.presto
                 return
         
         elif reactor.http_request[0] == 'GET':

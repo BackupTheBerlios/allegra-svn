@@ -131,22 +131,22 @@ class Chunk_collector (object):
                 return False # continue ...
 
 
-def http_collector_continue (reactor, collected):
+def http_collector_continue (dispatcher, collected):
         # decide wether and wich collector wrappers are needed
-        if reactor.mime_collector_headers.get (
+        if dispatcher.mime_collector_headers.get (
                 'transfer-encoding', ''
                 ).lower () == 'chunked':
                 # HTTP/1.1 mostly
                 if not collected.collector_is_simple:
                         collected = collector.Simple_collector (collected)
-                reactor.mime_collector_body = Chunk_collector (
+                dispatcher.mime_collector_body = Chunk_collector (
                         collected,
-                        reactor.set_terminator,
-                        reactor.mime_collector_headers
+                        dispatcher.set_terminator,
+                        dispatcher.mime_collector_headers
                         )
         else:
                 # HTTP/1.0 mostly
-                content_length = reactor.mime_collector_headers.get (
+                content_length = dispatcher.mime_collector_headers.get (
                         'content-length'
                         )
                 if content_length:
@@ -154,10 +154,10 @@ def http_collector_continue (reactor, collected):
                                 collected = collector.Simple_collector (
                                         collected
                                         )
-                        reactor.set_terminator (int (content_length))
+                        dispatcher.set_terminator (int (content_length))
                 else:
-                        reactor.set_terminator (None)
-                reactor.mime_collector_body = collected
+                        dispatcher.set_terminator (None)
+                dispatcher.mime_collector_body = collected
 
 # TODO: charset and compression decoding.
 #

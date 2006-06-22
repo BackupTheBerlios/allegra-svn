@@ -36,10 +36,12 @@ class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         
         mime_collector_body = None
         
-        http_handler = http_response = None
+        http_response = http_handler = None
         
         def __repr__ (self):
                 return 'http-server-reactor id="%x"' % id (self)
+        
+        def http_continuation (self): pass
         
 
 # split a URL into ('protocol:', 'hostname', '/path', 'query', '#fragment')
@@ -147,14 +149,13 @@ class HTTP_server_channel (
                 return self.http_continue (reactor)
                 
         def http_continue (self, reactor):
-                if reactor.http_response == None:
-                        # do not continue yet if a response is not set
-                        return False
-                
-                self.http_reactor = reactor
+                #if reactor.http_response == None:
+                #        # do not continue yet if a response is not set
+                #        return False
+                #
                 if reactor.http_request[0] in ('GET', 'HEAD', 'DELETE'):
                         # finalize requests without a MIME body now!
-                        return self.mime_collector_finalize ()
+                        return self.mime_collector_finalize (reactor)
 
                 # finalize POST and PUT when their body is collected, or
                 # close the connection for reason of unimplemented 
@@ -165,31 +166,33 @@ class HTTP_server_channel (
                                 'Connection'
                                 ] = 'close'
                         reactor.http_response = 501
-                        return self.mime_collector_finalize ()
+                        return self.mime_collector_finalize (reactor)
                         #
                         # 501 Not Implemented
                         
                 # wraps the POST or PUT body collector with the appropriate 
                 # decoding collectors, and continue ...
                 #
+                self.http_reactor = reactor
                 return self.http_collector_continue (
                         reactor.mime_collector_body
                         )
                         
         http_collector_continue = http_reactor.http_collector_continue
 
-        def mime_collector_finalize (self):
+        def mime_collector_finalize (self, reactor=None):
                 # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
                 self.mime_collector_headers = \
                         self.mime_collector_lines = \
                         self.mime_collector_body = None
-                # finalize the current HTTP request
-                reactor = self.http_reactor
-                self.http_reactor = None
-                if reactor.http_handler != None:
-                        reactor.http_handler.http_finalize (reactor)
-                        reactor.http_handler = None
+                if reactor == None:
+                        # current request's body collected, continue.
+                        reactor = self.http_reactor
+                        reactor.http_continuation (reactor)
+                        self.http_reactor = None
+                # finalize the current request
+                reactor.http_handler.http_finalize (reactor)
                 # Complete the HTTP response producer
                 if reactor.mime_producer_body == None and (
                         reactor.http_request[0] in ('GET', 'POST')

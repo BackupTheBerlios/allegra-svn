@@ -27,7 +27,7 @@ else:
         allegra_time = time.time
 
 from allegra import (
-        loginfo, finalization, thread_loop, synchronized,
+        loginfo, finalization, thread_loop, 
         producer, reactor, xml_dom, xml_unicode
         )
 
@@ -72,6 +72,23 @@ class PRESTo_async (
         
 
 # Synchronized Component
+#
+# The idea is to pass a distinct copy of the asynchronous state and
+# allow the synchronized method to access it safely.
+#
+# Synchronized method must not update the XML tree or any
+# asynchronously managed data structures, but they are expected to
+# access at least the most relevant state: its request's state, the
+# PRESTo vector. Such method will access the instance bound to,
+# but with utmost care and certainly not its xml_* or presto_*
+# interfaces.
+#
+# A synchronized method is guaranteed to be "thread-safe" if it does
+# not access anything else than the synchronized reactor passed as
+# argument.
+#
+# Most "real-world" implementation should validate all requests
+# asynchronously and then eventually invoke synchronized methods.
 
 class PRESTo_reactor_sync (reactor.Buffer_reactor):
         
@@ -83,10 +100,9 @@ class PRESTo_reactor_sync (reactor.Buffer_reactor):
                 assert type (data) == types.StringType
                 self.select_trigger ((self.buffer, (data,)))
 
-
 class PRESTo_sync (PRESTo_async):
 
-        "A derived generic component to synchronize threaded methods."
+        "A component to synchronize threaded methods."
 
         xml_name = u'http://presto/ sync'
         
@@ -96,6 +112,23 @@ class PRESTo_sync (PRESTo_async):
         def __init__ (self, name, attributes):
                 xml_dom.XML_element.__init__ (self, name, attributes)
                 thread_loop.synchronized (self)
+                
+        def xml_valid (self, dom):
+                self.xml_dom = dom 
+                #
+                # a synchronized element *must* provide a circular reference
+                # through the cache. this prevents a big: 
+                #
+                # thread trashing
+                #
+                # too early death of the weakref in the cache and a horde 
+                # of thread-queues and select_triggers to be instanciated, 
+                # opened and closed, with all the problems associated.
+                #
+                # and a "busy-body" cache behaviour is not usefull for
+                # something long-lived like a database connection, a CPU
+                # intensive process, etc ... things that are meant to be
+                # cached as long as possible.
         
         # Note also that there are two logging interfaces for a synchronized
         # PRESTo instance, asynchronous and synchronous:
@@ -106,24 +139,6 @@ class PRESTo_sync (PRESTo_async):
         #
         #       self.synchronizer.log ('sync')
         #
-
-        # The idea is to pass a distinct copy of the asynchronous state and
-        # allow the synchronized method to access it safely.
-        #
-        # Synchronized method must not update the XML tree or any
-        # asynchronously managed data structures, but they are expected to
-        # access at least the most relevant state: its request's state, the
-        # PRESTo vector. Such method will access the instance bound to,
-        # but with utmost care and certainly not its xml_* or presto_*
-        # interfaces.
-        #
-        # A synchronized method is guaranteed to be "thread-safe" if it does
-        # not access anything else than the synchronized reactor passed as
-        # argument.
-        #
-        # Most "real-world" implementation should validate all requests
-        # asynchronously and then eventually invoke synchronized methods.
-
         
 def presto_synchronize (method):
         def sync (element, reactor):
@@ -138,6 +153,8 @@ def presto_synchronize (method):
         # handled with a synchronized buffer reactor before passing it
         # to the "decorated" method.
 
+
+# An Asynchronous Component Object Model
 
 class PRESTo_dom (
         xml_dom.XML_dom, loginfo.Loginfo, finalization.Finalization
@@ -165,7 +182,7 @@ class PRESTo_dom (
                                 )
                 except expat.ExpatError, error:
                         self.xml_expat_ERROR (error)
-                self.xml_expat = None
+                self.xml_expat = xml_parsed = None
                 if self.xml_root == None:
                         self.xml_root = PRESTo_async (
                                 u'http://presto/ async', None
@@ -193,6 +210,7 @@ class PRESTo_root (loginfo.Loginfo):
         presto_type = PRESTo_async
         
         def __init__ (self, path):
+                "load all Python in modules/ and all components in root/"
                 self.presto_path = path + '/root'
                 self.presto_path_python = path + '/modules'
                 self.presto_types = {}
@@ -223,11 +241,13 @@ class PRESTo_root (loginfo.Loginfo):
         # Asynchronous is as fast as a safe network peer can get ;-)
         
         def presto_modules_dir (self):
+                "list all modules's name found in modules/"
                 return [os.path.basename (n) for n in glob.glob (
                         self.presto_path_python + '/*.py'
                         )]
 
         def presto_module_load (self, filename):
+                "load a named Python module"
                 if self.presto_modules.has_key (filename):
                         self.presto_module_unload (filename)
                 name, ext = os.path.splitext (filename)
@@ -262,6 +282,7 @@ class PRESTo_root (loginfo.Loginfo):
                         ]))
 
         def presto_module_unload (self, filename):
+                "unload a named Python module"
                 presto_module = self.presto_modules.get (filename)
                 if presto_module == None:
                         return
@@ -282,10 +303,14 @@ class PRESTo_root (loginfo.Loginfo):
         PRESTo_FOLDER_DEPTH = 2
         
         def presto_route (self, reactor):
+                "route a request to its reactor.presto_dom component"
+                #
                 # Check for a reference in the root's cache for that path or 
                 # for a folder that contains it and if there is one, try to 
-                # dereference the DOM instance, and return True if the method 
-                # succeeded to attribute such instance to the reactor.
+                # dereference the DOM instance.
+                #
+                # return True if the method succeeded to attribute such 
+                # instance to the reactor.
                 #
                 try:
                         dom = self.presto_cached[reactor.presto_path] ()
@@ -317,22 +342,7 @@ class PRESTo_root (loginfo.Loginfo):
                                 
                 return False
         
-        def presto_dom (self, reactor):
-                try:
-                        dom = self.presto_cached[reactor.presto_path] ()
-                except KeyError:
-                        dom = None
-                if dom == None:
-                        reactor.presto_dom = self.presto_cache (
-                                reactor.presto_path, (
-                                        self.presto_continue, (reactor, )
-                                        )
-                                )
-                else:
-                        reactor.presto_dom = dom
-                        self.presto_continue (reactor)
-                
-        def presto_cache (self, path, rolledback=PASS):
+        def presto_cache (self, path, rolledback=PASS, reactor=None):
                 # instanciate a DOM, cache its weak reference, roll it back
                 # and defer the PRESTo continuation ...
                 #
@@ -342,6 +352,8 @@ class PRESTo_root (loginfo.Loginfo):
                         self.presto_type
                         )
                 self.presto_cached[path] = weakref.ref (dom)
+                if reactor != None:
+                        reactor.presto_dom = dom
                 dom.presto_path = path
                 dom.presto_root = self
                 dom.presto_rollback (rolledback)
