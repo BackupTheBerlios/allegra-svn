@@ -47,7 +47,7 @@ class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
 HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)[?]?([^#]+)?(#.+)?')
 
 class HTTP_server_channel (
-        async_chat.Dispatcher, mime_reactor.MIME_collector
+        mime_reactor.MIME_collector, async_chat.Dispatcher
         ):
 
         ac_in_buffer_size = 4096 # 4KB input buffer
@@ -62,11 +62,6 @@ class HTTP_server_channel (
         def __repr__ (self):
                 return 'http-server-channel id="%x"' % id (self)                
                 
-        collect_incoming_data = \
-                mime_reactor.MIME_collector.collect_incoming_data
-        found_terminator = \
-                mime_reactor.MIME_collector.found_terminator
-
 	def mime_collector_continue (self):
 		while (
                         self.mime_collector_lines and not 
@@ -336,16 +331,12 @@ else:
 
 def none (): pass
 
-class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
+class File_cache (loginfo.Loginfo, finalization.Finalization):
 
-        synchronizer = None
-        synchronizer_size = 2
-                
         def __init__ (self, path): #, host):
                 self.http_path = path
                 # self.http_host = host
                 self.http_cached = {}
-                thread_loop.synchronized (self)
                 assert None == self.log (
                         'loaded path="%s"' % path, 'debug'
                         )
@@ -362,38 +353,24 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                         
                 filename = self.http_path + self.http_urlpath (reactor)
                 teed = self.http_cached.get (filename, none) ()
-                if teed == None:
-                        self.synchronized ((
-                                self.sync_stat, (reactor, filename)
-                                ))
-                        return True
-        
-                reactor.mime_producer_headers.update (teed.mime_headers)
-                reactor.mime_producer_body = producer.Tee_producer (teed)
-                reactor.http_response = 200
-                return False
-        
-        def http_urlpath (self, reactor):
-                return urllib.unquote (reactor.http_uri[2])
-        
-        http_finalize = http_log
-        
-        def sync_stat (self, reactor, filename):
+                if teed != None:
+                        reactor.mime_producer_headers.update (
+                                teed.mime_headers
+                                )
+                        reactor.mime_producer_body = \
+                                producer.Tee_producer (teed)
+                        reactor.http_response = 200
+                        return False
+
                 try:
                         result = os.stat (filename)
                 except:
                         result = None
-                self.select_trigger ((
-                        self.async_stat, (reactor, filename, result)
-                        ))
-        
-        def async_stat (self, reactor, filename, result):
                 if result == None or not stat.S_ISREG (result[0]):
                         reactor.http_response = 404
-                        reactor.http_channel.http_continue (reactor)
-                        return
-                
-                teed = synchronized.Synchronized_open (filename, 'rb')
+                        return False
+                        
+                teed = producer.File_producer (open (filename, 'rb'))
                 content_type, content_encoding = \
                         mimetypes.guess_type (filename)
                 teed.mime_headers = {
@@ -410,10 +387,15 @@ class HTTP_cache (loginfo.Loginfo, finalization.Finalization):
                 reactor.mime_producer_body = producer.Tee_producer (teed)
                 reactor.http_response = 200
                 self.http_cached[filename] = weakref.ref (teed)
-                reactor.http_channel.http_continue (reactor)
+                return False
+        
+        def http_urlpath (self, reactor):
+                return urllib.unquote (reactor.http_uri[2])
+        
+        http_finalize = http_log
+        
+        
                 
-
-
 # The HTTP Server method and variants
         
 def http_accept (server, channel):
@@ -557,7 +539,7 @@ if __name__ == '__main__':
         else:
                 server = HTTP_public ((ip, port))
         server.http_hosts = dict ([
-                (h, HTTP_cache (p)) 
+                (h, File_cache (p)) 
                 for h, p in http_hosts (root, host, port)
                 if stat.S_ISDIR (os.stat (p)[0])
                 ])

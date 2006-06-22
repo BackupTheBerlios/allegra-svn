@@ -17,7 +17,7 @@
 
 "Practical REST objects"
 
-import types, glob, os, imp, weakref, time
+import types, glob, os, stat, imp, weakref, time
 
 from xml.parsers import expat
 
@@ -139,37 +139,9 @@ def presto_synchronize (method):
         # to the "decorated" method.
 
 
-# A Synchronized XML document loader, reading and writing a file to a 
-# synchronous and threaded file descriptor, but parsing and serializing
-# the XML string asynchronously. This is a crude form of non-blocking
-# persistence for PRESTo, to and from the filesystem. It serves as a base
-# class to derive threaded BSDDB persistence and asynchronous PNS/TCP
-# layers.
-#
-# Flat Is Better Than Nested (from "The Zen of Python")
-#
-# This is a typical Allegra class, with a relatively large namespace, not
-# an instance tree. The practical reason is that Python instanciation is
-# significantly expensive (it's 50 times slower than C++, Lisp, etc!).
-#
-# A Single Namespace Is Better Than Many (The Zen of Allegra)
-#
-# This impose a strict requirement on attribute names, which anyway
-# is "The Right Thing To Do": a clean non-conflicting namespace for the
-# library and application. Names like "parent", "parse" or "read" are 
-# forbidden, because they are not articulated enough, possibly semantically
-# dispersed and therefore prohibiting flatter instance trees.
-
 class PRESTo_dom (
         xml_dom.XML_dom, loginfo.Loginfo, finalization.Finalization
         ):
-        
-        synchronizer = None
-        synchronizer_size = 4
-        #
-        # let a blocking I/O stall no more than one DOM out of 4, ymmv.
-        
-        sync_buffer = 4096
         
         presto_defered = None
         
@@ -179,93 +151,35 @@ class PRESTo_dom (
                 self.xml_type = type
                 self.xml_types = types
                 self.presto_name = name
-                thread_loop.synchronized (self)
                         
         def __repr__ (self):
                 return 'presto-dom name="%s"' % self.presto_name
                         
-        def async_open (self, mode):
-                if mode[0] == 'r':
-                        self.xml_parser_reset ()
-                        self.synchronized ((self.sync_read, ()))
-                elif mode[0] == 'w':
-                        self.synchronized ((self.sync_write, (
-                                xml_unicode.xml_document (self)
-                                )))
-                        self.synchronized ((self.sync_close, ('w', )))
-
-        def async_read (self, data):
-                try:
-                        self.xml_expat.Parse (data, 0)
-                except expat.ExpatError, error:
-                        self.xml_expat_ERROR (error)
-                        self.synchronized ((self.sync_close, ('re', )))
-                else:
-                        self.synchronized ((self.sync_read, ()))
-                
-        def async_close (self, mode):
-                if mode[0] == 'r':
-                        if mode[-1] == 'e':
-                                try:
-                                        self.xml_expat.Parse ('', 1)
-                                except expat.ExpatError, error:
-                                        self.xml_expat_ERROR (error)
-                        self.xml_expat = self.xml_parsed = None
-                        if self.xml_root == None:
-                                self.xml_root = PRESTo_async (
-                                        u'http://presto/ async', None
-                                        )
-                        if self.xml_root.xml_attributes == None:
-                                self.xml_root.xml_attributes = {}
-                defered = self.presto_defered
-                self.presto_defered = None
-                for call, args in defered:
-                        call (*args)
-                #
-                # defered continuations are queued nicely and called
-                # in sequence, asynchronously. this means that concurrent
-                # access to a persistent component instance is done without
-                # errors: ten requests to a "loading" instance will be
-                # handled asynchronously once the instance is loaded but
-                # only the first request will force the cache to access the
-                # original resource, parse the XML document and instanciate
-                # the component DOM.
-
         # The PRESTo commit and rollback interfaces
         
         def presto_rollback (self, defered):
-                if self.presto_defered == None:
-                        self.presto_defered = [defered]
-                        self.xml_root = None
-                        self.synchronized ((
-                                self.sync_open, (self.presto_name, 'r')
-                                ))
-                else:
-                        try:
-                                self.presto_defered.append (defered)
-                        except:
-                                return False
-                                #
-                                # you can't roll it back while it's
-                                # committing, anyway it would be useless
-                                # to do so ...
-                        
+                self.xml_parser_reset ()
+                try:
+                        self.xml_expat.Parse (
+                                open (self.presto_name, 'r').read (), 0
+                                )
+                except expat.ExpatError, error:
+                        self.xml_expat_ERROR (error)
+                self.xml_expat = None
+                if self.xml_root == None:
+                        self.xml_root = PRESTo_async (
+                                u'http://presto/ async', None
+                                )
+                if self.xml_root.xml_attributes == None:
+                        self.xml_root.xml_attributes = {}
+                defered[0] (*defered[1])
                 return True
         
         def presto_commit (self, defered):
-                if self.presto_defered:
-                        return False
-                
-                self.presto_defered = (defered, )
-                self.synchronized ((
-                        self.sync_open, (self.presto_name, 'w')
-                        ))
+                open (self.presto_name, 'w').write (
+                        xml_unicode.xml_document (self)
+                        )
                 return True
-        
-PRESTo_dom.sync_open = synchronized.sync_open
-PRESTo_dom.sync_write = synchronized.sync_write
-PRESTo_dom.sync_read = synchronized.sync_read
-PRESTo_dom.sync_close = synchronized.sync_close
 
 
 # Loading and unloading Python modules, XML namespace to types mapping.
@@ -287,9 +201,11 @@ class PRESTo_root (loginfo.Loginfo):
                 for filename in self.presto_modules_dir ():
                         self.presto_module_load (filename)
                 for filename in glob.glob (self.presto_path + '/*'):
-                        self.presto_cache (
-                                '/' + os.path.basename (filename), PASS
-                                )
+                        if stat.S_ISREG (os.stat (filename)[0]):
+                                self.presto_cache (
+                                        '/' + os.path.basename (filename), 
+                                        PASS
+                                        )
                         
         def __repr__ (self):
                 return 'presto-root path="%s"' % self.presto_path

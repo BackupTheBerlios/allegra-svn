@@ -20,7 +20,7 @@ import os
 from allegra import http_server, presto, presto_http
 
 
-class PRESTo_http_cache (presto.PRESTo_async, http_server.HTTP_cache):
+class PRESTo_http_cache (presto.PRESTo_async, http_server.File_cache):
         
         xml_name = u'http://presto/ cache'
         
@@ -34,7 +34,7 @@ class PRESTo_http_cache (presto.PRESTo_async, http_server.HTTP_cache):
                         u'root', u'/static'
                         ).encode ('UTF-8')
                 # instanciate a new HTTP static file cache
-                http_server.HTTP_cache.__init__ (
+                http_server.File_cache.__init__ (
                         self, dom.presto_root.presto_path[:-5] + path
                         )
                 # if a path was specified, move the cached weakref to it

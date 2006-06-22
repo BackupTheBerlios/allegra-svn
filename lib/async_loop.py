@@ -62,7 +62,7 @@ async_map = {}
 
 ASYNC_SELECT_LIMIT = 511
 
-def poll1 (map, timeout=0.0):
+def async_io_select (map, timeout=0.0):
         r = []
         w = []
         for fd, dispatcher in map.items ():
@@ -128,10 +128,10 @@ def poll1 (map, timeout=0.0):
                         dispatcher.handle_error ()
 
 
-def poll3 (map, timeout=0.0):
+def async_io_poll (map, timeout=0.0):
         timeout = int (timeout*1000)
         pollster = select.poll ()
-        for fd, dispatcher in map.items():
+        for fd, dispatcher in map.items ():
                 flags = 0
                 if dispatcher.readable ():
                         flags |= select.POLLIN | select.POLLPRI
@@ -167,9 +167,9 @@ def poll3 (map, timeout=0.0):
 # Select the best poll function available for this system
 
 if hasattr (select, 'poll'):
-	async_poll = poll3
+	async_io = async_io_poll
 else:
-	async_poll = poll1
+	async_io = async_io_select
 
 async_timeout = 0.1 # default to a much smaller interval (300) than asyncore
 
@@ -263,7 +263,7 @@ def dispatch ():
 	assert None == loginfo.log ('async_dispatch_start', 'debug')
 	while async_map or async_scheduled or async_finalized:
 		try:
-			async_poll (async_map, async_timeout)
+			async_io (async_map, async_timeout)
 		except async_Exception:
 			if not async_catch ():
 				break

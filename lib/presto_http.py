@@ -20,7 +20,7 @@
 import os, stat, glob, urllib
 
 from allegra import (
-        netstring, loginfo, async_loop, finalization, thread_loop, 
+        netstring, loginfo, async_loop, finalization, 
         collector, producer, mime_headers, http_server, presto
         )
 
@@ -29,22 +29,12 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
         
         "An implementation of PRESTo interfaces for HTTP/1.1 servers"
 
-        synchronizer = None
-        synchronizer_size = 2 
-        #
-        # First os.stat should be fast enough not to require more than two
-        # threads for all roots. Second, it won't hurt having a bottleneck
-        # on cache misses and the filesystem look they entail. Preventing
-        # potential DoS exploit of that bottleneck is a general precaution
-        # against spammers.
-                
         def __init__ (self, path, host=None, port=80):
                 if port == 80:
                         self.http_host = host
                 else:
                         self.http_host = '%s:%d' % (host, port)
                 presto.PRESTo_root.__init__ (self, path)
-                thread_loop.synchronized (self)
                 
         def __repr__ (self):
                 return 'presto-http-cache path="%s"' % self.presto_path
@@ -52,53 +42,26 @@ class PRESTo_http_root (presto.PRESTo_root, finalization.Finalization):
         def http_continue (self, reactor):
                 reactor.presto_path = urllib.unquote (reactor.http_uri[2])
                 if self.presto_route (reactor):
-                        defered = reactor.presto_dom.presto_defered 
-                        if defered == None:
-                                self.presto_continue_http (reactor)
-                                return False
-                        
-                        defered.append ((
-                                self.presto_continue, (reactor, )
-                                ))
-                        return True
+                        self.presto_continue_http (reactor)
+                        return False
                 
-                self.synchronized ((self.sync_stat, (
-                        reactor, self.presto_path + reactor.presto_path
-                        )))
-                return True # sure, True: this will be continued ...
+                filename = self.presto_path + reactor.presto_path
+                try:
+                        result = os.stat (filename)
+                except:
+                        result = None
+                if result == None or not stat.S_ISREG (result[0]):
+                        reactor.http_response = 404
+                        return False
+
+                self.presto_dom (reactor)
+                return False
 
         def http_finalize (self, reactor):
                 if reactor.mime_collector_body != None:
                         self.presto_continue_http (reactor)
                 http_server.http_log (self, reactor)
-
-        def sync_stat (self, reactor, filename):
-                try:
-                        result = os.stat (filename)
-                except:
-                        result = None
-                self.select_trigger ((
-                        self.async_stat, (reactor, result)
-                        ))
-        
-        def async_stat (self, reactor, result):
-                if result == None or not stat.S_ISREG (result[0]):
-                        reactor.http_response = 404
-                        reactor.http_channel.http_continue (reactor)
-                        return
-
-                self.presto_dom (reactor)
                 
-        def presto_continue (self, reactor):
-                self.presto_continue_http (reactor)
-                channel = reactor.http_channel
-                channel.http_continue (reactor)
-                channel.collector_stalled = False
-                #
-                # Resume collection of the async_chat buffer
-                # stalled while loading the synchronized XML
-                # instance in the cache.
-
         def presto_continue_http (self, reactor):
                 dom = reactor.presto_dom
                 reactor.presto_vector = {
