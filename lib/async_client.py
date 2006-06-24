@@ -157,9 +157,9 @@ class Manager (loginfo.Loginfo):
                 self.client_dispatched += 1
 
         def client_close (self, dispatcher):
-                "remove the dispatcher from cache and increment dispatched"
-                self.client_meter (dispatcher)
+                "remove the dispatcher from cache and meter dispatched"
                 del self.client_managed[dispatcher.client_key]
+                self.client_meter (dispatcher)
                 dispatcher.async_client = None
 
         def client_stop (self, when):
