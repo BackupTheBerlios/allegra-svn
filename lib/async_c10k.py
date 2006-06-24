@@ -22,7 +22,7 @@ import select, errno, collections
 from allegra import loginfo, async_loop, async_core
         
         
-def async_c10k (new, writable, readable, stalled, limit):
+def async_concurrent (new, writable, readable, stalled, limit):
         #
         # this is the nearly O(1) part of the async_c10k loop
         #
@@ -44,7 +44,7 @@ def async_c10k (new, writable, readable, stalled, limit):
 def async_select (
         map, timeout, new, writable, readable, stalled, limit
         ):
-        nd, wd, rd, sd = async_c10k (
+        nd, wd, rd, sd = async_concurrent (
                 new, writable, readable, stalled, limit
                 )
         #
@@ -137,7 +137,7 @@ def async_select (
 def async_poll (
         map, timeout, new, writable, readable, stalled, limit
         ):
-        nd, wd, rd, sd = async_c10k (
+        nd, wd, rd, sd = async_concurrent (
                 new, writable, readable, stalled, limit
                 )
         timeout = int (timeout*1000)
@@ -296,23 +296,34 @@ previously readable or stalled dispatchers.
 Previously writable sockets are polled first, eventually moved to
 the readable map when their status change, when no more output is
 available. Since input and output are interleaving, the loop acts 
-like a revolving door between the two maps, moving to high priority
+like a revolving door between the maps, moving to high priority
 the connections with a response, moving to low priority the 
 dispatchers waiting for input. 
 
 When the number of writable connections is above the limit, the
 peer won't poll dispatcher waiting for input, slowing down the
-number of connections submitting requests, which is a good thing. 
+number of connections submitting requests, which is a good thing.
+ 
 When the number of writable connections is below the limit, the 
-peer will poll I/O for readable dispatchers.
+peer will poll I/O for readable dispatchers too. So, the application 
+will only read more input if it is not saturating its output, which
+implies a smoother behaviour, less buffering and load taken at once
+and which are stressing the computer system (yielding a general decrease
+in operating performances).
 
-This loop will stall I/O under one condition: that the first writable
-connections have stalled output. Practically this imply a lot of zombie 
-peers requesting data it never reads or a dead network. In the case of 
-a dead network, stalling is actually a very good behaviour. As for zombies
-they may be taken care of by thigh connection management (with 0.1 seconds)
+This loop will stall under only one condition: that enough writable
+connections below the concurrency limit have stalled output. 
 
-Zombie clients can be taken care of by tight connection management.
+Practically this imply a lot of zombie TCP peer requesting data never 
+read ... or a dead network. In the case of a dead network, stalling is 
+actually a very good behaviour. As for zombies, they must be taken care 
+of by thigh connection management: only an audit can counter inadvertent
+and malicious deniers of service.
+
+However, for buffered async_net and async_chat connections, zombie 
+connections will either not be writable because there is not output
+queued (a spleeping HTTP/1.1 pipeline) because their buffers are filled
+and not emptyied.
 
 """
 
