@@ -321,26 +321,3 @@ def rationed (server, timeout, inBps, outBps):
 
 def tcp_ip_resolved (addr):
         return addr[0]
-        
-def tcp_ip_accept_limit (server, limit):
-        connections = {}
-        def accepted (conn, addr, name):
-                if connections.setdefault (name, 0) < limit:
-                        connections[name] += 1
-                        return True
-                
-                assert None == server.log (
-                        'accept-limit ip="%s"' % name,
-                        'error'
-                        )
-                return False
-        
-        def close (dispatcher):
-                name = dispatcher.server_name
-                if connections[name] > 1:
-                        connections[name] -= 1
-                else:
-                        del connections[name]
-                        
-        server.server_accepted = accepted
-        server.server_close = close
