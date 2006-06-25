@@ -27,13 +27,13 @@ def async_concurrent (new, writable, readable, stalled, limit):
         # this is the nearly O(1) part of the async_c10k loop
         #
         n = new.items ()[:limit]
-        rest = max (0, limit - len (new))
+        rest = limit - len (new)
         if rest > 0:
                 w = writable.items ()[:rest]
-                rest = max (0, rest - len (w))
+                rest = rest - len (w)
                 if rest > 0:
                         r = readable.items ()[:rest]
-                        rest = max (0, rest - len (r))
+                        rest = rest - len (r)
                         if rest > 0:
                                 return (n, w, r, stalled.items ()[:rest])
         
