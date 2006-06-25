@@ -182,7 +182,6 @@ def async_close ():
 
 async_finalized = collections.deque ()
 
-
 def async_finalize ():
 	"call all finalization queued"
         while True:
@@ -236,27 +235,12 @@ def async_clock ():
 # The async_Exception catcher
 
 def async_catch ():
-	"catch or throw an async_Exception"
+	"throw an async_Exception"
 	assert None == loginfo.log ('async_catch', 'debug')
 	return False
 
 
 # And finally, the loop itself
-
-def loop ():
-	"poll, clock and finalize while there is at least one channel mapped"
-	assert None == loginfo.log ('async_loop_start', 'debug')
-	while async_map:
-		try:
-			async_poll (async_map, async_timeout)
-		except async_Exception:
-			if not async_catch ():
-				break
-			
-		async_clock () 
-		async_finalize ()
-	assert None == loginfo.log ('async_loop_stop', 'debug')
-                                
 
 def dispatch ():
 	"poll, clock and finalize while there is at least one event"
@@ -264,12 +248,12 @@ def dispatch ():
 	while async_map or async_scheduled or async_finalized:
 		try:
 			async_io (async_map, async_timeout)
+                        async_clock ()
+                        async_finalize ()
 		except async_Exception:
 			if not async_catch ():
 				break
-			
-		async_clock () 
-		async_finalize ()
+	
 	assert None == loginfo.log ('async_dispatch_stop', 'debug')
 
 
@@ -359,9 +343,9 @@ def dispatch ():
 # than Java or C#, because the same algorithm is usually shorter in Python.
 #
 # So, a CPython VM running an asynchronous peer like Allegra might very
-# well prove to be a more competitive solution than Sun's or the
-# Microsoft's frameworks when it comes to audit and maintenance, a huge
-# share of the TCO for entreprise software. 
+# well prove to be a more competitive solution than Sun's or Microsoft's 
+# frameworks when it comes to audit and maintenance, a huge share of the 
+# TCO for entreprise software. 
 #
 # The Python language itself has allready been ported to C# and Java,
 # exactly for that specific reason: it is simpler to read and write, 
