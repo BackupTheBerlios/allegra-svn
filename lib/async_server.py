@@ -22,20 +22,18 @@ import socket, time
 from allegra import async_loop, async_core, async_limits
 
 
-class Dispatcher (async_core.Dispatcher):
+class Listen (async_core.Dispatcher):
         
         ac_in_meter = ac_out_meter = 0
         server_when = server_dispatched = 0
         
         def __init__ (
-                self, Dispatcher, addr, limit,
-                timeout, precision, listen, family
+                self, Dispatcher, addr, limit, precision, listen, family
                 ):
-                self.server_connections_limit = limit
                 self.server_dispatchers = []
                 self.Server_dispatcher = Dispatcher
-                resolved (self)
-                metered (self)
+                self.server_connections_limit = limit
+                self.server_precision = precision
                 #
                 async_core.Dispatcher.__init__ (self)
                 self.create_socket (family, socket.SOCK_STREAM)
@@ -43,8 +41,10 @@ class Dispatcher (async_core.Dispatcher):
                 self.bind (addr)
                 self.listen (listen)
                 #
+                resolved (self)
+                metered (self)                
+                #
                 self.log ('listen', 'info')
-                
 
         def __repr__ (self):
                 return 'async-server id="%x"' % id (self)
@@ -105,14 +105,12 @@ class Dispatcher (async_core.Dispatcher):
                 self.server_resolve (addr, resolve)
                         
         def handle_close (self):
-                "stop the server, close all dispatchers now, then finalize"
+                "close all dispatchers, close the server and finalize it"
                 for dispatcher in tuple (self.server_dispatchers):
                         dispatcher.handle_close ()
-                async_core.Dispatcher.handle_close (self)
-                del (
-                        self.server_resolved, self.server_resolve, 
-                        self.server_limit, self.server_decorate
-                        )
+                self.close ()
+                self.__dict__ = {} 
+                # breaks any circular reference through attributes
                 
         def server_unresolved (self, addr):
                 assert None == self.log ('unresolved %r' % addr, 'debug')
@@ -207,15 +205,19 @@ class Dispatcher (async_core.Dispatcher):
 
         def server_shutdown (self):
                 "stop accepting connections, close all current when done"
-                self.accepting = 0
+                self.log ('shutdown', 'info')
+                self.accepting = 0                        
                 for dispatcher in tuple (self.server_dispatchers):
                         dispatcher.close_when_done ()
-
+                if not self.server_dispatchers:
+                        self.handle_close ()
+                        
 
 def resolved (server):
         "allways resolved for unresolved dispatcher address"
         server.server_resolved = (lambda addr: '')
         server.server_resolve = None
+        return server
 
 
 def unmeter (dispatcher):
@@ -245,6 +247,7 @@ def metered (server):
                 
         server.server_decorate = decorate
         server.server_limit = None
+        return server
 
 
 def inactive (server, timeout):
@@ -256,6 +259,7 @@ def inactive (server, timeout):
         server.server_decorate = decorate
         server.server_inactive = timeout
         server.server_limit = async_limits.inactive
+        return server
 
 
 def limited (server, timeout, inBps, outBps):
@@ -298,6 +302,7 @@ def limited (server, timeout, inBps, outBps):
         server.ac_in_throttle_Bps = inBps
         server.ac_out_throttle_Bps = outBps
         server.server_limit = async_limits.limit
+        return server
 
 
 def rationed (server, timeout, inBps, outBps):
@@ -315,9 +320,15 @@ def rationed (server, timeout, inBps, outBps):
                         ), 1))
 
         limited (server, timeout, throttle_in, throttle_out)
+        return server
 
 
-# TCP/IP decorators
-
-def tcp_ip_resolved (addr):
-        return addr[0]
+def catch_shutdown (server):
+        async_catch = async_loop.async_catch
+        def shutdown ():
+                server.server_shutdown ()
+                async_loop.async_catch = async_catch
+                return True
+                
+        async_loop.async_catch = shutdown
+        return server
