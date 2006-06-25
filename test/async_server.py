@@ -1,10 +1,6 @@
-# TCP/IP decorators
-
 import socket
 
 from allegra import async_net, async_server
-
-# 
 
 listen = async_server.Listen (
     async_net.Dispatcher, ('127.0.0.1', 1234),
@@ -13,11 +9,10 @@ listen = async_server.Listen (
 async_server.catch_shutdown (listen)
 del listen
 
-#
-
-from allegra import async_loop
+from allegra import async_loop, finalization
 
 async_loop.dispatch ()
+finalization.collect ()
 
 # public
 
@@ -33,7 +28,4 @@ async_server.catch_shutdown (listen)
 del listen
 
 async_loop.dispatch ()
-
-from allegra import finalization
-
 finalization.collect ()

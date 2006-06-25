@@ -239,13 +239,14 @@ def meter (dispatcher, when):
                 
         dispatcher.handle_close = handle_close
 
-def metered (server):
-        "meter I/O and limit inactivity for server streams"
+def metered (server, timeout=1<<32):
+        "meter I/O for server streams"
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
-                dispatcher.limit_inactive = 1<<32 
+                dispatcher.limit_inactive = timeout
                 
         server.server_decorate = decorate
+        server.server_inactive = timeout
         server.server_limit = None
         return server
 
