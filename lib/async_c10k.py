@@ -19,9 +19,6 @@
 
 import select, errno, collections
 
-from allegra import loginfo, async_loop, async_core
-        
-        
 def async_concurrent (new, writable, readable, stalled, limit):
         #
         # this is the nearly O(1) part of the async_c10k loop
@@ -239,7 +236,7 @@ if hasattr (select, 'poll'):
         async_io_c10k = async_poll
 else:
         async_io_c10k = async_select
-           
+                   
                         
 # decorate async_loop.async_io 
 
@@ -248,22 +245,13 @@ writable = {}
 readable = {}
 stalled = {}
 
-# decorate async_core.Dispatcher
-
-async_core.Dispatcher.async_new = new 
-
-def add_channel (dispatcher):
+def add_channel (dispatcher, map=None):
         fd = dispatcher._fileno
         dispatcher.async_map[fd] = dispatcher.async_new[fd] = dispatcher
 
-async_core.Dispatcher.add_channel = add_channel
-
-async_core.Dispatcher.async_writable = writable
-async_core.Dispatcher.async_readable = readable
-async_core.Dispatcher.async_stalled = stalled
-
-def del_channel (dispatcher):
+def del_channel (dispatcher, map=None):
         fd = dispatcher._fileno
+        dispatcher._fileno = None
         del dispatcher.async_map[fd]
         try:
                 del dispatcher.async_readable[fd]
@@ -273,13 +261,21 @@ def del_channel (dispatcher):
                 except KeyError:
                         del dispatcher.async_stalled[fd]
                 
-async_core.Dispatcher.del_channel = del_channel
+concurrency = 512
 
-def concurrency (limit):
-        def async_io (map, timeout):
-                async_io_c10k (
-                        map, timeout, 
-                        new, writable, readable, stalled, limit
-                        )
-        
-        async_loop.async_io = async_io
+from allegra import async_loop, async_core
+
+def async_io (map, timeout):
+        async_io_c10k (
+                map, timeout, 
+                new, writable, readable, stalled, concurrency
+                )
+
+async_loop.async_io = async_io
+Dispatcher = async_core.Dispatcher
+Dispatcher.async_new = new 
+Dispatcher.async_writable = writable
+Dispatcher.async_readable = readable
+Dispatcher.async_stalled = stalled
+Dispatcher.add_channel = add_channel
+Dispatcher.del_channel = del_channel
