@@ -55,7 +55,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
         
         async_map = async_loop.async_map
     
-        connected = accepting = closing = 0
+        connected = accepting = closing = False
 
         addr = None
 
@@ -64,7 +64,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         self.set_socket (sock)
                         # I think it should inherit this anyway
                         self.socket.setblocking (0)
-                        self.connected = 1
+                        self.connected = True
                         # Does the constructor require that the socket
                         # passed be connected?
                         try:
@@ -85,8 +85,10 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
         def del_channel (self):
                 "removes the dispatcher from the asynchronous I/O map"
                 fd = self._fileno
-                if self.async_map.has_key (fd):
+                try:
                         del self.async_map[fd]
+                except KeyError:
+                        pass
 
         def create_socket (self, family, type):
                 "create a socket and add the dispatcher to the I/O map"
@@ -94,13 +96,13 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                 self.socket = socket.socket (family, type)
                 self.socket.setblocking (0)
                 self._fileno = self.socket.fileno ()
-                self.add_channel ()
+                self.add_channel () # async_loop.add_dispatcher (self)
 
         def set_socket (self, sock):
                 "set the dispatcher's socket and add itself to the I/O map"
                 self.socket = sock
                 self._fileno = sock.fileno()
-                self.add_channel ()
+                self.add_channel () # async_loop.add_dispatcher (self)
 
         def set_reuse_addr (self):
                 "try to re-use a server port if possible"
@@ -118,17 +120,17 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def readable (self):
                 "predicate for inclusion as readable in the poll loop"
-                return 1
+                return True
 
         def writable (self):
                 "predicate for inclusion as writable in the poll loop"
-                return 1
+                return True
 
         # socket object methods.
 
         def listen (self, num):
                 "listen and set the dispatcher's accepting state"
-                self.accepting = 1
+                self.accepting = True
                 if os.name == 'nt' and num > 5:
                         num = 1
                 return self.socket.listen (num)
@@ -140,14 +142,14 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def connect (self, address):
                 "try to connect and set the dispatcher's connected state"
-                self.connected = 0
+                self.connected = True
                 err = self.socket.connect_ex (address)
                 if err in (EINPROGRESS, EALREADY, EWOULDBLOCK):
                         return
                         
                 if err in (0, EISCONN):
                         self.addr = address
-                        self.connected = 1
+                        self.connected = True
                         self.handle_connect ()
                 else:
                         raise socket.error, err
@@ -212,11 +214,11 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def close (self):
                 "remove the dispatcher from the I/O map and close the socket"
-                self.del_channel ()
+                self.del_channel ()  # async_loop.del_dispatcher (self)
                 self.socket.close ()
                 #
-                self.connected = 0
-                self.closing = 1
+                self.connected = False
+                self.closing = True
                 #
                 # added here because a closed channel state may be accessed
                 # by a scheduled event like a too-late timeout!
@@ -227,11 +229,11 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         # for an accepting socket, getting a read implies
                         # that we are connected
                         if not self.connected:
-                                self.connected = 1
+                                self.connected = True
                         self.handle_accept ()
                 elif not self.connected:
                         self.handle_connect ()
-                        self.connected = 1
+                        self.connected = True
                         self.handle_read ()
                 else:
                         self.handle_read ()
@@ -241,12 +243,8 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                 # getting a write implies that we are connected
                 if not self.connected:
                         self.handle_connect ()
-                        self.connected = 1
+                        self.connected = True
                 self.handle_write ()
-
-        #def handle_expt_event (self):
-        #        assert None == self.log ('expt', 'debug')
-        #        self.handle_close ()
 
         def handle_error (self):
                 "log a traceback or raise SystemExit again"
