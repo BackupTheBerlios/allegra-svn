@@ -38,6 +38,9 @@ def async_concurrent (new, writable, readable, stalled, limit):
         
                 return (n, w, (), ())
 
+        return (n, (), (), ())
+
+
 def async_select (
         map, timeout, new, writable, readable, stalled, limit
         ):
@@ -134,86 +137,77 @@ def async_select (
 def async_poll (
         map, timeout, new, writable, readable, stalled, limit
         ):
+        "limit the connections tested and poll writable or readable only"
+        # first limit in the order of priority
+        #
         nd, wd, rd, sd = async_concurrent (
                 new, writable, readable, stalled, limit
                 )
-        timeout = int (timeout*1000)
+        #
+        # note that you can reload the select module.
+        #
         pollster = select.poll ()
+        W = select.POLLOUT
+        R = select.POLLIN | select.POLLPRI
+        RW = R | W
+        #
+        # now the four loops: new, writable, readable and stalled:
+        #
         for fd, dispatcher in nd:
                 if dispatcher.writable ():
                         writable[fd] = new.pop (fd)
                         if dispatcher.readable ():
-                                pollster.register (fd, (
-                                        select.POLLOUT | 
-                                        select.POLLIN | 
-                                        select.POLLPRI
-                                        ))
+                                pollster.register (fd, RW)
                         else:
-                                pollster.register (fd, select.POLLOUT)
+                                pollster.register (fd, W)
                 elif dispatcher.readable ():
                         readable[fd] = new.pop (fd)
-                        pollster.register (
-                                fd, select.POLLIN | select.POLLPRI
-                                )
+                        pollster.register (R)
                 else:
                         stalled[fd] = new.pop (fd)
         for fd, dispatcher in wd:
                 if dispatcher.writable ():
                         if dispatcher.readable ():
-                                pollster.register (fd, (
-                                        select.POLLOUT | 
-                                        select.POLLIN | 
-                                        select.POLLPRI
-                                        ))
+                                pollster.register (fd, RW)
                         else:
-                                pollster.register (fd, select.POLLOUT)
+                                pollster.register (fd, W)
                 elif dispatcher.readable ():
                         readable[fd] = writable.pop (fd)
-                        pollster.register (
-                                fd, select.POLLIN | select.POLLPRI
-                                )
+                        pollster.register (R)
                 else:
                         stalled[fd] = writable.pop (fd)
         for fd, dispatcher in rd:
                 if dispatcher.writable ():
                         writable[fd] = readable.pop (fd)
                         if dispatcher.readable ():
-                                pollster.register (fd, (
-                                        select.POLLOUT | 
-                                        select.POLLIN | 
-                                        select.POLLPRI
-                                        ))
+                                pollster.register (fd, RW)
                         else:
-                                pollster.register (fd, select.POLLOUT)
+                                pollster.register (fd, W)
                 elif dispatcher.readable ():
-                        pollster.register (
-                                fd, select.POLLIN | select.POLLPRI
-                                )
+                        pollster.register (R)
                 else:
                         stalled[fd] = readable.pop (fd)
         for fd, dispatcher in sd:
                 if dispatcher.writable ():
                         writable[fd] = stalled.pop (fd)
                         if dispatcher.readable ():
-                                pollster.register (fd, (
-                                        select.POLLOUT | 
-                                        select.POLLIN | 
-                                        select.POLLPRI
-                                        ))
+                                pollster.register (fd, RW)
                         else:
-                                pollster.register (fd, select.POLLOUT)
+                                pollster.register (fd, W)
                 elif dispatcher.readable ():
                         readable[fd] = stalled.pop (fd)
-                        pollster.register (
-                                fd, select.POLLIN | select.POLLPRI
-                                )
+                        pollster.register (R)
+        #
+        # try to poll
+        #
         try:
-                p = pollster.poll (timeout)
+                p = pollster.poll (int (timeout*1000))
         except select.error, err:
                 if err[0] != errno.EINTR:
                         raise
 
         else:
+                # and handle I/O events and exceptions.
                 for fd, flags in p:
                         try:
                                 dispatcher = map[fd]
@@ -221,9 +215,9 @@ def async_poll (
                                 continue
                                 
                         try:
-                                if flags & (select.POLLIN | select.POLLPRI):
+                                if flags & R:
                                         dispatcher.handle_read_event()
-                                if flags & select.POLLOUT:
+                                if flags & W:
                                         dispatcher.handle_write_event()
                         except async_Exception:
                                 raise async_Exception 

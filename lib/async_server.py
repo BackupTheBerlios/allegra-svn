@@ -138,9 +138,9 @@ class Listen (async_core.Dispatcher):
                 dispatcher.server_when = now
                 dispatcher.async_server = self
                 self.server_decorate (dispatcher, now)
-                self.server_dispatchers.append (dispatcher)
-                if len (self.server_dispatchers) == 1:
+                if self.server_when == 0:
                         self.server_start (now)
+                self.server_dispatchers.append (dispatcher)
                 # assert None == dispatcher.log ('%r' % addr, 'accepted')
                 
         def server_start (self, when):
@@ -203,9 +203,8 @@ class Listen (async_core.Dispatcher):
                                 self.ac_in_meter,
                                 self.ac_out_meter
                                 ), 'debug')
-                self.server_dispatched = \
-                        self.ac_in_meter = \
-                        self.ac_out_meter = 0
+                self.server_when = self.server_dispatched = \
+                        self.ac_in_meter = self.ac_out_meter = 0
 
         def server_shutdown (self):
                 "stop accepting connections, close all current when done"
@@ -213,8 +212,8 @@ class Listen (async_core.Dispatcher):
                 self.accepting = False                       
                 for dispatcher in tuple (self.server_dispatchers):
                         dispatcher.close_when_done ()
-                if not self.server_dispatchers:
-                        self.handle_close ()
+                #if not self.server_dispatchers:
+                #        self.handle_close ()
                 return True
                         
 
