@@ -239,6 +239,40 @@ def async_catch ():
 	assert None == loginfo.log ('async_catch', 'debug')
 	return False
 
+def catch (catchers):
+        decorated = async_catch
+        def decorating ():
+                for catcher in catchers:
+                        catcher ()
+                async_catch = decorated
+                return True
+                
+        return decorating
+
+# TODO: move to a simpler and yet more powerfull signal catching interface
+#
+# catcher (signal) == False | True
+#
+# async_loop.async_catchers = []
+# async_loop.async_catch (signal) == False | True
+# async_loop.catch (catcher)
+#
+
+async_catchers2 = []
+
+def async_catch2 ():
+        "call catchers on async_Exception (KeyboardInterrupt by default)"
+        if not async_catchers2:
+                return False
+        
+        for catcher in tuple (async_catchers2):
+                if catcher ():
+                        async_catchers2.remove (catcher)
+        return True
+
+def catch2 (catcher):
+        async_catchers2.append (catcher)
+
 
 # And finally, the loop itself
 

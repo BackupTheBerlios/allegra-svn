@@ -28,21 +28,22 @@ class Listen (async_core.Dispatcher):
         server_when = server_dispatched = 0
         
         def __init__ (
-                self, Dispatcher, addr, limit, precision, listen, family
+                self, Dispatcher, addr, precision, max, family
                 ):
                 self.server_dispatchers = []
+                self.server_named = {}
                 self.Server_dispatcher = Dispatcher
-                self.server_connections_limit = limit
                 self.server_precision = precision
                 #
                 async_core.Dispatcher.__init__ (self)
                 self.create_socket (family, socket.SOCK_STREAM)
                 self.set_reuse_addr ()
                 self.bind (addr)
-                self.listen (listen)
+                self.listen (max)
                 #
-                resolved (self)
-                metered (self)                
+                anonymous (self)
+                accept_all (self)
+                metered (self)             
                 #
                 self.log ('listen', 'info')
 
@@ -86,6 +87,10 @@ class Listen (async_core.Dispatcher):
 
                 name = self.server_resolved (addr)
                 if name != None:
+                        try:
+                                self.server_named[name] += 1
+                        except KeyError:
+                                self.server_named[name] = 1
                         if self.server_accepted (conn, addr, name):
                                 self.server_accept (
                                         conn, addr, name
@@ -96,7 +101,12 @@ class Listen (async_core.Dispatcher):
                 
                 assert self.server_resolve != None
                 def resolve (name):
+                        try:
+                                self.server_named[name] += 1
+                        except KeyError:
+                                self.server_named[name] = 1
                         if addr == None:
+                                conn.close ()
                                 self.server_unresolved (addr, name)
                         elif self.server_accepted (conn, addr, name):
                                 self.server_accept (
@@ -108,25 +118,17 @@ class Listen (async_core.Dispatcher):
                 "close all dispatchers, close the server and finalize it"
                 for dispatcher in tuple (self.server_dispatchers):
                         dispatcher.handle_close ()
+                self.server_stop (time.time ())
                 self.close ()
-                self.__dict__ = {} 
-                # breaks any circular reference through attributes
+                self.__dict__ = {}
+                #
+                # Breaks any circular reference through attributes, by 
+                # clearing them all. Note that this prevents finalizations
+                # to be used with listeners, but anyway subclassing the
+                # stop method.
                 
         def server_unresolved (self, addr):
                 assert None == self.log ('unresolved %r' % addr, 'debug')
-
-        def server_accepted (self, conn, addr, name):
-                if self.server_clients.setdefault (
-                        name, 0
-                        ) < self.server_connections_limit:
-                        self.server_clients.connections[name] += 1
-                        return True
-                
-                assert None == self.log (
-                        'accept-limit ip="%s"' % name,
-                        'error'
-                        )
-                return False
 
         def server_accept (self, conn, addr, name):
                 now = time.time ()
@@ -138,7 +140,7 @@ class Listen (async_core.Dispatcher):
                 self.server_decorate (dispatcher, now)
                 self.server_dispatchers.append (dispatcher)
                 if len (self.server_dispatchers) == 1:
-                        self.server_start (when)
+                        self.server_start (now)
                 # assert None == dispatcher.log ('%r' % addr, 'accepted')
                 
         def server_start (self, when):
@@ -151,7 +153,10 @@ class Listen (async_core.Dispatcher):
                   
         def server_manage (self, when):
                 if not self.server_dispatchers:
-                        self.server_stop ()
+                        if self.accepting:
+                                self.server_stop (when)
+                        else:
+                                self.handle_close ()
                         return
                 
                 if self.server_limit != None:
@@ -180,45 +185,66 @@ class Listen (async_core.Dispatcher):
         def server_close (self, dispatcher):
                 "remove the dispatcher from list and meter dispatched"
                 name = dispatcher.server_name
-                if self.server_clients[name] > 1:
-                        self.server_clients[name] -= 1
+                if self.server_named[name] > 1:
+                        self.server_named[name] -= 1
                 else:
-                        del connections[name]
+                        del self.server_named[name]
                 self.server_dispatchers.remove (dispatcher)
                 self.server_meter (dispatcher)
                 dispatcher.async_server = None
                 
         def server_stop (self, when):
-                "handle the server management stop, close if shutted down"
+                "handle the server scheduled or inpromptu stop"
                 assert None == self.log (
                         'stop dispatched="%d"'
                         ' seconds="%f" in="%d" out="%d"' % (
-                                self.client_dispatched,
-                                (when - self.client_when),
+                                self.server_dispatched,
+                                (when - self.server_when),
                                 self.ac_in_meter,
                                 self.ac_out_meter
                                 ), 'debug')
-                self.client_dispatched = \
-                        self.ac_in_meter = self.ac_out_meter = 0
-                if not self.accepting:
-                        self.handle_close ()
+                self.server_dispatched = \
+                        self.ac_in_meter = \
+                        self.ac_out_meter = 0
 
         def server_shutdown (self):
                 "stop accepting connections, close all current when done"
-                self.log ('shutdown', 'info')
-                self.accepting = 0                        
+                assert None == self.log ('shutdown', 'debug')
+                self.accepting = False                       
                 for dispatcher in tuple (self.server_dispatchers):
                         dispatcher.close_when_done ()
                 if not self.server_dispatchers:
                         self.handle_close ()
+                return True
                         
 
-def resolved (server):
-        "allways resolved for unresolved dispatcher address"
+def anonymous (server):
+        "allways resolved to the empty string"
         server.server_resolved = (lambda addr: '')
         server.server_resolve = None
         return server
 
+def accept_all (server):
+        server.server_accepted = (lambda conn, addr, name: True)
+        return server
+
+def accept_named (listen, limit):
+        def accepted (conn, addr, name):
+                if listen.server_named[name] < limit:
+                        return True
+                
+                if listen.server_named[name] > 1:
+                        listen.server_named[name] -= 1
+                else:
+                        del listen.server_named[name]
+                assert None == listen.log (
+                        'accept-limit ip="%s"' % name,
+                        'error'
+                        )
+                return False
+        
+        listen.server_accepted = accepted 
+        return listen
 
 def unmeter (dispatcher):
         "remove stream decorators from a server dispatcher"
@@ -322,14 +348,4 @@ def rationed (server, timeout, inBps, outBps):
 
         limited (server, timeout, throttle_in, throttle_out)
         return server
-
-
-def catch_shutdown (server):
-        async_catch = async_loop.async_catch
-        def shutdown ():
-                server.server_shutdown ()
-                async_loop.async_catch = async_catch
-                return True
-                
-        async_loop.async_catch = shutdown
-        return server
+        
