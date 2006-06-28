@@ -99,15 +99,19 @@ class Listen (async_core.Dispatcher):
                                 conn.close ()
                         return
                 
-                assert self.server_resolve != None
+                if self.server_resolve == None:
+                        self.server_unresolved (conn, addr)
+                        conn.close ()
+                        return
+                        
                 def resolve (name):
                         try:
                                 self.server_named[name] += 1
                         except KeyError:
                                 self.server_named[name] = 1
-                        if addr == None:
+                        if name == None:
+                                self.server_unresolved (conn, addr)
                                 conn.close ()
-                                self.server_unresolved (addr, name)
                         elif self.server_accepted (conn, addr, name):
                                 self.server_accept (
                                         conn, addr, name
@@ -125,9 +129,13 @@ class Listen (async_core.Dispatcher):
                 # Breaks any circular reference through attributes, by 
                 # clearing them all. Note that this prevents finalizations
                 # to be used with listeners, but anyway subclassing the
-                # stop method.
+                # stop and shutdown methods provides enough leverage to
+                # gracefully come to closure: the listener is most probably 
+                # in the highest level of the application's instance tree.
+                #
+                # ... and sometimes damn hard to finalize ;-)
                 
-        def server_unresolved (self, addr):
+        def server_unresolved (self, conn, addr):
                 assert None == self.log ('unresolved %r' % addr, 'debug')
 
         def server_accept (self, conn, addr, name):
@@ -142,6 +150,7 @@ class Listen (async_core.Dispatcher):
                         self.server_start (now)
                 self.server_dispatchers.append (dispatcher)
                 # assert None == dispatcher.log ('%r' % addr, 'accepted')
+                return dispatcher
                 
         def server_start (self, when):
                 "handle the client management startup"
