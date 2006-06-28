@@ -23,50 +23,31 @@ import select, errno, asyncore
 async_Exception = asyncore.ExitNow
 
 
-def async_concurrent (new, writable, readable, stalled, limit):
-        #
-        # this is the nearly O(1) part of the async10k loop
-        #
-        n = new.items ()[:limit]
-        rest = limit - len (new)
+def async_concurrent (writable, readable, stalled, limit):
+        w = writable.items ()[:limit]
+        rest = limit - len (w)
         if rest > 0:
-                w = writable.items ()[:rest]
-                rest = rest - len (w)
+                r = readable.items ()[:rest]
+                rest = rest - len (r)
                 if rest > 0:
-                        r = readable.items ()[:rest]
-                        rest = rest - len (r)
-                        if rest > 0:
-                                return (n, w, r, stalled.items ()[:rest])
-        
-                        return (n, w, r, ())
-        
-                return (n, w, (), ())
-        
-        return (n, (), (), ())
+                        return w, r, stalled.items ()[:rest]
+
+                return w, r, ()
+
+        return w, (), ()
 
 
 def async_select (
-        map, timeout, new, writable, readable, stalled, limit
+        map, timeout, writable, readable, stalled, limit
         ):
-        nd, wd, rd, sd = async_concurrent (
-                new, writable, readable, stalled, limit
+        wd, rd, sd = async_concurrent (
+                writable, readable, stalled, limit
                 )
-        #
-        # and here is the O(N) part, where N < limit ...
-        #
+        w = []
         r = []
-        for fd, dispatcher in nd:
-                if dispatcher.writable ():
-                        writable[fd] = new.pop (fd)
-                        if dispatcher.readable ():
-                                r.append (fd)
-                elif dispatcher.readable ():
-                        readable[fd] = new.pop (fd)
-                        r.append (fd)
-                else:
-                        stalled[fd] = new.pop (fd)
         for fd, dispatcher in wd:
                 if dispatcher.writable ():
+                        w.append (fd)
                         if dispatcher.readable ():
                                 r.append (fd)
                 elif dispatcher.readable ():
@@ -76,6 +57,7 @@ def async_select (
                         stalled[fd] = writable.pop (fd)
         for fd, dispatcher in rd:
                 if dispatcher.writable ():
+                        w.append (fd)
                         writable[fd] = readable.pop (fd)
                         if dispatcher.readable ():
                                 r.append (fd)
@@ -85,6 +67,7 @@ def async_select (
                         stalled[fd] = readable.pop (fd)
         for fd, dispatcher in sd:
                 if dispatcher.writable ():
+                        w.append (fd)
                         writable[fd] = stalled.pop (fd)
                         if dispatcher.readable ():
                                 r.append (fd)
@@ -95,7 +78,6 @@ def async_select (
                 time.sleep (timeout)
                 return
         
-        w = writable.keys () # probably faster than all those w.append (fd)
         try:
                 r, w, e = select.select (r, w, [], timeout)
         except select.error, err:
@@ -131,22 +113,22 @@ def async_select (
                         
                 except:
                         dispatcher.handle_error ()
-        w = set (w)
-        inactive = (w + set (r)) - (set (ww) + set (rr))
-        if inactive:
-                for fd in (inactive & w):
-                        stalled[fd] = writable.pop (fd)
-                for fd in (inactive - w):
-                        stalled[fd] = readable.pop (fd)
+        #w = set (w)
+        #inactive = (w + set (r)) - (set (ww) + set (rr))
+        #if inactive:
+        #        for fd in (inactive & w):
+        #                stalled[fd] = writable.pop (fd)
+        #        for fd in (inactive - w):
+        #                stalled[fd] = readable.pop (fd)
 
 
 def async_poll (
-        map, timeout, new, writable, readable, stalled, limit
+        map, timeout, writable, readable, stalled, limit
         ):
         "limit the connections tested and poll writable or readable only"
         # first limit in the order of priority
         #
-        nd, wd, rd, sd = async_concurrent (
+        wd, rd, sd = async_concurrent (
                 new, writable, readable, stalled, limit
                 )
         #
@@ -159,18 +141,6 @@ def async_poll (
         #
         # now the four loops: new, writable, readable and stalled:
         #
-        for fd, dispatcher in nd:
-                if dispatcher.writable ():
-                        writable[fd] = new.pop (fd)
-                        if dispatcher.readable ():
-                                pollster.register (fd, RW)
-                        else:
-                                pollster.register (fd, W)
-                elif dispatcher.readable ():
-                        readable[fd] = new.pop (fd)
-                        pollster.register (R)
-                else:
-                        stalled[fd] = new.pop (fd)
         for fd, dispatcher in wd:
                 if dispatcher.writable ():
                         if dispatcher.readable ():
@@ -203,9 +173,6 @@ def async_poll (
                 elif dispatcher.readable ():
                         readable[fd] = stalled.pop (fd)
                         pollster.register (R)
-        #
-        # try to poll
-        #
         try:
                 p = pollster.poll (int (timeout*1000))
         except select.error, err:
@@ -213,7 +180,6 @@ def async_poll (
                         raise
 
         else:
-                # and handle I/O events and exceptions.
                 for fd, flags in p:
                         try:
                                 dispatcher = map[fd]
@@ -227,10 +193,10 @@ def async_poll (
                                                 dispatcher.handle_write_event()
                                 elif flags & W:
                                         dispatcher.handle_write_event()
-                                elif readable.has_key (fd):
-                                        stalled[fd] = readable.pop (fd)
-                                else:
-                                        stalled[fd] = writable.pop (fd)
+                                #elif readable.has_key (fd):
+                                #        stalled[fd] = readable.pop (fd)
+                                #else:
+                                #        stalled[fd] = writable.pop (fd)
                         except async_Exception:
                                 raise
                                 
@@ -246,14 +212,13 @@ else:
                         
 # decorate asyncore
 
-new = {}
-writable = {}
-readable = {}
-stalled = {}
+async_writable = {}
+async_readable = {}
+async_stalled = {}
 
 def add_channel (dispatcher, map=None):
         fd = dispatcher._fileno
-        dispatcher.async_map[fd] = dispatcher.async_new[fd] = dispatcher
+        dispatcher.async_map[fd] = dispatcher.async_readable[fd] = dispatcher
 
 def del_channel (dispatcher, map=None):
         fd = dispatcher._fileno
@@ -269,10 +234,7 @@ def del_channel (dispatcher, map=None):
                         try:
                                 del dispatcher.async_writable[fd]
                         except KeyError:
-                                try:
-                                        del dispatcher.async_stalled[fd]
-                                except KeyError:
-                                        del dispatcher.async_new[fd]
+                                del dispatcher.async_stalled[fd]
                 
 
 concurrency = 512
@@ -280,16 +242,15 @@ concurrency = 512
 def poll_fun (timeout, map):
         async_io (
                 map, timeout, 
-                new, writable, readable, stalled, concurrency
+                async_writable, async_readable, async_stalled, concurrency
                 )
 
 asyncore.poll_fun = poll_fun
 
 Dispatcher = asyncore.dispatcher
 Dispatcher.async_map = asyncore.socket_map
-Dispatcher.async_new = new 
-Dispatcher.async_writable = writable
-Dispatcher.async_readable = readable
-Dispatcher.async_stalled = stalled
+Dispatcher.async_writable = async_writable
+Dispatcher.async_readable = async_readable
+Dispatcher.async_stalled = async_stalled
 Dispatcher.add_channel = add_channel
 Dispatcher.del_channel = del_channel

@@ -24,7 +24,7 @@ def async_concurrent (new, writable, readable, stalled, limit):
         # this is the nearly O(1) part of the async_c10k loop
         #
         n = new.items ()[:limit]
-        rest = limit - len (new)
+        rest = limit - len (n)
         if rest > 0:
                 w = writable.items ()[:rest]
                 rest = rest - len (w)
@@ -51,8 +51,10 @@ def async_select (
         # and here is the O(N) part, where N < limit ...
         #
         r = []
+        w = []
         for fd, dispatcher in nd:
                 if dispatcher.writable ():
+                        w.append (fd)
                         writable[fd] = new.pop (fd)
                         if dispatcher.readable ():
                                 r.append (fd)
@@ -63,6 +65,7 @@ def async_select (
                         stalled[fd] = new.pop (fd)
         for fd, dispatcher in wd:
                 if dispatcher.writable ():
+                        w.append (fd)
                         if dispatcher.readable ():
                                 r.append (fd)
                 elif dispatcher.readable ():
@@ -72,6 +75,7 @@ def async_select (
                         stalled[fd] = writable.pop (fd)
         for fd, dispatcher in rd:
                 if dispatcher.writable ():
+                        w.append (fd)
                         writable[fd] = readable.pop (fd)
                         if dispatcher.readable ():
                                 r.append (fd)
@@ -91,7 +95,6 @@ def async_select (
                 time.sleep (timeout)
                 return
         
-        w = writable.keys () # probably faster than all those w.append (fd)
         try:
                 rr, ww, e = select.select (r, w, [], timeout)
         except select.error, err:
@@ -130,13 +133,13 @@ def async_select (
         #
         # The last part of the job, moving inactive connections to stalled
         #
-        w = set (w)
-        inactive = (w + set (r)) - (set (ww) + set (rr))
-        if inactive:
-                for fd in (inactive & w):
-                        stalled[fd] = writable.pop (fd)
-                for fd in (inactive - w):
-                        stalled[fd] = readable.pop (fd)
+        #w = set (w)
+        #inactive = (w + set (r)) - (set (ww) + set (rr))
+        #if inactive:
+        #        for fd in (inactive & w):
+        #                stalled[fd] = writable.pop (fd)
+        #        for fd in (inactive - w):
+        #                stalled[fd] = readable.pop (fd)
 
 def async_poll (
         map, timeout, new, writable, readable, stalled, limit
@@ -201,9 +204,6 @@ def async_poll (
                 elif dispatcher.readable ():
                         readable[fd] = stalled.pop (fd)
                         pollster.register (R)
-        #
-        # try to poll
-        #
         try:
                 p = pollster.poll (int (timeout*1000))
         except select.error, err:
@@ -211,7 +211,6 @@ def async_poll (
                         raise
 
         else:
-                # and handle I/O events and exceptions.
                 for fd, flags in p:
                         try:
                                 dispatcher = map[fd]
@@ -225,10 +224,10 @@ def async_poll (
                                                 dispatcher.handle_write_event()
                                 elif flags & W:
                                         dispatcher.handle_write_event()
-                                elif readable.has_key (fd):
-                                        stalled[fd] = readable.pop (fd)
-                                else:
-                                        stalled[fd] = writable.pop (fd)
+                                #elif readable.has_key (fd):
+                                #        stalled[fd] = readable.pop (fd)
+                                #else:
+                                #        stalled[fd] = writable.pop (fd)
                         except async_Exception:
                                 raise
                                 
