@@ -15,13 +15,15 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"http://laurentszyster.be/blog/async_c10k/"
+"http://laurentszyster.be/blog/async10k/"
 
-import select, errno, collections
+import select, errno, asyncore
+
+async_Exception = asyncore.ExitNow
 
 def async_concurrent (new, writable, readable, stalled, limit):
         #
-        # this is the nearly O(1) part of the async_c10k loop
+        # this is the nearly O(1) part of the async10k loop
         #
         n = new.items ()[:limit]
         rest = limit - len (new)
@@ -37,9 +39,8 @@ def async_concurrent (new, writable, readable, stalled, limit):
                         return (n, w, r, ())
         
                 return (n, w, (), ())
-
+        
         return (n, (), (), ())
-
 
 def async_select (
         map, timeout, new, writable, readable, stalled, limit
@@ -93,7 +94,7 @@ def async_select (
         
         w = writable.keys () # probably faster than all those w.append (fd)
         try:
-                rr, ww, e = select.select (r, w, [], timeout)
+                r, w, e = select.select (r, w, [], timeout)
         except select.error, err:
                 if err[0] != errno.EINTR:
                     raise
@@ -101,7 +102,7 @@ def async_select (
                 else:
                     return
 
-        for fd in rr:
+        for fd in r:
                 try:
                         dispatcher = map[fd]
                 except KeyError:
@@ -114,7 +115,7 @@ def async_select (
                         
                 except:
                         dispatcher.handle_error ()
-        for fd in ww:
+        for fd in w:
                 try:
                         dispatcher = map[fd]
                 except KeyError:
@@ -127,9 +128,6 @@ def async_select (
                         
                 except:
                         dispatcher.handle_error ()
-        #
-        # The last part of the job, moving inactive connections to stalled
-        #
         w = set (w)
         inactive = (w + set (r)) - (set (ww) + set (rr))
         if inactive:
@@ -137,6 +135,7 @@ def async_select (
                         stalled[fd] = writable.pop (fd)
                 for fd in (inactive - w):
                         stalled[fd] = readable.pop (fd)
+
 
 def async_poll (
         map, timeout, new, writable, readable, stalled, limit
@@ -237,23 +236,23 @@ def async_poll (
         
         
 if hasattr (select, 'poll'):
-        async_io_c10k = async_poll
+        async_io = async_poll
 else:
-        async_io_c10k = async_select
+        async_io = async_select
                    
                         
-# decorate async_loop.async_io 
+# decorate asyncore
 
-async_new = {}
-async_writable = {}
-async_readable = {}
-async_stalled = {}
+new = {}
+writable = {}
+readable = {}
+stalled = {}
 
-def add_channel (dispatcher):
+def add_channel (dispatcher, map=None):
         fd = dispatcher._fileno
         dispatcher.async_map[fd] = dispatcher.async_new[fd] = dispatcher
 
-def del_channel (dispatcher):
+def del_channel (dispatcher, map=None):
         fd = dispatcher._fileno
         dispatcher._fileno = None
         del dispatcher.async_map[fd]
@@ -267,20 +266,18 @@ def del_channel (dispatcher):
                 
 concurrency = 512
 
-from allegra import async_loop, async_core
-
-def async_io (map, timeout):
-        async_io_c10k (
+def poll_fun (timeout, map):
+        async_io (
                 map, timeout, 
-                async_new, async_writable, async_readable, async_stalled, 
-                concurrency
+                new, writable, readable, stalled, concurrency
                 )
 
-async_loop.async_io = async_io
-Dispatcher = async_core.Dispatcher
-Dispatcher.async_new = async_new 
-Dispatcher.async_writable = async_writable
-Dispatcher.async_readable = async_readable
-Dispatcher.async_stalled = async_stalled
+async_core.poll_fun = poll_fun
+Dispatcher = asyncore.dispatcher
+Dispatcher.async_map = asyncore.socket_map
+Dispatcher.async_new = new 
+Dispatcher.async_writable = writable
+Dispatcher.async_readable = readable
+Dispatcher.async_stalled = stalled
 Dispatcher.add_channel = add_channel
 Dispatcher.del_channel = del_channel

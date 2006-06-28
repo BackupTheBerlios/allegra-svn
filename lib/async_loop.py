@@ -50,17 +50,19 @@ from allegra import loginfo
 async_Exception = KeyboardInterrupt
 
 
-# The socket map, a dictionnary of dispatchers indexed by their socket fileno
+# Variables
+
+concurrency = 512
+async_timeout = 0.1 # default to a much smaller interval (300) than asyncore
 
 async_map = {}
+async_scheduled = []
+async_finalized = collections.deque ()
 
 
-# The original Medusa/asyncore.py functions to poll this socket map for I/O
-#
-# ... plus a few selected improvements ...
-#
+# Poll Functions, starting with I/O
 
-def async_io_select (map, timeout=0.0, limit=512):
+def async_io_select (map, timeout, limit):
         r = []
         w = []
         concurrent = map.items ()
@@ -113,7 +115,7 @@ def async_io_select (map, timeout=0.0, limit=512):
                         dispatcher.handle_error ()
 
 
-def async_io_poll (map, timeout=0.0, limit=512):
+def async_io_poll (map, timeout, limit):
         timeout = int (timeout*1000)
         pollster = select.poll ()
         R = select.POLLIN | select.POLLPRI
@@ -155,19 +157,15 @@ def async_io_poll (map, timeout=0.0, limit=512):
                                 dispatcher.handle_error()
 
 
-# Select the best poll function available for this system
+# Select the best I/O poll function available for this system
 
 if hasattr (select, 'poll'):
 	async_io = async_io_poll
 else:
 	async_io = async_io_select
 
-async_timeout = 0.1 # default to a much smaller interval (300) than asyncore
 
-
-# Finalizations, the Garbage Collector asynchronous loop
-
-async_finalized = collections.deque ()
+# Poll Memory (Finalizations, ie: CPython Garbage Collection decoupled)
 
 def async_finalize ():
 	"call all finalization queued"
@@ -186,14 +184,8 @@ def async_finalize ():
                         loginfo.loginfo_traceback () # log exception
         
 	
-# Scheduled Events
+# Poll Time (Scheduled Events)
 
-async_scheduled = []
-
-def async_schedule (when, defered):
-	"schedule a call to defered for when"
-	heapq.heappush (async_scheduled, (when, defered))
-	
 def async_clock ():
 	"call all defered scheduled before now"
 	if not async_scheduled:
@@ -219,13 +211,43 @@ def async_clock ():
 				# ... maybe continue ...
 
 
-# The async_Exception catcher
+# Poll Signals (Exceptions Handler)
 
 def async_catch ():
 	"throw an async_Exception"
 	assert None == loginfo.log ('async_catch', 'debug')
 	return False
 
+
+# The Push Function(s)
+
+def schedule (when, defered):
+        "schedule a call to defered for when"
+        heapq.heappush (async_scheduled, (when, defered))        
+
+async_schedule = schedule # TODO: move to a simpler namespace
+        
+
+# The loop Itself
+
+def dispatch ():
+        "poll, clock and finalize while there is at least one event"
+        assert None == loginfo.log ('async_dispatch_start', 'debug')
+        while async_map or async_scheduled or async_finalized:
+                try:
+                        async_io (async_map, async_timeout, concurrency)
+                        async_clock ()
+                        async_finalize ()
+                except async_Exception:
+                        if not async_catch ():
+                                break
+                
+                except:
+                        loginfo.loginfo_traceback ()
+        
+        assert None == loginfo.log ('async_dispatch_stop', 'debug')
+   
+        
 # TODO: move to a simpler and yet more powerfull signal catching interface
 #
 # catcher (signal) == False | True
@@ -251,18 +273,3 @@ def catch2 (catcher):
         async_catchers2.append (catcher)
 
 
-# And finally, the loop itself
-
-def dispatch ():
-	"poll, clock and finalize while there is at least one event"
-	assert None == loginfo.log ('async_dispatch_start', 'debug')
-	while async_map or async_scheduled or async_finalized:
-		try:
-			async_io (async_map, async_timeout)
-                        async_clock ()
-                        async_finalize ()
-		except async_Exception:
-			if not async_catch ():
-				break
-	
-	assert None == loginfo.log ('async_dispatch_stop', 'debug')
