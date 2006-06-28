@@ -256,14 +256,21 @@ def add_channel (dispatcher):
 def del_channel (dispatcher):
         fd = dispatcher._fileno
         dispatcher._fileno = None
-        del dispatcher.async_map[fd]
         try:
-                del dispatcher.async_readable[fd]
+                del dispatcher.async_map[fd]
         except KeyError:
+                pass
+        else:
                 try:
-                        del dispatcher.async_writable[fd]
+                        del dispatcher.async_readable[fd]
                 except KeyError:
-                        del dispatcher.async_stalled[fd]
+                        try:
+                                del dispatcher.async_writable[fd]
+                        except KeyError:
+                                try:
+                                        del dispatcher.async_stalled[fd]
+                                except KeyError:
+                                        del dispatcher.async_new[fd]
                 
 concurrency = 512
 
