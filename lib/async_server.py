@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/async_server/"
 
 import socket, time
 
@@ -139,6 +139,7 @@ class Listen (async_core.Dispatcher):
                 assert None == self.log ('unresolved %r' % addr, 'debug')
 
         def server_accept (self, conn, addr, name):
+                assert None == dispatcher.log ('accept %r' % addr, 'debug')
                 now = time.time ()
                 dispatcher = self.Server_dispatcher (conn)
                 dispatcher.addr = addr #?
@@ -149,7 +150,6 @@ class Listen (async_core.Dispatcher):
                 if self.server_when == 0:
                         self.server_start (now)
                 self.server_dispatchers.append (dispatcher)
-                # assert None == dispatcher.log ('%r' % addr, 'accepted')
                 return dispatcher
                 
         def server_start (self, when):
