@@ -98,6 +98,9 @@ class File_producer (finalization.Finalization):
         sync_read = sync_read
         sync_close = sync_close
         
+        def async_open (self, mode):
+                self.synchronized ((self.sync_read, ()))
+        
         def async_read (self, data):
                 self.async_buffers.append (data)
                 self.synchronized ((self.sync_read, ()))
@@ -137,6 +140,8 @@ class File_collector (finalization.Finalization):
         sync_open = sync_open
         sync_write = sync_write
         sync_close = sync_close
+        
+        def async_open (self, mode): pass
         
         def async_close (self, mode):
                 self.async_closed = True
