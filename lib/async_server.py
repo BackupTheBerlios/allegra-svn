@@ -136,10 +136,10 @@ class Listen (async_core.Dispatcher):
                 # ... and sometimes damn hard to finalize ;-)
                 
         def server_unresolved (self, conn, addr):
-                assert None == self.log ('unresolved %r' % addr, 'debug')
+                assert None == self.log ('unresolved %r' % (addr,), 'debug')
 
         def server_accept (self, conn, addr, name):
-                assert None == dispatcher.log ('accept %r' % addr, 'debug')
+                assert None == self.log ('accepted %r' % (addr,), 'debug')
                 now = time.time ()
                 dispatcher = self.Server_dispatcher (conn)
                 dispatcher.addr = addr #?
