@@ -33,15 +33,7 @@ class PNS_peer (loginfo.Loginfo):
 		self.pns_subscriptions = {}
 		self.pns_resolution = pns_resolution.PNS_resolution (self)
 		self.pns_inference = pns_inference.PNS_inference (self)
-		if tcp_ip.startswith ('127.'):
-			self.pns_tcp = pns_tcp.PNS_TCP_peer (self, tcp_ip)
-		elif (
-			tcp_ip.startswith ('192.168.') or
-			tcp_ip.startswith ('10.')
-			):
-			self.pns_tcp = pns_tcp.PNS_TCP_server (self, tcp_ip)
-		else:
-			self.pns_tcp = pns_tcp.PNS_TCP_seed (self, tcp_ip)
+                self.pns_tcp = pns_tcp.Listen (self, tcp_ip)
 		self.pns_udp = pns_udp.PNS_UDP_peer (self, self.pns_name)
 			
 	def __repr__ (self):
