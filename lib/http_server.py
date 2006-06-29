@@ -20,8 +20,8 @@
 import types, weakref, time, os, stat, glob, mimetypes, urllib, re
 
 from allegra import (
-        netstring, loginfo, async_loop, finalization, thread_loop, 
-        async_chat, producer, synchronized, tcp_server,
+        netstring, loginfo, async_loop, finalization, 
+        async_chat, producer, tcp_server,
         mime_headers, mime_reactor, http_reactor
         )
         
