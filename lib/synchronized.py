@@ -22,7 +22,7 @@ import collections, subprocess
 from allegra import loginfo, finalization, thread_loop 
 
 
-# Methods attributed to a synchronized file type
+# File producer and collector
 
 def sync_open (self, filename, mode):
         try:
@@ -59,40 +59,29 @@ def sync_close (self, mode):
         self.sync_file = None
         
 
-class Synchronized_open (object):
-        
-        # either buffers a synchronous file opened read-only and provide
-        # a stallable producer interface, or write synchronously to a
-        # file the data provided by the instance collector interface.
-        #
-        # practically, this is a synchronized file reactor.
-        
+class File_producer (finalization.Finalization):
+
         synchronizer = None
         synchronizer_size = 4
-        
-        collector_is_simple = True
         
         async_buffers = ()
         async_closed = False
 
-        def __init__ (self, filename, mode='r', buffer=4096):
+        def __init__ (self, filename, mode='rb', buffer=4096):
+                assert (
+                        type (filename) == str and
+                        mode.startswith ('r') and 
+                        (0 < len (mode) < 3) and
+                        buffer > 0
+                        )
                 self.sync_buffer = buffer
-                if mode[0] == 'r':
-                        self.async_buffers = collections.deque([])
+                self.async_buffers = collections.deque([])
                 thread_loop.synchronize (self)
                 self.synchronized ((self.sync_open, (filename, mode)))
 
         def __repr__ (self):
-                return 'synchronized-open id="%x"' % id (self)
+                return 'synchronized-file-producer id="%x"' % id (self)
                         
-        # a reactor interface
-                
-        def collect_incoming_data (self, data):
-                self.synchronized ((self.sync_write, (data,)))
-                
-        def found_terminator (self):
-                self.synchronized ((self.sync_close, ('w', )))
-                
         def more (self):
                 try:
                         return self.async_buffers.popleft ()
@@ -105,19 +94,10 @@ class Synchronized_open (object):
                         self.async_closed or len (self.async_buffers) > 0
                         )
                         
-        # >>> Synchronized methods
-        
         sync_open = sync_open
-        sync_write = sync_write
         sync_read = sync_read
         sync_close = sync_close
-
-        # ... asynchronous continuations
         
-        def async_open (self, mode):
-                if mode[0] == 'r':
-                        self.synchronized ((self.sync_read, ()))
-                
         def async_read (self, data):
                 self.async_buffers.append (data)
                 self.synchronized ((self.sync_read, ()))
@@ -127,25 +107,43 @@ class Synchronized_open (object):
                 thread_loop.desynchronize (self)
                                 
 
-class File_producer (Synchronized_open, finalization.Finalization):
+class File_collector (finalization.Finalization):
 
-        synchronizer_size = 16
+        synchronizer = None
+        synchronizer_size = 4
         
-        def __init__ (self, filename, mode='rb'):
-                assert mode.startswith ('r')
-                Synchronized_open.__init__ (self, filename, mode)
+        collector_is_simple = True
+        
+        async_closed = False
+
+        def __init__ (self, filename, mode='wb'):
+                assert (
+                        type (filename) == str and
+                        not mode.startswith ('r') and 
+                        (0 < len (mode) < 3)
+                        )
+                thread_loop.synchronize (self)
+                self.synchronized ((self.sync_open, (filename, mode)))
+
+        def __repr__ (self):
+                return 'synchronized-open id="%x"' % id (self)
+                
+        def collect_incoming_data (self, data):
+                self.synchronized ((self.sync_write, (data,)))
+                
+        def found_terminator (self):
+                self.synchronized ((self.sync_close, ('w', )))
+
+        sync_open = sync_open
+        sync_write = sync_write
+        sync_close = sync_close
+        
+        def async_close (self, mode):
+                self.async_closed = True
+                thread_loop.desynchronize (self)
 
 
-class File_collector (Synchronized_open, finalization.Finalization):
-
-        synchronizer_size = 8
-
-        def __init__ (self, filename, chunk=1<<14, mode='wb'):
-                assert not mode.startswith ('r')
-                Synchronized_open.__init__ (self, filename, mode, chunk)
-
-                                
-# Methods attributed to a synchronized subprocess type
+# Subprocess reactor               
                                 
 def sync_popen (self, args, kwargs):
         # try to open a subprocess and either write input and/or
