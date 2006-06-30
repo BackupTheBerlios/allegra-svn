@@ -59,7 +59,7 @@ def sync_close (self, mode):
         self.sync_file = None
         
 
-class File_producer (finalization.Finalization):
+class File_producer (object):
 
         synchronizer = None
         synchronizer_size = 4
@@ -106,7 +106,7 @@ class File_producer (finalization.Finalization):
                 thread_loop.desynchronize (self)
                                 
 
-class File_collector (finalization.Finalization):
+class File_collector (object):
 
         synchronizer = None
         synchronizer_size = 4
@@ -152,9 +152,9 @@ def sync_popen (self, args, kwargs):
                 return
         
         if self.subprocess.stdin == None:
-                self.sync_poll ()
-        else:
-                self.sync_stdin ()
+                sync_poll (self)
+        #else:
+        #        sync_stdin (self)
 
 def sync_stdin (self, data):
         # try to write and poll, or return
@@ -201,7 +201,7 @@ def sync_poll (self):
                 return
         
         # ... or poll more >>>
-        self.synchronized ((self.sync_poll, ()))
+        self.synchronized ((sync_poll, (self, )))
                 
 def sync_wait (self):
         try:
@@ -235,13 +235,13 @@ class Synchronized_popen (object):
         def __init__ (self, *args, **kwargs):
                 self.async_stdout = collections.deque([])
                 thread_loop.synchronize (self)
-                self.synchronized ((self.sync_popen, (args, kwargs)))
+                self.synchronized ((sync_popen, (self, args, kwargs)))
                 
         def collect_incoming_data (self, data):
-                self.synchronized ((self.sync_stdin, (data,)))
+                self.synchronized ((sync_stdin, (self, data,)))
                 
         def found_terminator (self):
-                self.synchronized ((self.sync_poll, ()))
+                self.synchronized ((sync_poll, (self, )))
                 return True
         
         def more (self):
@@ -257,14 +257,9 @@ class Synchronized_popen (object):
                         len (self.async_stdout) > 0
                         )
 
-        sync_popen = sync_popen
-        sync_stdin = sync_stdin
-        sync_poll = sync_poll
-        sync_wait = sync_wait
-        
         def async_read (self, stdout):
                 self.async_stdout.append (stdout)
-                self.synchronized ((self.sync_poll, ()))
+                self.synchronized ((sync_poll, (self, )))
                 
         def async_return (self, code):
                 self.async_code = code
