@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/synchronized/"
 
 import collections, subprocess
 
@@ -217,7 +217,7 @@ def sync_wait (self):
                 self.select_trigger ((self.async_return, (code, )))
 
 
-class Synchronized_popen (object):
+class Popen_reactor (object):
         
         # Another reactor interface for synchronous system call, here
         # a popened process. Data is collected asynchronously to STDIN, 
@@ -265,46 +265,15 @@ class Synchronized_popen (object):
                 self.async_code = code
                 thread_loop.desynchronize (self)
                 assert None == loginfo.log ('%r' % code, 'debug')
-        
-        # The rational is that you want to produce STDOUT not STDERR.
-        #
-        # Errors are "bagged" in one big buffer or any other file type
-        # specified as SYNC_STDERR that is supported by the subprocess
-        # standard module of Python 2.4.
-        #
-        # This class is a very practical way to pipe UNIX processes
-        # with Command Line Interface through asynchronously network
-        # I/O, with the least blocking possible given a maximum number 
-        # of threads.
-        #
-        # It's methods and design is reused by PRESTo components to
-        # provide a CGI-like interface for Allegra's web framework. It
-        # may be applied to all those CPU intensive processes for which
-        # a reliable and optimized pipes allready exists.
-        #
-        # Further processing of the reactor's output or input can be
-        # implemented by chaining the ad-hoc type of collector and/or 
-        # producer instances.
 
 
-class Pipe_reactor (Synchronized_popen, finalization.Finalization):
+class Pipe_reactor (Popen_reactor, finalization.Finalization):
 
         synchronizer_size = 16
         
         def __init__ (self, args):
-                Synchronized_popen.__init__ (
+                Popen.__init__ (
                         self, args, 0, None, 
-                        subprocess.PIPE, subprocess.PIPE, None
+                        subprocess.PIPE, subprocess.PIPE, subprocess.STDOUT
                         )
 
-        #
-        # Uses up to 16 threads to synchronize subprocess with the
-        # asynchronous collector and producer interfaces, piping
-        # in collected data, producing the subprocess STDOUT and
-        # not even looking at STDERR.
-
-
-# Synchronized file and process reactors
-#
-# This modules comes with two usefull asynchronous reactors that can collect
-# and/or produce data to/from a synchronous file or process.
