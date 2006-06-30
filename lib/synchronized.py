@@ -47,7 +47,7 @@ def sync_read (self):
                 if data:
                         self.select_trigger ((self.async_read, (data, )))
                 else:
-                        self.sync_close ('r')
+                        sync_close (self, 'r')
         
 def sync_close (self, mode):
         try:
@@ -77,7 +77,7 @@ class File_producer (finalization.Finalization):
                 self.sync_buffer = buffer
                 self.async_buffers = collections.deque([])
                 thread_loop.synchronize (self)
-                self.synchronized ((self.sync_open, (filename, mode)))
+                self.synchronized ((sync_open, (self, filename, mode)))
 
         def __repr__ (self):
                 return 'synchronized-file-producer id="%x"' % id (self)
@@ -94,16 +94,12 @@ class File_producer (finalization.Finalization):
                         self.async_closed or len (self.async_buffers) > 0
                         )
                         
-        sync_open = sync_open
-        sync_read = sync_read
-        sync_close = sync_close
-        
         def async_open (self, mode):
-                self.synchronized ((self.sync_read, ()))
+                self.synchronized ((sync_read, (self, )))
         
         def async_read (self, data):
                 self.async_buffers.append (data)
-                self.synchronized ((self.sync_read, ()))
+                self.synchronized ((sync_read, (self, )))
                 
         def async_close (self, mode):
                 self.async_closed = True
@@ -126,21 +122,17 @@ class File_collector (finalization.Finalization):
                         (0 < len (mode) < 3)
                         )
                 thread_loop.synchronize (self)
-                self.synchronized ((self.sync_open, (filename, mode)))
+                self.synchronized ((sync_open, (self, filename, mode)))
 
         def __repr__ (self):
-                return 'synchronized-open id="%x"' % id (self)
+                return 'synchronized-file-collector id="%x"' % id (self)
                 
         def collect_incoming_data (self, data):
-                self.synchronized ((self.sync_write, (data,)))
+                self.synchronized ((sync_write, (self, data,)))
                 
         def found_terminator (self):
-                self.synchronized ((self.sync_close, ('w', )))
+                self.synchronized ((sync_close, (self, 'w', )))
 
-        sync_open = sync_open
-        sync_write = sync_write
-        sync_close = sync_close
-        
         def async_open (self, mode): pass
         
         def async_close (self, mode):
