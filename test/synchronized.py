@@ -67,9 +67,13 @@ def test_popen_reactor (when):
         r = synchronized.Popen_reactor (
                 '/python24/python test/subcollect.py'
                 )
+        def finalize (finalized):
+                loginfo.log ('%r' % finalized, 'finalized')
+        r.finalization = finalize
         test_producer (when, r.spout, (lambda when: None))
         r.scin.collect_incoming_data ('this is a test\n\n')
         r.scin.found_terminator ()
+        del r
                         
 async_loop.schedule (
         time.time () + async_loop.async_timeout, test_file_collector

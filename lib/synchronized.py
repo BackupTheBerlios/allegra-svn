@@ -19,7 +19,7 @@
 
 import collections, subprocess
 
-from allegra import loginfo, thread_loop 
+from allegra import loginfo, finalization, thread_loop 
 
 
 # File producer and collector
@@ -322,7 +322,7 @@ def popen_collector (
         return sc
 
 
-class Popen_reactor (object):
+class Popen_reactor (finalization.Finalization):
         
         def __init__ (
                 self, args, 
@@ -354,15 +354,17 @@ class Popen_reactor (object):
         def async_popen (self):
                 self.spout.subprocess = self.scin.subprocess
                 self.spout.synchronized ((sync_stdout, (self.spout, )))
+                self.scin.async_popen = None
                 
         def found_terminator (self):
-                pass
+                self.scin.found_terminator = None
         
         def async_return (self, code):
                 scin = self.scin
                 spout = self.spout
                 scin.async_code = spout.async_code = code
                 self.scin = self.spout = None
+                spout.async_return = None
                 thread_loop.desynchronize (scin)
                 thread_loop.desynchronize (spout)
                 assert None == loginfo.log ('%r' % code, 'debug')
