@@ -156,11 +156,9 @@ def sync_popen (self, args):
 
 def sync_stdin (self, data):
         try:
-                length = self.subprocess.stdin.write (data)
+                self.subprocess.stdin.write (data)
         except Exception, error:
                 self.select_trigger ((self.async_except, (error, )))
-        else:
-                self.select_trigger ((self.async_stdin, (length, )))
                 
 def sync_stdout (self):
         exit = self.subprocess.poll ()
@@ -283,10 +281,6 @@ class Popen_collector (object):
         def async_popen (self):
                 assert None == loginfo.log ('async_popen', 'debug')
 
-        def async_stdout (self, data):
-                self.async_buffers.append (data)
-                self.synchronized ((sync_poll, (self, )))
-                
         def async_stderr (self, data):
                 assert None == loginfo.log (
                         'async_error', 'not implemented'
