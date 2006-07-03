@@ -74,7 +74,7 @@ class File_producer (object):
                         (0 < len (mode) < 3) and
                         buffer > 0
                         )
-                self.sync_buffer = buffer
+                self.sync_buffer = bufsize
                 self.async_buffers = collections.deque([])
                 thread_loop.synchronize (self)
                 self.synchronized ((
@@ -146,18 +146,15 @@ class File_collector (object):
 
 # Subprocess reactor
 
-def sync_popen (self, args, kwargs):
-        # try to open a subprocess and either write input and/or
-        # poll output. Return on exception.
+def sync_popen (self, args):
         try:
-                self.subprocess = subprocess.Popen (*args, **kwargs)
+                self.subprocess = subprocess.Popen (*args)
         except Exception, error:
-                self.select_trigger ((self.async_return, (str (error), )))
+                self.select_trigger ((self.async_except, (error, )))
         else:
                 self.select_trigger ((self.async_popen, ()))
 
 def sync_stdin (self, data):
-        # try to write and poll, or return
         try:
                 length = self.subprocess.stdin.write (data)
         except Exception, error:
@@ -165,21 +162,16 @@ def sync_stdin (self, data):
         else:
                 self.select_trigger ((self.async_stdin, (length, )))
                 
-def sync_close (self):
-        try:
-                self.subprocess.stdin.close ()
-        except Exception, error:
-                self.select_trigger ((self.async_except, (error, )))
-        else:
-                sync_wait (self)
-        
 def sync_stdout (self):
+        exit = self.subprocess.poll ()
+        if exit != None:
+                sync_wait (self)
+                return
+        
         try:
                 data = self.subprocess.stdout.read (self.sync_buffer)
         except Exception, error:
                 self.select_trigger ((self.async_except, (error, )))
-                self.subprocess.stdout.close ()
-                sync_wait (self)
         else:
                 if data:
                         self.select_trigger ((self.async_stdout, (data, )))
@@ -187,16 +179,19 @@ def sync_stdout (self):
                         sync_wait (self)
         
 def sync_wait (self):
-        if self.subprocess.stderr != None:
-                try:
-                        data = self.subprocess.stderr.read ()
-                except Exception, error:
-                        self.select_trigger ((self.async_except, (error, )))
-                else:
-                        self.select_trigger ((self.async_stderr, (data, )))
-                self.subprocess.stderr.close ()
-        exit = self.subproces.wait ()
-        self.select_trigger ((self.async_return, (exit, )))
+        if self.subprocess == None:
+                self.select_trigger ((self.async_return, (None, )))
+                return
+                
+        sub = self.subprocess
+        self.subprocess = None
+        if sub.stdin:
+                sub.stdin.close ()
+        if sub.stdout:
+                sub.stdout.close ()
+        if sub.stderr:
+                sub.stderr.close ()
+        self.select_trigger ((self.async_return, (sub.wait (), )))
 
 
 class Popen_producer (object):
@@ -204,13 +199,12 @@ class Popen_producer (object):
         synchronizer = None
         synchronizer_size = 2
 
-        async_code = None
+        subprocess = async_code = None
         sync_buffer = 1<<16
         
-        def __init__ (self, *args, **kwargs):
+        def __init__ (self):
                 self.async_buffers = collections.deque([])
                 thread_loop.synchronize (self)
-                self.synchronized ((sync_popen, (self, args, kwargs)))
                 
         def more (self):
                 try:
@@ -220,9 +214,9 @@ class Popen_producer (object):
                         return ''
         
         def producer_stalled (self):
-                return not (
-                        self.async_code == None or 
-                        len (self.async_buffers) > 0
+                return (
+                        self.async_code == None and
+                        len (self.async_buffers) == 0
                         )
 
         def async_popen (self):
@@ -239,12 +233,35 @@ class Popen_producer (object):
                 
         def async_except (self, error):
                 assert None == loginfo.log (str (error), 'debug')
+                sync_wait (self)
                 
         def async_return (self, code):
                 self.async_code = code
                 thread_loop.desynchronize (self)
-                assert None == loginfo.log ('%r' % code, 'debug')
+                assert None == loginfo.log ('exit (%r)' % code, 'debug')
 
+
+def popen_producer (
+        args, bufsize=0, executable=None, 
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+        preexec_fn=None, close_fds=False, 
+        shell=False, cwd=None, env=None, 
+        universal_newlines=False, startupinfo=None, 
+        creationflags=0
+        ):
+        assert (
+                stdin != None and 
+                stdout == subprocess.PIPE and
+                stderr in (subprocess.PIPE, subprocess.STDOUT)
+                )
+        sp = Popen_producer ()
+        sp.synchronized ((sync_popen, (sp, (
+                args, bufsize, executable, stdin, stdout, stderr,
+                preexec_fn, close_fds, shell, cwd, env, universal_newlines,
+                startupinfo, creationflags
+                ))))
+        return sp
+        
 
 class Popen_collector (object):
         
@@ -253,17 +270,16 @@ class Popen_collector (object):
 
         collector_is_simple = True
 
-        async_code = None
+        subprocess = async_code = None
         
-        def __init__ (self, *args, **kwargs):
+        def __init__ (self):
                 thread_loop.synchronize (self)
-                self.synchronized ((sync_popen, (self, args, kwargs)))
                 
         def collect_incoming_data (self, data):
                 self.synchronized ((sync_stdin, (self, data,)))
                 
         def found_terminator (self):
-                self.synchronized ((sync_close, (self, )))
+                self.synchronized ((sync_wait, (self, )))
                 return True
         
         def async_popen (self):
@@ -280,6 +296,7 @@ class Popen_collector (object):
                 
         def async_except (self, error):
                 assert None == loginfo.log (str (error), 'debug')
+                sync_wait (self)
                 
         def async_return (self, code):
                 self.async_code = code
@@ -287,14 +304,22 @@ class Popen_collector (object):
                 assert None == loginfo.log ('%r' % code, 'debug')
 
 
-def subproducer (args):
-        return Popen_producer (
-                args, 0, None, 
-                None, subprocess.PIPE, subprocess.PIPE
+def popen_collector (
+        args, bufsize=0, executable=None, 
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+        preexec_fn=None, close_fds=False, 
+        shell=False, cwd=None, env=None, 
+        universal_newlines=False, startupinfo=None, 
+        creationflags=0
+        ):
+        assert (
+                stdin == subprocess.PIPE and 
+                stdout != None and stderr != None
                 )
-
-def subcollector (args):
-        return Popen_collector (
-                args, 0, None, 
-                subprocess.PIPE, None, None
-                )
+        sc = Popen_collector ()
+        sc.synchronized ((sync_popen, (sc, (
+                args, bufsize, executable, stdin, stdout, stderr,
+                preexec_fn, close_fds, shell, cwd, env, universal_newlines,
+                startupinfo, creationflags
+                ))))
+        return sc
