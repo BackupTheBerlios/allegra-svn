@@ -280,3 +280,27 @@ def catch2 (catcher):
         async_catchers2.append (catcher)
 
 
+# Schedule
+#
+# Having now peaked at both twisted, ACE and the libevent interfaces, I can
+# proudly say that the async_loop.async_schedule and the timeouts.Timeouts
+# interfaces are better.
+#
+# Allegra offers three kind of time events: single events defered at a fixed 
+# interval of time (ie the classic timeout) and single or recurent events 
+# scheduled at varying interval.
+#
+# The async_schedule interface has one or two advantages over the
+# competing designs. First it provides a way to schedule recurrent events 
+# without some ugly callback, without pegging the heap queue of the event 
+# "clock" implementation, and with an interface that prove to be quite 
+# flexible and simple for general purpose applications (like zombie channel
+# scavenging, TPC server or UDP peer gracefull shutdown, etc ...).
+#
+# Second, it allows to schedule events at absolute point in time and provide
+# a very much usefull absolute scheduled time value to its handler. Moreover
+# the underlying implementation implies that time is stable, that the
+# scheduled event's notion of time does not drift even if polling time is
+# done with little precision.
+#
+#

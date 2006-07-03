@@ -22,10 +22,7 @@ import time, collections
 from allegra import async_loop
 
 
-class Timeouts:
-	
-	# for many applications you may as well check for any timeouts due
-	# every seconds.
+class Timeouts (object):
 	
 	def __init__ (self, timeout, period, precision=None):
 		self.timeouts_timeout = timeout
@@ -43,7 +40,7 @@ class Timeouts:
 	
 	def timeouts_schedule (self, now):
 		then = now - self.timeouts_precision - self.timeouts_period 
-		while len (self.timeouts_deque) > 0:
+		while self.timeouts_deque:
 			when, reference = self.timeouts_deque[0]
 			if  when < then:
 				self.timeouts_deque.popleft ()
@@ -68,33 +65,33 @@ class Timeouts:
 		#
 		# ... break the circular reference on last schedule.
 	
-	
+
+# The first, simplest and probably most interesting application of Timeouts
+
+def cached (cache, period, precision):
+        def timeout (reference):
+                try:
+                        del cache[reference]
+                except KeyError:
+                        pass
+        
+        t = Timeouts (timeout, period, precision)
+        def push (key, value):
+                cache[key] = value
+                t.timeouts_push (key)
+                
+        def stop ():
+                t.timeouts_continue = t.timeouts_stop
+                
+        return push, stop
+
+# push, stop = timeouts.cached ({}, 60, 6)
+# ...
+# push (key, value)
+# ...
+# stop ()
+        
 # Note about this implementation	
-#
-# Having now peaked at both twisted, ACE and the libevent interfaces, I can
-# proudly say that the async_loop.async_schedule and the timeouts.Timeouts
-# interfaces are better.
-#
-# Allegra offers three kind of time events: single events defered at a fixed 
-# interval of time (ie the classic timeout) and single or recurent events 
-# scheduled at varying.
-#
-#
-# Schedule
-#
-# The async_schedule interface has one or two advantages over the
-# competing designs. First it provides a way to schedule recurrent events 
-# without some ugly callback, without pegging the heap queue of the event 
-# "clock" implementation, and with an interface that prove to be quite 
-# flexible and simple for general purpose applications (like zombie channel
-# scavenging, TPC server or UDP peer gracefull shutdown, etc ...).
-#
-# Second, it allows to schedule events at absolute point in time and provide
-# a very much usefull absolute scheduled time value to its handler. Moreover
-# the underlying implementation implies that time is stable, that the
-# scheduled event's notion of time does not drift even if polling time is
-# done with little precision.
-#
 #
 # Time out
 #
@@ -102,7 +99,7 @@ class Timeouts:
 # asynchronously at fixed intervals, this module provides a simple deque 
 # interface that for a fifo of timeout events to poll from.
 #
-# Polling a timeouts queue should be scheduled recurrently more or less
+# Polling a timeouts queue should be scheduled recurrently at more or less
 # precise intervals depending on the volume expected and the time it takes
 # to handle each timeout. Your mileage may vary, but this design will scale
 # up in the case of long intervals, when for each time poll only a few first 
