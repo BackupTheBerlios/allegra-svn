@@ -216,6 +216,13 @@ def async_clock ():
 def async_catch ():
 	"throw an async_Exception"
 	assert None == loginfo.log ('async_catch', 'debug')
+        if __debug__:
+                for dispatcher in async_map:
+                        loginfo.log ('%r' % dispatcher, 'undispatched')
+                for scheduled in async_scheduled:
+                        loginfo.log ('%r' % (scheduled, ), 'unscheduled')
+                for finalized in async_finalized:
+                        loginfo.log ('%r' % (finalized, ), 'unfinalized')
 	return False
 
 
