@@ -185,10 +185,8 @@ def sync_wait (self):
                 
         sub = self.subprocess
         self.subprocess = None
-        if sub.stdin:
-                sub.stdin.close ()
-        if sub.stdout:
-                sub.stdout.close ()
+        sub.stdin.close ()
+        sub.stdout.close ()
         if sub.stderr:
                 sub.stderr.close ()
         self.select_trigger ((self.async_return, (sub.wait (), )))
@@ -250,7 +248,7 @@ def popen_producer (
         creationflags=0
         ):
         assert (
-                stdin != None and 
+                stdin == subprocess.PIPE and 
                 stdout == subprocess.PIPE and
                 stderr in (subprocess.PIPE, subprocess.STDOUT)
                 )
@@ -314,7 +312,8 @@ def popen_collector (
         ):
         assert (
                 stdin == subprocess.PIPE and 
-                stdout != None and stderr != None
+                stdout == subprocess.PIPE and
+                stderr in (subprocess.PIPE, subprocess.STDOUT)
                 )
         sc = Popen_collector ()
         sc.synchronized ((sync_popen, (sc, (
