@@ -19,7 +19,7 @@
 
 import collections, subprocess
 
-from allegra import loginfo, finalization, thread_loop 
+from allegra import loginfo, thread_loop 
 
 
 # File producer and collector
@@ -239,7 +239,9 @@ class Popen_producer (object):
 
 def popen_producer (
         args, bufsize=0, executable=None, 
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+        stdin=subprocess.PIPE, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE, 
         preexec_fn=None, close_fds=False, 
         shell=False, cwd=None, env=None, 
         universal_newlines=False, startupinfo=None, 
@@ -253,8 +255,8 @@ def popen_producer (
         sp = Popen_producer ()
         sp.synchronized ((sync_popen, (sp, (
                 args, bufsize, executable, stdin, stdout, stderr,
-                preexec_fn, close_fds, shell, cwd, env, universal_newlines,
-                startupinfo, creationflags
+                preexec_fn, close_fds, shell, cwd, env, 
+                universal_newlines, startupinfo, creationflags
                 ))))
         return sp
         
@@ -298,7 +300,9 @@ class Popen_collector (object):
 
 def popen_collector (
         args, bufsize=0, executable=None, 
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+        stdin=subprocess.PIPE, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE, 
         preexec_fn=None, close_fds=False, 
         shell=False, cwd=None, env=None, 
         universal_newlines=False, startupinfo=None, 
@@ -312,7 +316,54 @@ def popen_collector (
         sc = Popen_collector ()
         sc.synchronized ((sync_popen, (sc, (
                 args, bufsize, executable, stdin, stdout, stderr,
-                preexec_fn, close_fds, shell, cwd, env, universal_newlines,
-                startupinfo, creationflags
+                preexec_fn, close_fds, shell, cwd, env, 
+                universal_newlines, startupinfo, creationflags
                 ))))
         return sc
+
+
+class Popen_reactor (object):
+        
+        def __init__ (
+                self, args, 
+                bufsize=0, executable=None, 
+                stdin=subprocess.PIPE, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                preexec_fn=None, close_fds=False, 
+                shell=False, cwd=None, env=None, 
+                universal_newlines=False, startupinfo=None, 
+                creationflags=0
+                ):
+                assert (
+                        stdin == subprocess.PIPE and 
+                        stdout == subprocess.PIPE and
+                        stderr in (subprocess.PIPE, subprocess.STDOUT)
+                        )
+                self.scin = Popen_collector ()
+                self.spout = Popen_producer ()
+                self.scin.async_popen = self.async_popen
+                self.scin.found_terminator = self.found_terminator
+                self.spout.async_return = self.async_return
+                self.scin.synchronized ((sync_popen, (self.scin, (
+                        args, bufsize, executable, stdin, stdout, stderr,
+                        preexec_fn, close_fds, shell, cwd, env, 
+                        universal_newlines, startupinfo, creationflags
+                        ))))
+                
+        def async_popen (self):
+                self.spout.subprocess = self.scin.subprocess
+                self.spout.synchronized ((sync_stdout, (self.spout, )))
+                
+        def found_terminator (self):
+                pass
+        
+        def async_return (self, code):
+                scin = self.scin
+                spout = self.spout
+                scin.async_code = spout.async_code = code
+                self.scin = self.spout = None
+                thread_loop.desynchronize (scin)
+                thread_loop.desynchronize (spout)
+                assert None == loginfo.log ('%r' % code, 'debug')
+        
