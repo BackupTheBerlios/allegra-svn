@@ -212,6 +212,22 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         else:
                                 raise socket.error, why
 
+        def sendto (self, data, peer):
+                try:
+                        return self.socket.sendto (data, peer)
+                
+                except socket.error:
+                        self.handle_error ()
+                        return 0
+
+        def recvfrom (self, datagram_size):
+                try:
+                        return self.socket.recvfrom (datagram_size)
+
+                except socket.error:
+                        self.handle_error ()
+                        return '', None
+
         def close (self):
                 "remove the dispatcher from the I/O map and close the socket"
                 self.del_channel ()  # async_loop.del_dispatcher (self)

@@ -600,10 +600,10 @@ class PNS_UDP_peer (udp_peer.UDP_dispatcher, timeouts.Timeouts):
 	def __repr__ (self):
 		return 'pns-udp'
 
-	udp_datagram_size = 512
+	pns_datagram_size = 512
 			
 	def handle_read (self):
-		datagram, peer = self.recvfrom ()
+		datagram, peer = self.recvfrom (pns_datagram_size)
 		if peer == None:
 			assert None == self.log ('nop', 'debug')
 			return

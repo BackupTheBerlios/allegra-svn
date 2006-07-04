@@ -24,8 +24,6 @@ from allegra import async_core
 
 class UDP_dispatcher (async_core.Dispatcher):
 
-	udp_datagram_size = 512
-
 	def __init__ (self, ip, port=None):
 		async_core.Dispatcher.__init__ (self)
 		self.create_socket (socket.AF_INET, socket.SOCK_DGRAM)
@@ -70,9 +68,9 @@ class UDP_dispatcher (async_core.Dispatcher):
 			self.handle_error ()
 			return 0
 
-	def recvfrom (self):
+	def recvfrom (self, datagram_size):
 		try:
-			return self.socket.recvfrom (self.udp_datagram_size)
+			return self.socket.recvfrom (datagram_size)
 
 		except socket.error:
 			self.handle_error ()

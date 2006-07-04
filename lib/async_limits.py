@@ -55,8 +55,8 @@ def meter_recvfrom (dispatcher, when):
         dispatcher.ac_in_meter = 0
         dispatcher.ac_in_when = when
         metered_recvfrom = dispatcher.recvfrom
-        def recvfrom ():
-                data, peer = metered_recvfrom ()
+        def recvfrom (datagram_size):
+                data, peer = metered_recvfrom (datagram_size)
                 dispatcher.ac_in_meter += len (data)
                 dispatcher.ac_in_when = time.time ()
                 return data, peer
