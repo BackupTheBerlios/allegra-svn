@@ -64,16 +64,15 @@ def test_popen_collector (when):
         
 def test_popen_reactor (when):
         loginfo.log ('test Popen_reactor')
-        r = synchronized.Popen_reactor (
+        apipe = synchronized.Popen_reactor (
                 '/python24/python test/subcollect.py'
                 )
-        def finalize (finalized):
-                loginfo.log ('%r' % finalized, 'finalized')
-        r.finalization = finalize
-        test_producer (when, r.spout, (lambda when: None))
-        r.scin.collect_incoming_data ('this is a test\n\n')
-        r.scin.found_terminator ()
-        del r
+        def finalize (apipe):
+                loginfo.log ('%r' % apipe, 'finalized')
+        apipe.finalization = finalize
+        test_producer (when, apipe.producer, (lambda when: None))
+        apipe.collector.collect_incoming_data ('this is a test\n\n')
+        apipe.collector.found_terminator ()
                         
 async_loop.schedule (
         time.time () + async_loop.async_timeout, test_file_collector

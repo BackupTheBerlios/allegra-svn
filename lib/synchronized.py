@@ -340,30 +340,32 @@ class Popen_reactor (finalization.Finalization):
                         stdout == subprocess.PIPE and
                         stderr in (subprocess.PIPE, subprocess.STDOUT)
                         )
-                self.scin = Popen_collector ()
-                self.spout = Popen_producer ()
-                self.scin.async_popen = self.async_popen
-                self.scin.found_terminator = self.found_terminator
-                self.spout.async_return = self.async_return
-                self.scin.synchronized ((sync_popen, (self.scin, (
+                self.collector = Popen_collector ()
+                self.producer = Popen_producer ()
+                self.collector.async_popen = self.async_popen
+                self.collector.found_terminator = self.found_terminator
+                self.producer.async_return = self.async_return
+                self.collector.synchronized ((sync_popen, (self.collector, (
                         args, bufsize, executable, stdin, stdout, stderr,
                         preexec_fn, close_fds, shell, cwd, env, 
                         universal_newlines, startupinfo, creationflags
                         ))))
                 
         def async_popen (self):
-                self.spout.subprocess = self.scin.subprocess
-                self.spout.synchronized ((sync_stdout, (self.spout, )))
-                self.scin.async_popen = None
+                self.producer.subprocess = self.collector.subprocess
+                self.producer.synchronized ((
+                        sync_stdout, (self.producer, )
+                        ))
+                self.collector.async_popen = None
                 
         def found_terminator (self):
-                self.scin.found_terminator = None
+                self.collector.found_terminator = None
         
         def async_return (self, code):
-                scin = self.scin
-                spout = self.spout
+                scin = self.collector
+                spout = self.producer
                 scin.async_code = spout.async_code = code
-                self.scin = self.spout = None
+                self.producer = self.collector = None
                 spout.async_return = None
                 thread_loop.desynchronize (scin)
                 thread_loop.desynchronize (spout)
