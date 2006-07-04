@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"Metering and throttling decorators for async_core dispatchers"
+"http://laurentszyster.be/blog/async_limits/"
 
 import time
 

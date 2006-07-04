@@ -16,6 +16,9 @@
 # USA
 #
 
+"http://laurentszyster.be/blog/netstring/"
+
+
 class NetstringsError (Exception): pass
 
 

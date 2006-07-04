@@ -15,24 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"""Synchronous Standard I/O interfaces, with a Python prompt implementation.
-
-SYNOPSIS
-
-the development console, with full all debug assertion logs, 
-outlined for readability and CRLF applications (grep, more, tail, etc ...):
-
-        python sync_stdio.py
-
-or a quiet outlined console:
-
-	python -OO sync_stdio.py -d
-
-or netstring logs for tests scripts:
-
-        python -OO sync_stdio.py < script.py 1> stdout 2> stderr
-
-"""
+"http://laurentszyster.be/blog/sync_stdio/"
 
 import sys
 

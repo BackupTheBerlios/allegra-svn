@@ -15,9 +15,8 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"a Finalization implementation for async_loop's asynchronous network peers"
+"http://laurentszyster.be/blog/finalization/"
 
-# see http://laurentszyster.be/blog/finalization
 
 from allegra import loginfo, async_loop
 

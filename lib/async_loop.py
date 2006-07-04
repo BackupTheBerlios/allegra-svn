@@ -37,10 +37,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"""A marginally extended async loop implementation, with finalizations 
-and scheduled events. Cheap asynchronous continuations are provided by a 
-piggy-back of the CPython GC and the simplest event scheduler possible is
-implemented as a heap queue."""
+"http://laurentszyster.be/blog/async_loop/"
 
 import select, errno, time, collections, heapq
 

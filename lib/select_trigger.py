@@ -36,7 +36,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
 # USA
 
-"A practical interface to thunk calls to the asynchronous loop"
+"http://laurentszyster.be/blog/select_trigger/"
 
 import sys, os, socket, thread
 

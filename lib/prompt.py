@@ -15,9 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-"""The minimal Python program, an interpreter prompt. See allegra.loginfo,
-allegra.sync_stdio and allegra.presto_prompt for applications of its
-interfaces."""
+"http://laurentszyster.be/blog/prompt/"
 
 import sys
 
