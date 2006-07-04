@@ -197,7 +197,7 @@ def limit_schedule (dispatcher, when, interval, limit, unlimit):
                 # recur at interval
                 return (when + interval, scheduled)
         
-        async_loop.async_schedule (when + interval, scheduled)
+        async_loop.schedule (when + interval, scheduled)
 
         # I like that one (nested namespaces rule ,-)
 

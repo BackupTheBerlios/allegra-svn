@@ -155,7 +155,7 @@ class Listen (async_core.Dispatcher):
         def server_start (self, when):
                 "handle the client management startup"
                 self.server_when = when
-                async_loop.async_schedule (
+                async_loop.schedule (
                         when + self.server_precision, self.server_manage
                         )
                 assert None == self.log ('start', 'debug')

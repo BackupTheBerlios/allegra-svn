@@ -203,7 +203,7 @@ class TCP_server_limit (TCP_server):
                         self.tcp_server_precision >0 and
                         len (self.tcp_server_channels) == 1
                         ):
-                        async_loop.async_schedule (
+                        async_loop.schedule (
                                 time.time () + self.tcp_server_precision,
                                 self.tcp_server_defer
                                 )

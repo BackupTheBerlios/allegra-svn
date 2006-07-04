@@ -80,7 +80,7 @@ class Sync_cache (loginfo.Loginfo, finalization.Finalization):
                         reactor.http_channel.http_continue (reactor)
                         return
                 
-                teed = synchronized.Synchronized_open (filename, 'rb')
+                teed = synchronized.File_producer (filename, 'rb', 1<<14)
                 content_type, content_encoding = \
                         mimetypes.guess_type (filename)
                 teed.mime_headers = {

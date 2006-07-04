@@ -40,7 +40,7 @@ class Dispatcher (object):
                         
                 assert None == self.log ('connect', 'debug')
                 self.client_when = time.time ()
-                async_loop.async_schedule (
+                async_loop.schedule (
                         self.client_when + timeout, self.client_timeout
                         )
                 return True
@@ -116,7 +116,7 @@ class Manager (loginfo.Loginfo):
         def client_start (self, when):
                 "handle the client management startup"
                 self.client_when = when
-                async_loop.async_schedule (
+                async_loop.schedule (
                         when + self.client_precision, self.client_manage
                         )
                 assert None == self.log ('start', 'debug')

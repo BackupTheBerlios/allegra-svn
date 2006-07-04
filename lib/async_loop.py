@@ -213,29 +213,43 @@ def async_clock ():
 
 # Poll Signals (Exceptions Handler)
 
+async_catchers = []
+
 def async_catch ():
-	"throw an async_Exception"
-	assert None == loginfo.log ('async_catch', 'debug')
-        if __debug__:
-                for dispatcher in async_map:
-                        loginfo.log ('%r' % dispatcher, 'undispatched')
-                for scheduled in async_scheduled:
-                        loginfo.log ('%r' % (scheduled, ), 'unscheduled')
-                for finalized in async_finalized:
-                        loginfo.log ('%r' % (finalized, ), 'unfinalized')
-	return False
+        "call catchers on async_Exception (KeyboardInterrupt by default)"
+        assert None == loginfo.log ('async_catch', 'debug')
+        if not async_catchers:
+                if __debug__:
+                        for dispatcher in async_map:
+                                loginfo.log (
+                                        '%r' % dispatcher, 'undispatched'
+                                        )
+                        for scheduled in async_scheduled:
+                                loginfo.log (
+                                        '%r' % (scheduled, ), 'unscheduled'
+                                        )
+                        for finalized in async_finalized:
+                                loginfo.log (
+                                        '%r' % (finalized, ), 'unfinalized'
+                                        )
+                return False
+        
+        for catcher in tuple (async_catchers):
+                if catcher ():
+                        async_catchers.remove (catcher)
+        return len (async_catchers) > 0
 
 
-# The Push Function(s)
+# Application Programming Interfaces
 
 def schedule (when, defered):
         "schedule a call to defered for when"
         heapq.heappush (async_scheduled, (when, defered))        
-
-async_schedule = schedule # TODO: move to a simpler namespace
         
 
-# The loop Itself
+def catch (catcher):
+        async_catchers.append (catcher)
+
 
 def dispatch ():
         "poll, clock and finalize while there is at least one event"
@@ -255,35 +269,11 @@ def dispatch ():
         assert None == loginfo.log ('async_dispatch_stop', 'debug')
    
         
-# TODO: move to a simpler and yet more powerfull signal catching interface
-#
-# catcher (signal) == False | True
-#
-# async_loop.async_catchers = []
-# async_loop.async_catch (signal) == False | True
-# async_loop.catch (catcher)
-#
-
-async_catchers2 = []
-
-def async_catch2 ():
-        "call catchers on async_Exception (KeyboardInterrupt by default)"
-        if not async_catchers2:
-                return False
-        
-        for catcher in tuple (async_catchers2):
-                if catcher ():
-                        async_catchers2.remove (catcher)
-        return True
-
-def catch2 (catcher):
-        async_catchers2.append (catcher)
-
 
 # Schedule
 #
 # Having now peaked at both twisted, ACE and the libevent interfaces, I can
-# proudly say that the async_loop.async_schedule and the timeouts.Timeouts
+# proudly say that the async_loop.schedule and the timeouts.Timeouts
 # interfaces are better.
 #
 # Allegra offers three kind of time events: single events defered at a fixed 

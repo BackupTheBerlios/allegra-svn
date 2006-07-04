@@ -43,7 +43,7 @@ class TCP_client_channel (object):
 			return False
 			
 		assert None == self.log ('connect %s %d' % addr, 'debug')
-		async_loop.async_schedule (
+		async_loop.schedule (
 			time.time () + timeout, self.tcp_timeout
 			)
 		return True
@@ -113,7 +113,7 @@ class TCP_client (loginfo.Loginfo):
 		self.tcp_client_channels[addr] = channel
 		if len (self.tcp_client_channels) == 1:
 	                assert None == self.log ('defer-start', 'debug')
-			async_loop.async_schedule (
+			async_loop.schedule (
 				time.time () + self.tcp_client_precision, 
 				self.tcp_client_defer
 				)

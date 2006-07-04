@@ -376,7 +376,7 @@ class DNS_client (udp_peer.UDP_dispatcher):
                 request.dns_peer = (request.dns_servers[0], 53)
                 self.dns_pending[request.dns_uid] = request
                 self.sendto (request.udp_datagram (), request.dns_peer)
-                async_loop.async_schedule (
+                async_loop.schedule (
                         request.dns_when + self.dns_timeout,
                         request.dns_continue
                         )

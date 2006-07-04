@@ -159,3 +159,21 @@ class Listen (async_server.Listen):
                         self.pns_peer.pns_unsubscribe (self, name)
                 dispatcher.pns_peer = None
                 async_server.Listen.server_close (self, dispatcher)
+                
+#        def pns_command (self, model):
+#                self.pns_peer.pns_inference.pns_command (model)
+#        
+#        def pns_subscribe (self, subscriber, context):
+#                self.pns_peer.pns_subscribe (subscriber, context)
+#        
+#        def pns_unsubscribe (self, subscriber, context):
+#                self.pns_peer.pns_unsubscribe (subscriber, context)
+#        
+#        def pns_open (self, model):
+#                self.pns_peer.pns_resolution.pns_tcp_anonymous (model)
+#
+#        def pns_contextual (self, model):
+#                self.pns_peer.pns_resolution.pns_tcp_statement (model)
+#        
+#        def pns_inference (self, model):
+#                self.pns_peer.pns_inference.pns_statement (model)

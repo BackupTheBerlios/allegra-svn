@@ -29,7 +29,7 @@ class Timeouts (object):
 		self.timeouts_period = max (period, async_loop.async_timeout)
 		self.timeouts_precision = precision or async_loop.async_timeout
 		self.timeouts_deque = collections.deque ()
-		async_loop.async_schedule (
+		async_loop.schedule (
 			time.time () + self.timeouts_precision,
 			self.timeouts_schedule
 			)
