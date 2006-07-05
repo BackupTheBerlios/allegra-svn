@@ -6,7 +6,7 @@ def test_producer (now, p, next_test):
         def test_produce (when):
                 if p.producer_stalled ():
                         async_loop.schedule (
-                                when + async_loop.async_timeout, 
+                                when + async_loop.precision, 
                                 test_produce
                                 )
                 else:
@@ -14,18 +14,18 @@ def test_producer (now, p, next_test):
                         if data:
                                 loginfo.log (data, 'p.more ()')
                                 async_loop.schedule (
-                                        when + async_loop.async_timeout, 
+                                        when + async_loop.precision, 
                                         test_produce
                                         )
                         else:
                                 async_loop.schedule (
-                                        when + async_loop.async_timeout, 
+                                        when + async_loop.precision, 
                                         next_test
                                         )
                                 
                 
         async_loop.schedule (
-                now + async_loop.async_timeout, test_produce
+                now + async_loop.precision, test_produce
                 )        
 
 def test_file_collector (when):
@@ -36,7 +36,7 @@ def test_file_collector (when):
         c.collect_incoming_data ('this is a test\n')
         c.found_terminator ()
         async_loop.schedule (
-                when + async_loop.async_timeout, test_file_producer
+                when + async_loop.precision, test_file_producer
                 )
         
 def test_file_producer (when):
@@ -59,7 +59,7 @@ def test_popen_collector (when):
         c.collect_incoming_data ('this is a test\n\n')
         c.found_terminator ()
         async_loop.schedule (
-                when + async_loop.async_timeout, test_popen_reactor
+                when + async_loop.precision, test_popen_reactor
                 )
         
 def test_popen_reactor (when):
@@ -75,7 +75,7 @@ def test_popen_reactor (when):
         apipe.collector.found_terminator ()
                         
 async_loop.schedule (
-        time.time () + async_loop.async_timeout, test_file_collector
+        time.time () + async_loop.precision, test_file_collector
         )
 async_loop.dispatch ()
 finalization.collect ()

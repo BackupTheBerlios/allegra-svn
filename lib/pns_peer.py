@@ -221,12 +221,12 @@ if __name__ == '__main__':
 			)
 		class PNS_run (PNS_peer):
 			def __init__ (self, udp, tcp, root):
-				self.async_catch = async_loop.async_catch
-				async_loop.async_catch = self.pns_shutdown
+				self.async_catch = async_loop._catched
+				async_loop._catched = self.pns_shutdown
 				PNS_peer.__init__ (self, udp, tcp, root)
 			def pns_shutdown (self):
 				PNS_peer.pns_shutdown (self)
-				async_loop.async_catch = self.async_catch
+				async_loop._catched = self.async_catch
 				self.async_catch = None
 				return True
 	else:
@@ -240,8 +240,8 @@ if __name__ == '__main__':
 			def __init__ (self, udp, tcp, root):
                                 PNS_peer.__init__ (self, udp, tcp, root)
                                 sync_stdio.Sync_stdoe ().start ()
-                                self.async_loop_catch = async_loop.async_catch
-                                async_loop.async_catch = self.pns_shutdown
+                                self.async_loop_catch = async_loop._catched
+                                async_loop._catched = self.pns_shutdown
 			def pns_finalize (self):
 				PNS_peer.pns_finalize (self)
 				self.async_loop_catch ()

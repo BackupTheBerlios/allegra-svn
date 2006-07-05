@@ -44,22 +44,12 @@ import select, errno, time, collections, heapq
 from allegra import loginfo
 
 
-async_Exception = KeyboardInterrupt
+Exit = KeyboardInterrupt
 
 
-# Variables
+# Poll I/O
 
-concurrency = 512
-async_timeout = 0.1 # default to a much smaller interval (300) than asyncore
-
-async_map = {}
-async_scheduled = []
-async_finalized = collections.deque ()
-
-
-# Poll Functions, starting with I/O
-
-def async_io_select (map, timeout, limit):
+def _io_select (map, timeout, limit):
         r = []
         w = []
         concurrent = map.items ()
@@ -91,8 +81,8 @@ def async_io_select (map, timeout, limit):
 
                 try:
                         dispatcher.handle_read_event ()
-                except async_Exception:
-                        raise async_Exception
+                except Exit:
+                        raise
                         
                 except:
                         dispatcher.handle_error ()
@@ -105,14 +95,14 @@ def async_io_select (map, timeout, limit):
 
                 try:
                         dispatcher.handle_write_event ()
-                except async_Exception:
-                        raise async_Exception 
+                except Exit:
+                        raise 
                         
                 except:
                         dispatcher.handle_error ()
 
 
-def async_io_poll (map, timeout, limit):
+def _io_poll (map, timeout, limit):
         timeout = int (timeout*1000)
         pollster = select.poll ()
         R = select.POLLIN | select.POLLPRI
@@ -147,8 +137,8 @@ def async_io_poll (map, timeout, limit):
                                         dispatcher.handle_read_event ()
                                 if flags & W:
                                         dispatcher.handle_write_event ()
-                        except async_Exception:
-                                raise async_Exception 
+                        except Exit:
+                                raise 
                                 
                         except:
                                 dispatcher.handle_error()
@@ -157,18 +147,20 @@ def async_io_poll (map, timeout, limit):
 # Select the best I/O poll function available for this system
 
 if hasattr (select, 'poll'):
-	async_io = async_io_poll
+	_io = _io_poll
 else:
-	async_io = async_io_select
+	_io = _io_select
 
 
 # Poll Memory (Finalizations, ie: CPython Garbage Collection decoupled)
 
-def async_finalize ():
+_finalized = collections.deque ()
+
+def _finalize ():
 	"call all finalization queued"
         while True:
                 try:
-                        finalized = async_finalized.popleft ()
+                        finalized = _finalized.popleft ()
                 except IndexError:
                         break
                        
@@ -183,81 +175,85 @@ def async_finalize ():
 	
 # Poll Time (Scheduled Events)
 
-def async_clock ():
+_scheduled = []
+
+def _clock ():
 	"call all defered scheduled before now"
-	if not async_scheduled:
-		return
-		
 	now = time.time ()
-	while async_scheduled:
+	while _scheduled:
 		# get the next defered ...
-		defered = heapq.heappop (async_scheduled)
-		if defered[0] > now:
-			heapq.heappush (async_scheduled, defered)
+		event = heapq.heappop (_scheduled)
+		if event[0] > now:
+			heapq.heappush (_scheduled, event)
 			break  # ... nothing to defer now.
 
 		try:
 			# ... do defer and ...
-			defered = defered[1] (defered[0])
+			continued = event[1] (event[0])
 		except:
 			loginfo.loginfo_traceback ()
 		else:
-			if defered != None:
-				heapq.heappush (async_scheduled, defered) 
+			if continued != None:
+				heapq.heappush (_scheduled, continued) 
 				#
 				# ... maybe continue ...
 
 
 # Poll Signals (Exceptions Handler)
 
-async_catchers = []
+_catchers = []
 
-def async_catch ():
-        "call catchers on async_Exception (KeyboardInterrupt by default)"
+def _catched ():
+        "call catchers on Exit (KeyboardInterrupt by default)"
         assert None == loginfo.log ('async_catch', 'debug')
-        if not async_catchers:
-                if __debug__:
-                        for dispatcher in async_map:
-                                loginfo.log (
-                                        '%r' % dispatcher, 'undispatched'
-                                        )
-                        for scheduled in async_scheduled:
-                                loginfo.log (
-                                        '%r' % (scheduled, ), 'unscheduled'
-                                        )
-                        for finalized in async_finalized:
-                                loginfo.log (
-                                        '%r' % (finalized, ), 'unfinalized'
-                                        )
-                return False
+        if _catchers:
+                for catcher in tuple (_catchers):
+                        if catcher ():
+                                _catchers.remove (catcher)
+                return True
         
-        for catcher in tuple (async_catchers):
-                if catcher ():
-                        async_catchers.remove (catcher)
-        return len (async_catchers) > 0
+        if __debug__:
+                for dispatcher in _dispatched:
+                        loginfo.log (
+                                '%r' % dispatcher, 'undispatched'
+                                )
+                for event in _scheduled:
+                        loginfo.log (
+                                '%r' % (event, ), 'unscheduled'
+                                )
+                for finalized in _finalized:
+                        loginfo.log (
+                                '%r' % (finalized, ), 'unfinalized'
+                                )
+        return False
 
 
 # Application Programming Interfaces
 
 def schedule (when, defered):
         "schedule a call to defered for when"
-        heapq.heappush (async_scheduled, (when, defered))        
+        heapq.heappush (_scheduled, (when, defered))        
         
 
 def catch (catcher):
-        async_catchers.append (catcher)
+        _catchers.append (catcher)
 
+
+concurrency = 512
+precision = 0.1
+
+_dispatched = {}
 
 def dispatch ():
         "poll, clock and finalize while there is at least one event"
         assert None == loginfo.log ('async_dispatch_start', 'debug')
-        while async_map or async_scheduled or async_finalized:
+        while _dispatched or _scheduled or _finalized:
                 try:
-                        async_io (async_map, async_timeout, concurrency)
-                        async_clock ()
-                        async_finalize ()
-                except async_Exception:
-                        if not async_catch ():
+                        _io (_dispatched, precision, concurrency)
+                        _clock ()
+                        _finalize ()
+                except Exit:
+                        if not _catched ():
                                 break
                 
                 except:

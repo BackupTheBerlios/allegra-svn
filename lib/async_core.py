@@ -54,7 +54,7 @@ from allegra import loginfo, async_loop, finalization
 
 class Dispatcher (loginfo.Loginfo, finalization.Finalization):
         
-        async_map = async_loop.async_map
+        async_map = async_loop._dispatched
     
         connected = accepting = closing = False
 

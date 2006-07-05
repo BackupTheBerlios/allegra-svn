@@ -26,8 +26,8 @@ class Timeouts (object):
 	
 	def __init__ (self, timeout, period, precision=None):
 		self.timeouts_timeout = timeout
-		self.timeouts_period = max (period, async_loop.async_timeout)
-		self.timeouts_precision = precision or async_loop.async_timeout
+		self.timeouts_period = max (period, async_loop.precision)
+		self.timeouts_precision = precision or async_loop.precision
 		self.timeouts_deque = collections.deque ()
 		async_loop.schedule (
 			time.time () + self.timeouts_precision,

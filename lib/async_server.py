@@ -218,11 +218,12 @@ class Listen (async_core.Dispatcher):
         def server_shutdown (self):
                 "stop accepting connections, close all current when done"
                 assert None == self.log ('shutdown', 'debug')
-                self.accepting = False                       
-                for dispatcher in tuple (self.server_dispatchers):
-                        dispatcher.close_when_done ()
-                #if not self.server_dispatchers:
-                #        self.handle_close ()
+                if self.server_when == 0:
+                        self.handle_close ()
+                else:
+                        self.accepting = False
+                        for dispatcher in tuple (self.server_dispatchers):
+                                dispatcher.close_when_done ()
                 return True
                         
 

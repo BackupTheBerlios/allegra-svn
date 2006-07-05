@@ -27,7 +27,7 @@ class Finalization (object):
 
         finalization = None
         
-        async_finalized = async_loop.async_finalized
+        async_finalized = async_loop._finalized
 
         def __del__ (self):
                 if self.finalization != None:
@@ -74,7 +74,7 @@ def branch (branched, finalization):
 class Continuation (object):
 
         finalization = None
-        async_finalized = async_loop.async_finalized
+        async_finalized = async_loop._finalized
         
         def __call__ (self): pass
 

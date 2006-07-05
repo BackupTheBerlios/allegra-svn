@@ -24,6 +24,51 @@ from allegra import (
         async_chat, producer, async_server,
         mime_headers, mime_reactor, http_reactor
         )
+
+HTTP_RESPONSE = (
+        '<html><head><title>Error</title></head>'
+        '<body><h1>%d %s</h1><pre>%s</pre></body></html>'
+        )
+
+HTTP_RESPONSES = {
+        100: "Continue",
+        101: "Switching Protocols",
+        200: "OK",
+        201: "Created",
+        202: "Accepted",
+        203: "Non-Authoritative Information",
+        204: "No Content",
+        205: "Reset Content",
+        206: "Partial Content",
+        300: "Multiple Choices",
+        301: "Moved Permanently",
+        302: "Moved Temporarily",
+        303: "See Other",
+        304: "Not Modified",
+        305: "Use Proxy",
+        400: "Bad Request",
+        401: "Unauthorized",
+        402: "Payment Required",
+        403: "Forbidden",
+        404: "Not Found",
+        405: "Method Not Allowed",
+        406: "Not Acceptable",
+        407: "Proxy Authentication Required",
+        408: "Request Time-out",
+        409: "Conflict",
+        410: "Gone",
+        411: "Length Required",
+        412: "Precondition Failed",
+        413: "Request Entity Too Large",
+        414: "Request-URI Too Large",
+        415: "Unsupported Media Type",
+        500: "Internal Server Error",
+        501: "Not Implemented",
+        502: "Bad Gateway",
+        503: "Service Unavailable",
+        504: "Gateway Time-out",
+        505: "HTTP Version not supported"
+        }
         
 
 if os.name == 'nt':
@@ -202,11 +247,9 @@ class Dispatcher (
                         # request's method and that none has been assigned
                         # by a previous handler
                         reactor.mime_producer_body = producer.Simple_producer (
-                                self.HTTP_SERVER_RESPONSE % (
+                                HTTP_RESPONSE % (
                                         reactor.http_response,
-                                        self.HTTP_SERVER_RESPONSES[
-                                                reactor.http_response
-                                                ],
+                                        HTTP_RESPONSES[reactor.http_response],
                                         '\n'.join (
                                                 reactor.mime_collector_lines
                                                 )
@@ -239,10 +282,19 @@ class Dispatcher (
                 reactor.mime_producer_lines = mime_headers.lines (
                         reactor.mime_producer_headers
                         )
-                reactor.mime_producer_lines.insert (0, 'HTTP/%s %d %s\r\n' % (
-                        self.http_version, reactor.http_response,
-                        self.HTTP_SERVER_RESPONSES[reactor.http_response]
-                        ))
+                reactor.mime_producer_lines.insert (
+                        0, 
+                        'HTTP/%s %d %s\r\n' 
+                        'Date: %s\r\n' 
+                        'Server: Allegra\r\n' % (
+                                self.http_version, reactor.http_response,
+                                HTTP_RESPONSES[reactor.http_response],
+                                time.strftime (
+                                        '%a, %d %b %Y %H:%M:%S GMT', 
+                                        time.gmtime (time.time ())
+                                        )
+                                )
+                        )
                 if reactor.mime_collector_headers.get (
                         'connection'
                         ) != 'keep-alive':
@@ -253,56 +305,11 @@ class Dispatcher (
                 #self.handle_write ()
                 #
                 # ... finally, log the response's first line.
-                assert None == reactor.log (
-                        reactor.mime_producer_lines[0][:-2], 'response'
-                        )
+                #assert None == reactor.log (
+                #        reactor.mime_producer_lines[0][:-2], 'response'
+                #        )
                 return False
 
-        HTTP_SERVER_RESPONSE = (
-                '<html><head><title>Error</title></head>'
-                '<body><h1>%d %s</h1><pre>%s</pre></body></html>'
-                )
-
-        HTTP_SERVER_RESPONSES = {
-                100: "Continue",
-                101: "Switching Protocols",
-                200: "OK",
-                201: "Created",
-                202: "Accepted",
-                203: "Non-Authoritative Information",
-                204: "No Content",
-                205: "Reset Content",
-                206: "Partial Content",
-                300: "Multiple Choices",
-                301: "Moved Permanently",
-                302: "Moved Temporarily",
-                303: "See Other",
-                304: "Not Modified",
-                305: "Use Proxy",
-                400: "Bad Request",
-                401: "Unauthorized",
-                402: "Payment Required",
-                403: "Forbidden",
-                404: "Not Found",
-                405: "Method Not Allowed",
-                406: "Not Acceptable",
-                407: "Proxy Authentication Required",
-                408: "Request Time-out",
-                409: "Conflict",
-                410: "Gone",
-                411: "Length Required",
-                412: "Precondition Failed",
-                413: "Request Entity Too Large",
-                414: "Request-URI Too Large",
-                415: "Unsupported Media Type",
-                500: "Internal Server Error",
-                501: "Not Implemented",
-                502: "Bad Gateway",
-                503: "Service Unavailable",
-                504: "Gateway Time-out",
-                505: "HTTP Version not supported"
-                }
-            
         # Support for stalled producers is a requirement for programming
         # asynchronous peer. It is also a practical solution for simple 
         # asynchronous pipelining of threaded requests. For instance it
@@ -398,10 +405,6 @@ class File_cache (loginfo.Loginfo, finalization.Finalization):
         
         http_finalize = http_log
 
-
-#        
-
-from allegra import async_server
 
 class Listen (async_server.Listen):
         

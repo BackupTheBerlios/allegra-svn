@@ -157,16 +157,16 @@ class TCP_server (async_core.Dispatcher):
                 assert None == self.log ('stop', 'debug')
                 
         def tcp_server_catch (self):
-                async_loop.async_catch = self.async_catch
+                async_loop._catched = self.async_catch
                 self.async_catch = None
                 self.handle_close ()
                 return True
         
         def tcp_server_throw (self):
-                async_loop.async_catch = self.async_catch
+                async_loop._catched = self.async_catch
                 self.async_catch = None
                 self.handle_close ()
-                return async_loop.async_catch ()
+                return async_loop._catched ()
         
 
 class TCP_server_limit (TCP_server):

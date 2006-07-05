@@ -91,7 +91,7 @@ def async_select (
                         
                 try:
                         dispatcher.handle_read_event ()
-                except async_Exception:
+                except Exit:
                         raise
                         
                 except:
@@ -104,7 +104,7 @@ def async_select (
                         
                 try:
                         dispatcher.handle_write_event ()
-                except async_Exception:
+                except Exit:
                         raise
                         
                 except:
@@ -193,7 +193,7 @@ def async_poll (
                                 #        stalled[fd] = readable.pop (fd)
                                 #else:
                                 #        stalled[fd] = writable.pop (fd)
-                        except async_Exception:
+                        except Exit:
                                 raise
                                 
                         except:

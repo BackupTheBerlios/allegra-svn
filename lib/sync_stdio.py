@@ -35,8 +35,8 @@ class Sync_stdoe_file:
 class Sync_stdio (thread_loop.Thread_loop):
 
 	def __init__ (self):
-                self.async_loop_catch = async_loop.async_catch
-                async_loop.async_catch = self.async_prompt_catch
+                self.async_loop_catch = async_loop._catched
+                async_loop._catched = self.async_prompt_catch
 		stdout, stderr = (
 			Sync_stdoe_file (self.async_stdout),
 			Sync_stdoe_file (self.async_stderr)
@@ -60,7 +60,7 @@ class Sync_stdio (thread_loop.Thread_loop):
 		self.thread_loop_queue ((self.sync_stderr, (data,)))
 
 	def async_stdio_stop (self):
-                async_loop.async_catch = self.async_loop_catch
+                async_loop._catched = self.async_loop_catch
                 self.async_loop_catch = None
 		sys.__stdout__, sys.__stderr__ = (
 			self.sys_stdout, self.sys_stderr
