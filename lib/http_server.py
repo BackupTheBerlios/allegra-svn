@@ -192,7 +192,8 @@ class Dispatcher (
                         reactor.http_continuation (reactor)
                         self.http_reactor = None
                 # finalize the current request
-                reactor.http_handler.http_finalize (reactor)
+                if reactor.http_handler != None:
+                        reactor.http_handler.http_finalize (reactor)
                 # Complete the HTTP response producer
                 if reactor.mime_producer_body == None and (
                         reactor.http_request[0] in ('GET', 'POST')
