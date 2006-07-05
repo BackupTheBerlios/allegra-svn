@@ -261,8 +261,6 @@ DNS_requests = {
 
 class DNS_client (udp_peer.UDP_dispatcher):
 
-        udp_datagram_size = 512
-
         # Parameters
         #
         dns_failover = 2
@@ -301,7 +299,7 @@ class DNS_client (udp_peer.UDP_dispatcher):
         def handle_read (self):
                 # match the datagram's UID with the pending DNS requests
                 #
-                datagram, peer = self.recvfrom ()
+                datagram, peer = self.recvfrom (512)
                 uid = (ord (datagram[0]) << 8) + ord (datagram[1])
                 try:
                         dns_request = self.dns_pending.pop (uid)
