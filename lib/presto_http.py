@@ -21,7 +21,8 @@ import os, stat, glob, urllib
 
 from allegra import (
         netstring, loginfo, async_loop, finalization, 
-        collector, producer, mime_headers, http_server, presto
+        collector, producer, async_server,
+        mime_headers, http_server, presto
         )
 
 
@@ -369,29 +370,22 @@ if __name__ == '__main__':
                 'info'
                 )
         root, ip, port, host = http_server.cli (sys.argv)
-        if ip.startswith ('127.'):
-                server = http_server.HTTP_local ((ip, port))
-        elif ip.startswith ('192.168.') or ip.startswith ('10.') :
-                server = http_server.HTTP_private ((ip, port))
-        else:
-                server = http_server.HTTP_public ((ip, port))
-        server.http_hosts = dict ([
+        #
+        listen = http_server.Listen ((ip, port))
+        listen.http_hosts = dict ([
                 (h, PRESTo_http_root (p)) 
                 for h, p in http_server.http_hosts (root, host, port)
                 ])
+        if not ip.startswith ('127.'):
+                listen.server_resolved = (lambda addr: addr[0])
+                if ip.startswith ('192.168.') or ip.startswith ('10.') :
+                        async_server.accept_named (listen, 256)
+                else:
+                        async_server.accept_named (listen, 2)
+        async_loop.catch (listen.server_shutdown)
         if sync_stdio:
-                class Sync_stdoe (sync_stdio.Sync_stdoe):
-                        def async_prompt_catch (self):
-                                self.async_stdio_stop ()
-                                server.handle_close ()
-                                return True
-
-                Sync_stdoe ().start ()
-                #del server
-        else:
-                server.async_catch = async_loop.async_catch
-                async_loop.async_catch = server.tcp_server_catch
-                del server
+                sync_stdio.Sync_stdoe ().start ()
+        del listen
         assert None == loginfo.log (
                 'startup seconds="%f"' % (time.clock () - t), 'PRESTo/HTTP'
                 )

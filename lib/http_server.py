@@ -17,11 +17,11 @@
 
 ""
 
-import types, weakref, time, os, stat, glob, mimetypes, urllib, re
+import types, weakref, time, os, socket, stat, glob, mimetypes, urllib, re
 
 from allegra import (
         netstring, loginfo, async_loop, finalization, 
-        async_chat, producer, tcp_server,
+        async_chat, producer, async_server,
         mime_headers, mime_reactor, http_reactor
         )
         
@@ -32,7 +32,7 @@ else:
         allegra_time = time.time
 
 
-class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
+class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         
         mime_collector_body = None
         
@@ -48,7 +48,7 @@ class HTTP_server_reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
 #
 HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)[?]?([^#]+)?(#.+)?')
 
-class HTTP_server_channel (
+class Dispatcher (
         mime_reactor.MIME_collector, async_chat.Dispatcher
         ):
 
@@ -83,7 +83,7 @@ class HTTP_server_channel (
                 # instanciate a reactor that will hold all states for the 
                 # HTTP request and response.
                 #
-		reactor = HTTP_server_reactor ()
+		reactor = Reactor ()
                 assert None == reactor.log (
                         self.mime_collector_lines[0], 'request'
                         )
@@ -134,7 +134,7 @@ class HTTP_server_channel (
                 self.output_fifo.append (reactor)
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
-                if self.http_server.http_continue (reactor):
+                if self.async_server.http_continue (reactor):
                         if reactor.http_request[0] in ('POST', 'PUT'):
                                 return True
                         #
@@ -396,76 +396,37 @@ class File_cache (loginfo.Loginfo, finalization.Finalization):
                 return urllib.unquote (reactor.http_uri[2])
         
         http_finalize = http_log
+
+
+#        
+
+from allegra import async_server
+
+class Listen (async_server.Listen):
         
+        http_hosts = {}
+
+        def __init__ (
+                self, addr, precision=3, max=5, family=socket.AF_INET
+                ):
+                async_server.Listen.__init__ (
+                        self, Dispatcher, addr, precision, max, family 
+                        )
+                        
+        def __repr__ (self):
+                return 'http-listen'
+
+        def http_continue (self, reactor):
+                handler = self.http_hosts.get (
+                        reactor.mime_collector_headers.get ('host')
+                        )
+                if handler == None:
+                        reactor.http_response = 404 # Not Found
+                        return False
         
+                reactor.http_handler = handler
+                return handler.http_continue (reactor)
                 
-# The HTTP Server method and variants
-        
-def http_accept (server, channel):
-        channel.http_server = server
-        channel.log ('accepted ip="%s" port="%d"' % channel.addr, 'info')
-        
-def http_continue (server, reactor):
-        handler = server.http_hosts.get (
-                reactor.mime_collector_headers.get ('host')
-                )
-        if handler == None:
-                reactor.http_response = 404 # Not Found
-                return False
-
-        reactor.http_handler = handler
-        return handler.http_continue (reactor)
-
-def http_close (server, channel):
-        channel.http_server = None
-
-def http_stop (self):
-        "called once the server stopped, assert debug log and close"
-        self.http_hosts = None
-        self.log ('stop', 'info')
-        
-
-class HTTP_local (tcp_server.TCP_server):
-
-        def __repr__ (self):
-                return 'http-local-server id="%x"' % id (self)
-
-        TCP_SERVER_CHANNEL = HTTP_server_channel
-        tcp_server_clients_limit = 256
-        
-        tcp_server_accept = http_accept
-        tcp_server_close = http_close
-        http_continue = http_continue
-        tcp_server_stop = http_stop
-        
-
-class HTTP_private (tcp_server.TCP_server_limit):
-
-        def __repr__ (self):
-                return 'http-private-server id="%x"' % id (self)
-
-        TCP_SERVER_CHANNEL = HTTP_server_channel
-        tcp_server_clients_limit = 2
-        
-        tcp_server_accept = http_accept
-        tcp_server_close = http_close
-        http_continue = http_continue
-        tcp_server_stop = http_stop
-        
-
-class HTTP_public (tcp_server.TCP_server_throttle):
-
-        def __repr__ (self):
-                return 'http-public-server id="%x"' % id (self)
-
-        TCP_SERVER_CHANNEL = HTTP_server_channel
-        tcp_server_clients_limit = 1
-        
-        tcp_server_accept = http_accept
-        tcp_server_close = http_close
-        http_continue = http_continue
-        tcp_server_stop = http_stop
-
 
 def http_hosts (root, host, port):
         if port == 80:
@@ -535,30 +496,23 @@ if __name__ == '__main__':
                 'info'
                 )
         root, ip, port, host = cli (sys.argv)
-        if ip.startswith ('127.'):
-                server = HTTP_local ((ip, port))
-        elif ip.startswith ('192.168.') or ip.startswith ('10.') :
-                server = HTTP_private ((ip, port))
-        else:
-                server = HTTP_public ((ip, port))
-        server.http_hosts = dict ([
+        #
+        listen = Listen ((ip, port))
+        listen.http_hosts = dict ([
                 (h, File_cache (p)) 
                 for h, p in http_hosts (root, host, port)
                 if stat.S_ISDIR (os.stat (p)[0])
                 ])
+        if not ip.startswith ('127.'):
+                listen.server_resolved = (lambda addr: addr[0])
+                if ip.startswith ('192.168.') or ip.startswith ('10.') :
+                        async_server.accept_named (listen, 256)
+                else:
+                        async_server.accept_named (listen, 2)
+                async_server.inactive (listen, 3)
+        async_loop.catch (listen.server_shutdown)
         if sync_stdio:
-                class Sync_stdoe (sync_stdio.Sync_stdoe):
-                        def async_prompt_catch (self):
-                                self.async_stdio_stop ()
-                                server.handle_close ()
-                                return True
-
-                Sync_stdoe ().start ()
-        else:
-                server.async_catch = async_loop.async_catch
-                async_loop.async_catch = server.tcp_server_catch
-                del server
+                sync_stdio.Sync_stdoe ().start ()
+        del listen
         async_loop.dispatch ()
         assert None == finalization.collect ()
-        
-        

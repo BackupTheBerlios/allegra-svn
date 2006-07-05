@@ -238,7 +238,7 @@ def accept_all (server):
 
 def accept_named (listen, limit):
         def accepted (conn, addr, name):
-                if listen.server_named[name] < limit:
+                if listen.server_named[name] <= limit:
                         return True
                 
                 if listen.server_named[name] > 1:

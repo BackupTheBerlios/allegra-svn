@@ -22,7 +22,7 @@ import socket
 from allegra import netstring, async_net, async_server, pns_model
 
 
-def handle_statement (self, encoded):
+def pns_statement (self, encoded):
         if encoded.startswith ('0:,0:,0:,0:,'):
                 # user agent closing
                 self.log ('pns-user-close', 'info')
@@ -89,7 +89,7 @@ class Dispatcher (async_net.Dispatcher):
 	def __repr__ (self):
 		return 'session id="%x"' % id (self)
                 
-        async_net_continue = handle_statement
+        async_net_continue = pns_statement
 
 	def pns_error (self, encoded, error):
 		encoded = '%s%d:.%s,' % (encoded, len (error)+1, error)
@@ -159,21 +159,3 @@ class Listen (async_server.Listen):
                         self.pns_peer.pns_unsubscribe (self, name)
                 dispatcher.pns_peer = None
                 async_server.Listen.server_close (self, dispatcher)
-                
-#        def pns_command (self, model):
-#                self.pns_peer.pns_inference.pns_command (model)
-#        
-#        def pns_subscribe (self, subscriber, context):
-#                self.pns_peer.pns_subscribe (subscriber, context)
-#        
-#        def pns_unsubscribe (self, subscriber, context):
-#                self.pns_peer.pns_unsubscribe (subscriber, context)
-#        
-#        def pns_open (self, model):
-#                self.pns_peer.pns_resolution.pns_tcp_anonymous (model)
-#
-#        def pns_contextual (self, model):
-#                self.pns_peer.pns_resolution.pns_tcp_statement (model)
-#        
-#        def pns_inference (self, model):
-#                self.pns_peer.pns_inference.pns_statement (model)
