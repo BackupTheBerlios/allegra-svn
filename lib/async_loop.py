@@ -50,6 +50,7 @@ Exit = KeyboardInterrupt
 # Poll I/O
 
 def _io_select (map, timeout, limit):
+        "poll for I/O a limited number of writable/readable dispatchers"
         r = []
         w = []
         concurrent = map.items ()
@@ -103,6 +104,7 @@ def _io_select (map, timeout, limit):
 
 
 def _io_poll (map, timeout, limit):
+        "poll for I/O a limited number of writable/readable dispatchers"
         timeout = int (timeout*1000)
         pollster = select.poll ()
         R = select.POLLIN | select.POLLPRI
@@ -144,7 +146,7 @@ def _io_poll (map, timeout, limit):
                                 dispatcher.handle_error()
 
 
-# Select the best I/O poll function available for this system
+# select the best I/O poll function available for this system
 
 if hasattr (select, 'poll'):
 	_io = _io_poll
@@ -152,12 +154,12 @@ else:
 	_io = _io_select
 
 
-# Poll Memory (Finalizations, ie: CPython Garbage Collection decoupled)
+# Poll Memory (Finalizations, ie: CPython __del__ decoupled)
 
 _finalized = collections.deque ()
 
 def _finalize ():
-	"call all finalization queued"
+	"call all finalizations queued"
         while True:
                 try:
                         finalized = _finalized.popleft ()
@@ -178,7 +180,7 @@ def _finalize ():
 _scheduled = []
 
 def _clock ():
-	"call all defered scheduled before now"
+	"call all events scheduled before now"
 	now = time.time ()
 	while _scheduled:
 		# get the next defered ...
@@ -204,7 +206,7 @@ def _clock ():
 _catchers = []
 
 def _catched ():
-        "call catchers on Exit (KeyboardInterrupt by default)"
+        "call catchers on Exit exception"
         assert None == loginfo.log ('async_catch', 'debug')
         if _catchers:
                 for catcher in tuple (_catchers):
@@ -230,12 +232,13 @@ def _catched ():
 
 # Application Programming Interfaces
 
-def schedule (when, defered):
-        "schedule a call to defered for when"
-        heapq.heappush (_scheduled, (when, defered))        
+def schedule (when, scheduled):
+        "schedule a call to scheduled after when"
+        heapq.heappush (_scheduled, (when, scheduled))        
         
 
 def catch (catcher):
+        "register an catcher for the Exit exception"
         _catchers.append (catcher)
 
 
@@ -245,7 +248,7 @@ precision = 0.1
 _dispatched = {}
 
 def dispatch ():
-        "poll, clock and finalize while there is at least one event"
+        "dispatch I/O, time and finalization events"
         assert None == loginfo.log ('async_dispatch_start', 'debug')
         while _dispatched or _scheduled or _finalized:
                 try:
