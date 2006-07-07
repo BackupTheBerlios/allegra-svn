@@ -46,144 +46,114 @@ from allegra import (
         )
 
 
+class Trigger (async_core.Dispatcher):
+
+        "Thunk back safely from threads into the asynchronous loop"
+        
+        def __repr__ (self):
+                return 'trigger id="%x"' % id (self)
+
+        def readable (self):
+                "a Trigger is allways readable"
+                return True
+
+        def writable (self):
+                "a Trigger is never writable"
+                return False
+
+        def handle_connect (self):
+                "pass on connect"
+                pass
+
+        def handle_read (self):
+                "try to call all thunked, log all exceptions' traceback"
+                try:
+                        self.recv (8192)
+                except socket.error:
+                        return
+                
+                self.lock.acquire ()
+                try:
+                        thunks = self.thunks
+                        self.thunks = []
+                finally:
+                        self.lock.release ()
+                for thunk in thunks:
+                        try:
+                                thunk[0] (*thunk[1])
+                        except:
+                                self.loginfo_traceback ()
+                        
+
 if os.name == 'posix':
 
-	class Trigger (async_core.Dispatcher):
+        def posix_trigger_init (self):
+                "use a POSIX pipe to connect a pair of file descriptors"
+                self.select_triggers = 0
+                fd, self.trigger = os.pipe ()
+                self.set_file (fd)
+                self.lock = thread.allocate_lock ()
+                self.thunks = []
+                assert None == self.log ('open', 'debug')
 
-		"Thunk back safely from threads into the asynchronous loop"
-		
-		def __init__ (self):
-			self.select_triggers = 0
-			fd, self.trigger = os.pipe ()
-                        self.set_file (fd)
-			self.lock = thread.allocate_lock ()
-			self.thunks = []
-			assert None == self.log ('open', 'debug')
+        def posix_trigger_pull (self, thunk):
+                "acquire the trigger's lock, thunk and pull"
+                self.lock.acquire ()
+                try:
+                        self.thunks.append (thunk)
+                finally:
+                        self.lock.release ()
+                os.write (self.trigger, 'x')
+        
+        def poxis_trigger_close (self):
+                "close the trigger"
+                async_core.Dispatcher.close (self)
+                os.close (self.trigger)
 
-		def __repr__ (self):
-			return 'trigger id="%x"' % id (self)
-
-		def __call__ (self, thunk):
-                        "acquire the trigger's lock, thunk and pull"
-                        self.lock.acquire ()
-			try:
-				self.thunks.append (thunk)
-			finally:
-				self.lock.release ()
-                        os.write (self.trigger, 'x')
-
-		def readable (self):
-			return True
-
-		def writable (self):
-			return False
-
-		def handle_connect (self):
-			pass
-
-		def handle_read (self):
-                        try:
-			        self.recv (8192)
-                        except socket.error:
-                                return
-                        
-                        self.lock.acquire ()
-			try:
-				thunks = self.thunks
-				self.thunks = []
-			finally:
-				self.lock.release ()
-			for thunk in thunks:
-				try:
-					thunk[0] (*thunk[1])
-				except:
-					self.loginfo_traceback ()
-				
-                def close (self):
-                        self.del_channel ()
-                        self.socket.close ()
-                        os.close (self.trigger)
-                        self.connected = False
-                        self.closing = True
- 
+        Trigger.__init__ = posix_trigger_init
+        Trigger.__call__ = posix_trigger_pull
+        Trigger.close = posix_trigger_close
                                 
 elif os.name == 'nt':
 
-	# win32-safe version
+        def win32_trigger_init (self):
+                "get a pair of Win32 connected sockets"
+                self.select_triggers = 0
+                a = socket.socket (socket.AF_INET, socket.SOCK_STREAM)
+                w = socket.socket (socket.AF_INET, socket.SOCK_STREAM)
+                a.bind (('127.9.9.9', 19999))
+                a.listen (1)
+                w.setblocking (0)
+                try:
+                        w.connect (('127.9.9.9', 19999))
+                except:
+                        pass
+                conn, addr = a.accept ()
+                a.close ()
+                w.setblocking (1)
+                self.trigger = w
+                self.set_connection (conn, addr)
+                self.lock = thread.allocate_lock ()
+                self.thunks = []
+                assert None == self.log ('open', 'debug')
 
-	class Trigger (async_core.Dispatcher):
-                
-                "Thunk back safely from threads into the asynchronous loop"
+        def win32_trigger_pull (self, thunk):
+                "acquire the trigger's lock, thunk and pull"
+                self.lock.acquire ()
+                try:
+                        self.thunks.append (thunk)
+                finally:
+                        self.lock.release ()
+                self.trigger.send ('x')
 
-		def __init__ (self):
-			self.select_triggers = 0
-                        #
-                        # tricky: get a pair of connected sockets
-                        #
-			a = socket.socket (socket.AF_INET, socket.SOCK_STREAM)
-			w = socket.socket (socket.AF_INET, socket.SOCK_STREAM)
-			a.bind (('127.9.9.9', 19999))
-			a.listen (1)
-			w.setblocking (0)
-			try:
-				w.connect (('127.9.9.9', 19999))
-			except:
-				pass
-			conn, addr = a.accept ()
-			a.close ()
-			w.setblocking (1)
-			self.trigger = w
-                        #
-                        self.set_connection (conn, addr)
-			self.lock = thread.allocate_lock ()
-			self.thunks = []
-			assert None == self.log ('open', 'debug')
+        def win32_trigger_close (self):
+                "close the trigger"
+                async_core.Dispatcher.close (self)
+                self.trigger.close ()
 
-		def __repr__ (self):
-			return 'trigger id="%x"' % id (self)
-
-		def __call__ (self, thunk):
-                        "acquire the trigger's lock, thunk and pull"
-                        self.lock.acquire ()
-			try:
-				self.thunks.append (thunk)
-			finally:
-				self.lock.release ()
-                        self.trigger.send ('x')
-
-		def readable (self):
-			return True
-
-		def writable (self):
-			return False
-
-		def handle_connect (self):
-			pass
-
-		def handle_read (self):
-                        try:
-                                self.recv (8192)
-                        except socket.error:
-                                return
-                        
-                        self.lock.acquire ()
-			try:
-				thunks = self.thunks
-				self.thunks = []
-			finally:
-				self.lock.release ()
-			for thunk in thunks:
-				try:
-					thunk[0] (*thunk[1])
-				except:
-					self.loginfo_traceback ()
-
-                def close (self):
-                        self.del_channel ()
-                        self.socket.close ()
-                        self.trigger.close ()
-                        self.connected = False
-                        self.closing = True
+        Trigger.__init__ = win32_trigger_init
+        Trigger.__call__ = win32_trigger_pull
+        Trigger.close = win32_trigger_close
 
 else:
 	raise ImportError ('OS "%s" not supported, sorry :-(' % os.name)
