@@ -3,12 +3,11 @@
 
 import collections
 
-from allegra.async_loop import dispatch
-from allegra.async_net import Dispatcher
-from allegra.tcp_client import TCP_client_channel
+from allegra import (
+    async_loop, async_net, collector, async_client
+    )
 
-
-class QMTP_client_channel (Dispatcher, TCP_client_channel):
+class QMTP (async_net.Dispatcher):
             
     ac_in_buffer_size = 1024
     ac_out_buffer_size = 1<<14
@@ -24,8 +23,8 @@ class QMTP_client_channel (Dispatcher, TCP_client_channel):
         else:
             loginfo.log (string, 'protocol error')
 
-qmtp = QMTP_client_channel ()
-if qmtp.tcp_connect (('127.0.0.1', 209)):
+qmtp = QMTP ()
+if async_client.connect (qmt, ('127.0.0.1', 209), 3):
     push = qmtp.output_fifo.append
     push ((
         'Subject: Hello\n\nHello who?', 
@@ -38,9 +37,8 @@ if qmtp.tcp_connect (('127.0.0.1', 209)):
         netstring.encode (('to@you', 'cc@somebody'))
         ))
     dispatch ()
-
     
-class PIRP_client_channel (Dispatcher, TCP_client_channel):
+class PIRP (async_net.Dispatcher):
             
     ac_in_buffer_size = 1<<14
     ac_out_buffer_size = 2048
@@ -62,10 +60,9 @@ class PIRP_client_channel (Dispatcher, TCP_client_channel):
             c.collect_incoming_data (data)
 
 
-pirp = PIRP_client_channel ()
-if pirp.tcp_connect (('127.0.0.1', 553)):
-    from allegra.collector import Loginfo_collector
-    collect = Loginfo_collector ()
+pirp = PIRP ()
+if async_client.connect (pirp, ('127.0.0.1', 553), 3):
+    collect = collector.LOGINFO
     pirp.pirp_resolve (('index', 'html', ''), collect)
     pirp.pirp_resolve (('rss20', 'xml', ''), collect)
     dispatch ()
