@@ -196,7 +196,7 @@ if __name__ == '__main__':
         http = http_client.HTTP_client ()
         if len (sys.argv) > 2:
                 from allegra import netstring, pns_model, pns_client
-                pns = pns_client.PNS_client ()
+                pns = pns_client.Cache ()
                 channel = pns ((sys.argv[2], int (sys.argv[3])))
                 def pns_statement (model):
                         model, error = pns_model.pns_triple (model)

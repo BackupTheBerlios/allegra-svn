@@ -20,13 +20,13 @@
 import re
 
 from allegra import (
-	loginfo, finalization, async_chat, producer, collector, 
-        async_client, #tcp_client, 
+	loginfo, finalization, 
+        async_chat, producer, collector, async_client, 
         dns_client, mime_headers, mime_reactor, http_reactor
         )
 
 
-class HTTP_client_reactor (
+class Reactor (
         mime_reactor.MIME_producer, finalization.Finalization
         ):
                 
@@ -50,11 +50,10 @@ class HTTP_client_reactor (
 
 # HTTP_RESPONSE_RE = re.compile ('.+?/([0-9.]+) ([0-9]{3}) (.*)')
 
-class HTTP_client_pipeline (
+class Dispatcher (
         mime_reactor.MIME_collector,
-        # tcp_client.TCP_client_channel, tcp_client.Pipeline, 
 	async_chat.Dispatcher, 
-        async_client.Dispatcher, async_client.Pipeline
+        async_client.Pipeline
 	):
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
@@ -67,7 +66,6 @@ class HTTP_client_pipeline (
         def __init__ (self):
                 async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n\r\n')
-                # tcp_client.Pipeline.__init__ (self)
                 self.pipeline_set ()
                 
         def __repr__ (self):
@@ -267,44 +265,37 @@ class HTTP_client_pipeline (
                 # ready to send.
                 
 
-class Cache (async_client.Cache): #dns_client.TCP_client_DNS):
+class Cache (async_client.Cache):
 
-	#TCP_CLIENT_CHANNEL = HTTP_client_pipeline
-        
 	def __call__ (self, host, port=80, version='1.1'):
-		#channel = self.tcp_client ((host, port))
-                #if channel == None:
-                #        return
-                channel = async_client.Cache.__call__ (
-                        HTTP_client_pipeline, (host, port)
+                dispatcher = async_client.Cache.__call__ (
+                        Dispatcher, (host, port)
                         )
-                if channel.closing:
+                if dispatcher.closing:
                         return
 
                 if port == 80:
-                        channel.http_host = host
+                        dispatcher.http_host = host
                 else:
-                        channel.http_host = '%s:%d' % (host, port)
-                channel.http_version = version
-                return channel
+                        dispatcher.http_host = '%s:%d' % (host, port)
+                dispatcher.http_version = version
+                return dispatcher
 
-        #def tcp_client_close (self, channel):
-        def client_close (self, channel):
-                assert None == channel.log (
+        def client_close (self, dispatcher):
+                assert None == dispatcher.log (
                         'pipelined '
                         ' requests="%d" responses="%d"'
                         ' pending="%d" failed="%d"' % (
-                                channel.http_requests, 
-                                channel.http_responses,
-                                len (channel.pipeline_requests),
-                                len (channel.pipeline_responses)
+                                dispatcher.http_requests, 
+                                dispatcher.http_responses,
+                                len (dispatcher.pipeline_requests),
+                                len (dispatcher.pipeline_responses)
                                 ), 'debug'
                         )
-                #dns_client.TCP_client_DNS.tcp_client_close (self, channel)
-                async_client.Cache.client_close (self, channel)
+                async_client.Cache.client_close (self, dispatcher)
 
 
-def HTTP_client (timeout, precision, resolver=None):
+def Cache (timeout, precision, resolver=None):
         client = Cache (timeout, precision)
         dns_client.client_resolution (client, resolver)
         return client
@@ -313,9 +304,7 @@ def HTTP_client (timeout, precision, resolver=None):
 def GET (pipeline, url, headers=None):
         if headers == None:
                 headers = {'Host': pipeline.http_host}
-        return HTTP_client_reactor (
-                pipeline, url, headers, 'GET', None
-                )
+        return Reactor (pipeline, url, headers, 'GET', None)
                 
 def POST (pipeline, url, body, headers=None):
         if headers == None:
@@ -323,9 +312,7 @@ def POST (pipeline, url, body, headers=None):
                         'Host': pipeline.http_host, 
                         'Content-Type': 'application/x-www-form-urlencoded'
                         }
-        return HTTP_client_reactor (
-                pipeline, url, headers, 'POST', body
-                )
+        return Reactor (pipeline, url, headers, 'POST', body)
                 
 
 # RE_URL = re.compile ('http://([^/:]+)[:]?([0-9]+)?(/.+)')

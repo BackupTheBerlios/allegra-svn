@@ -256,7 +256,7 @@ class PNS_TCP (presto.PRESTo_async):
         
         xml_name = u'http://pns/ tcp'
         
-        PNS_CLIENT = pns_client.PNS_client ()
+        PNS_CLIENT = pns_client.Cache ()
 
         pns_client = None
 

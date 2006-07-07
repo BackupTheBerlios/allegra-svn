@@ -17,15 +17,12 @@
 
 ""
 
-from allegra import netstring, loginfo, async_net, async_client #tcp_client
+from allegra import netstring, loginfo, async_net, async_client
 
 
-class PNS_client_channel (
-        async_net.Dispatcher, async_client.Dispatcher 
-        #tcp_client.TCP_client_channel
-        ):
+class Dispatcher (async_net.Dispatcher):
         
-        # a PNS client to implement multiplexing user agents like a resolver.
+        "a multiplexed PNS/TCP client resolver"
         
         def __init__ (self):
                 self.pns_commands = {}
@@ -238,52 +235,39 @@ def pns_peer (resolved, model):
         return False
 
 
-class PNS_client (async_client.Cache): #tcp_client.TCP_client):
+class Cache (async_client.Cache):
         
         "a PNS/TCP client channel manager"
         
-        #TCP_CLIENT_CHANNEL = PNS_client_channel
-
         def __call__ (self, addr, handler=pns_peer):
-                #channel = tcp_client.TCP_client.tcp_client (self, addr)
-                channel = async_client.Cache.__call__ (
-                        self, PNS_client_channel, addr
+                dispatcher = async_client.Cache.__call__ (
+                        self, Dispatcher, addr
                         )
-                #if channel:
-                if channel.closing:
+                if dispatcher.closing:
                         return 
 
                 try:
-                        channel.pns_commands[(
+                        dispatcher.pns_commands[(
                                 '', '', ''
                                 )].append (handler)
                 except KeyError:
-                         channel.pns_commands[(
+                         dispatcher.pns_commands[(
                                  '', '', ''
                                  )] = [handler]
-                return channel
+                return dispatcher
 
-        #def tcp_client_inactive (self, channel, when):
-        #        "close inactive channels without subscriptions"
-        #        if not channel.pns_subscribed:
-        #                tcp_client.TCP_client.tcp_client_inactive (
-        #                        self, channel, when
-        #                        )
-        
         def client_overflow (self, dispatcher):
                 "close inactive channels without subscriptions"
                 if not dispatcher.pns_subscribed:
                         dispatcher.handle_close ()
                 
 
-class PNS_pipe (PNS_client_channel):
+class Pipe (Dispatcher):
         
         def __init__ (self, addr, pipe, timeout=3):
-                self.pns_start = time.time ()
                 self.pns_pipe = pipe
-                PNS_client_channel.__init__ (self)
-                #self.tcp_connect (addr)
-                self.client_connect (addr, timeout)
+                Dispatcher.__init__ (self)
+                async_client.connect (self, addr, timeout)
                 self.pns_commands[('', '', '')] = [self.pns_peer]
                 
         def pns_peer (self, resolved, model):
@@ -298,7 +282,7 @@ class PNS_pipe (PNS_client_channel):
                         'close'
                         ' sent="%d" received="%d" seconds="%f"' % (
                                 self.pns_sent, self.pns_received,
-                                time.time () - self.pns_start
+                                time.time () - self.client_when
                                 ), 'debug'
                         )
                 return False
@@ -366,9 +350,7 @@ if __name__ == '__main__':
                         addr = (sys.argv[1], 3534)
         else:
                 addr = ('127.0.0.1', 3534)
-        PNS_pipe (addr, netstring.netpipe (
-                lambda: sys.stdin.read (4096)
-                ))
+        Pipe (addr, netstring.netpipe (lambda: sys.stdin.read (4096)))
         async_loop.loop ()
         assert None == finalization.collect ()
         #

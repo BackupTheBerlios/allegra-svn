@@ -21,42 +21,36 @@ import time, socket, collections
 
 from allegra import loginfo, async_loop, async_limits
         
-
-class Dispatcher (object):
         
-        "client mix-in for SOCK_STREAM dispatcher"
-        
-        client_when = 0
-
-        def client_connect (self, addr, timeout, family=socket.AF_INET):
-                "create a socket, try to connect it and schedule a timeout"
-                assert not self.connected and self.socket == None
-                try:
-                        self.create_socket (family, socket.SOCK_STREAM)
-                        self.connect (addr)
-                except:
-                        self.loginfo_traceback ()
-                        return False
-                        
-                assert None == self.log ('connect', 'debug')
-                self.client_when = time.time ()
-                async_loop.schedule (
-                        self.client_when + timeout, self.client_timeout
-                        )
-                return True
-
-        def client_timeout (self, when):
+def connect (dispatcher, addr, timeout, family=socket.AF_INET):
+        "create a socket, try to connect it and schedule a timeout"
+        assert not dispatcher.connected and dispatcher.socket == None
+        dispatcher.client_when = time.time ()
+        try:
+                dispatcher.create_socket (family, socket.SOCK_STREAM)
+                dispatcher.connect (addr)
+        except:
+                dispatcher.loginfo_traceback ()
+                return False
+                
+        assert None == dispatcher.log ('connect', 'debug')
+        def connect_timeout (when):
                 "if not connected and not closing yet, handle close"
-                if not self.connected and not self.closing:
-                        assert None == self.log (
+                if not dispatcher.connected and not dispatcher.closing:
+                        assert None == dispatcher.log (
                                 'connect-timeout %f seconds' % (
-                                        when - self.client_when
+                                        when - dispatcher.client_when
                                         ), 'debug'
                                 )
-                        self.handle_close ()
+                        dispatcher.handle_close ()
+
+        async_loop.schedule (
+                dispatcher.client_when + timeout, connect_timeout
+                )
+        return True
 
 
-class Manager (loginfo.Loginfo):
+class Connections (loginfo.Loginfo):
         
         "a connection manager for async_client.Dispatcher instances"
 
@@ -88,9 +82,9 @@ class Manager (loginfo.Loginfo):
         def client_connect (self, dispatcher, name):
                 "resolve and/or connect a dispatcher"
                 if self.client_resolved (name):
-                        if not dispatcher.client_connect (
-                                name, self.client_timeout,
-                                self.client_family
+                        if not connect (
+                                dispatcher, name, 
+                                self.client_timeout, self.client_family
                                 ):
                                 dispatcher.handle_close ()
                         return
@@ -99,9 +93,9 @@ class Manager (loginfo.Loginfo):
                 def resolve (addr):
                         if addr == None:
                                 self.client_unresolved (dispatcher, name)
-                        elif not dispatcher.client_connect (
-                                addr, self.client_timeout,
-                                self.client_family
+                        elif not connect (
+                                dispatcher, addr, 
+                                self.client_timeout, self.client_family
                                 ):
                                 dispatcher.handle_close ()
                 self.client_resolve (name, resolve)
@@ -181,7 +175,7 @@ class Manager (loginfo.Loginfo):
                         dispatcher.close_when_done ()
                         
 
-class Cache (Manager):
+class Cache (Connections):
 
         "a cache of managed connections"
 
@@ -217,7 +211,7 @@ class Cache (Manager):
                 return dispatcher
 
 
-class Pool (Manager):
+class Pool (Connections):
         
         "a pool of managed connections"
         
@@ -269,10 +263,10 @@ class Pool (Manager):
                 dispatcher.async_client = None
 
 
-def resolved (manager):
+def resolved (connections):
         "allways resolved for unresolved dispatcher address"
-        manager.client_resolved = (lambda name: True)
-        manager.client_resolve = None
+        connections.client_resolved = (lambda name: True)
+        connections.client_resolve = None
 
 
 def unmeter (dispatcher):
@@ -294,18 +288,18 @@ def meter (dispatcher, when):
                 
         dispatcher.handle_close = handle_close
 
-def inactive (manager, timeout):
+def inactive (connections, timeout):
         "meter I/O and limit inactivity for client streams"
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
-                dispatcher.limit_inactive = manager.client_inactive
+                dispatcher.limit_inactive = connections.client_inactive
                 
-        manager.client_decorate = decorate
-        manager.client_inactive = timeout
-        manager.client_limit = async_limits.inactive
+        connections.client_decorate = decorate
+        connections.client_inactive = timeout
+        connections.client_limit = async_limits.inactive
 
 
-def limited (manager, timeout, inBps, outBps):
+def limited (connections, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for managed client streams"
         def unthrottle (dispatcher):
                 "remove limit decorators from a client dispatcher"
@@ -323,10 +317,10 @@ def limited (manager, timeout, inBps, outBps):
                 async_limits.meter_send (dispatcher, when)
                 dispatcher.limit_inactive = timeout
                 async_limits.throttle_readable (
-                        dispatcher, when, manager.ac_in_throttle_Bps
+                        dispatcher, when, connections.ac_in_throttle_Bps
                         )
                 async_limits.throttle_writable (
-                        dispatcher, when, manager.ac_out_throttle_Bps
+                        dispatcher, when, connections.ac_out_throttle_Bps
                         )
                 def handle_close ():
                         assert None == dispatcher.log (
@@ -341,27 +335,27 @@ def limited (manager, timeout, inBps, outBps):
                         
                 dispatcher.handle_close = handle_close
 
-        manager.client_decorate = throttle
-        manager.ac_in_throttle_Bps = inBps
-        manager.ac_out_throttle_Bps = outBps
-        manager.client_limit = async_limits.limit
+        connections.client_decorate = throttle
+        connections.ac_in_throttle_Bps = inBps
+        connections.ac_out_throttle_Bps = outBps
+        connections.client_limit = async_limits.limit
 
 
-def rationed (manager, timeout, inBps, outBps):
+def rationed (connections, timeout, inBps, outBps):
         "ration I/O and limit inactivity for managed client streams"
-        manager.ac_in_ration_Bps = inBps
-        manager.ac_out_ration_Bps = outBps
+        connections.ac_in_ration_Bps = inBps
+        connections.ac_out_ration_Bps = outBps
         def throttle_in ():
-                return int (manager.ac_in_ration_Bps / max (len (
-                        manager.client_managed
+                return int (connections.ac_in_ration_Bps / max (len (
+                        connections.client_managed
                         ), 1))
 
         def throttle_out ():
-                return int (manager.ac_out_ration_Bps / max (len (
-                        manager.client_managed
+                return int (connections.ac_out_ration_Bps / max (len (
+                        connections.client_managed
                         ), 1))
 
-        limited (manager, timeout, throttle_in, throttle_out)
+        limited (connections, timeout, throttle_in, throttle_out)
 
 
 class Pipeline (object):

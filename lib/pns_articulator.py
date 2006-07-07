@@ -32,7 +32,7 @@ class PNS_articulator (finalization.Finalization):
         
         "a keep-alive caching PNS articulator"
         
-        PNS_CLIENT = pns_client.PNS_client ()
+        PNS_CLIENT = pns_client.Cache ()
 
         def __init__ (
                 self, addr=('127.0.0.1', 3534), commands=None, contexts=None
