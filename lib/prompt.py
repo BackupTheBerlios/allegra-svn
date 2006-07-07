@@ -85,10 +85,6 @@ def python_prompt (line, env):
                 return (method, result)
         
 
-__doc__ = "http://laurentszyster.be/blog/prompt/"
-
-__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
-        
 # Synopsis
 #
 # >>> from allegra import prompt
