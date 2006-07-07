@@ -102,7 +102,6 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def connect (self, address):
                 "try to connect and set the dispatcher's connected state"
-                self.connected = True
                 err = self.socket.connect_ex (address)
                 if err in (EINPROGRESS, EALREADY, EWOULDBLOCK):
                         return
