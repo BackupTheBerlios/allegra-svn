@@ -225,7 +225,7 @@ def _catched ():
                 return True
         
         if __debug__:
-                for dispatcher in _dispatched:
+                for dispatcher in _dispatched.values ():
                         loginfo.log (
                                 '%r' % dispatcher, 'undispatched'
                                 )
