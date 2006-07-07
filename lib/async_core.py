@@ -55,24 +55,7 @@ from allegra import loginfo, async_loop, finalization
 class Dispatcher (loginfo.Loginfo, finalization.Finalization):
         
         connected = accepting = closing = False
-
-        addr = None
-
-        def __init__ (self, sock=None):
-                if sock:
-                        self.set_socket (sock)
-                        # I think it should inherit this anyway
-                        self.socket.setblocking (0)
-                        self.connected = True
-                        # Does the constructor require that the socket
-                        # passed be connected?
-                        try:
-                                self.addr = sock.getpeername ()
-                        except socket.error:
-                                # The addr isn't crucial
-                                pass
-                else:
-                        self.socket = None
+        socket = addr = family_and_type = _fileno = None
 
         def create_socket (self, family, type):
                 "create a socket and add the dispatcher to the I/O map"
@@ -80,13 +63,16 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                 self.socket = socket.socket (family, type)
                 self.socket.setblocking (0)
                 self._fileno = self.socket.fileno ()
-                self.add_channel () # async_loop.add_dispatcher (self)
+                self.add_channel ()
 
-        def set_socket (self, sock):
-                "set the dispatcher's socket and add itself to the I/O map"
-                self.socket = sock
-                self._fileno = sock.fileno()
-                self.add_channel () # async_loop.add_dispatcher (self)
+        def set_connection (self, conn, addr):
+                "set a connected socket and add the dispatcher to the I/O map"
+                conn.setblocking (0)
+                self.socket = conn
+                self.addr = addr
+                self._fileno = conn.fileno ()
+                self.add_channel ()
+                self.connected = True
 
         def set_reuse_addr (self):
                 "try to re-use a server port if possible"
@@ -321,7 +307,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 if os.name == 'posix':
         import fcntl
 
-        class Async_file_wrapper (object):
+        class File_wrapper (object):
 
                 "wrap a file with enough of a socket like interface"
 
@@ -343,24 +329,16 @@ if os.name == 'posix':
                 def fileno (self):
                         return self.fd
                         
+        def set_file (self, fd):
+                "set a file descriptor and add the dispatcher (POSIX only)"
+                flags = fcntl.fcntl (fd, fcntl.F_GETFL, 0) | os.O_NONBLOCK
+                fcntl.fcntl (fd, fcntl.F_SETFL, flags)
+                self._fileno = fd
+                self.socket = File_wrapper (fd)
+                self.add_channel ()
+                self.connected = True
 
-        class Async_file (Dispatcher):
-                
-                "dispatcher for non-blocking UNIX file descriptors"
-                
-                def __init__ (self, fd):
-                        Async_dispatcher.__init__ (self)
-                        self.connected = 1
-                        # set it to non-blocking mode
-                        flags = fcntl.fcntl (fd, fcntl.F_GETFL, 0)
-                        flags |= os.O_NONBLOCK
-                        fcntl.fcntl (fd, fcntl.F_SETFL, flags)
-                        self.set_file (fd)
-        
-                def set_file (self, fd):
-                        self._fileno = fd
-                        self.socket = Async_file_wrapper (fd)
-                        self.add_channel ()
+        Dispatcher.set_file = set_file
 
 
 # Note about this implementation
@@ -371,6 +349,8 @@ if os.name == 'posix':
 # integrates a non-blocking I/O loop, a heapq scheduler loop and a loop
 # through a deque of finalizations.
 #
-# The two significant changes from the Standard Library version of asyncore
-# are a more powerfull netstring/outlines logging facility and
+# I also :
 #
+# 1. added set_connection (conn, addr), moving that logic out of __init__
+# 2. refactored the File_dispatcher as a set_file (fd) method
+# 3. removed the now redundant set_socket (sock) method.

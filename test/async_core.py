@@ -5,7 +5,6 @@ import string
 class http_client (async_core.Dispatcher):
         
     def __init__ (self, host, path):
-        async_core.Dispatcher.__init__ (self)
         self.path = path
         self.create_socket (socket.AF_INET, socket.SOCK_STREAM)
         self.connect ((host, 80))

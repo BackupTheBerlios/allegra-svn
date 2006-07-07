@@ -41,21 +41,21 @@
 import sys, os, socket, thread
 
 from allegra import (
-	netstring, prompt, loginfo, async_loop, finalization, async_core
+	netstring, prompt, loginfo, 
+        async_loop, finalization, async_core
         )
 
 
 if os.name == 'posix':
 
-	class Trigger (async_core.Async_file):
+	class Trigger (async_core.Dispatcher):
 
 		"Thunk back safely from threads into the asynchronous loop"
 		
 		def __init__ (self):
 			self.select_triggers = 0
-			r, w = os.pipe ()
-			self.trigger = w
-			async_core.Async_file.__init__ (self, r)
+			fd, self.trigger = os.pipe ()
+                        self.set_file (fd)
 			self.lock = thread.allocate_lock ()
 			self.thunks = []
 			assert None == self.log ('open', 'debug')
@@ -73,10 +73,10 @@ if os.name == 'posix':
                         os.write (self.trigger, 'x')
 
 		def readable (self):
-			return 1
+			return True
 
 		def writable (self):
-			return 0
+			return False
 
 		def handle_connect (self):
 			pass
@@ -99,11 +99,13 @@ if os.name == 'posix':
 				except:
 					self.loginfo_traceback ()
 				
-                def handle_close (self):
-                        assert self.select_triggers == 0
-                        self.close ()
-                        self.trigger.close ()
-                        assert None == self.log ('close', 'debug')
+                def close (self):
+                        self.del_channel ()
+                        self.socket.close ()
+                        os.close (self.trigger)
+                        self.connected = False
+                        self.closing = True
+ 
                                 
 elif os.name == 'nt':
 
@@ -127,12 +129,12 @@ elif os.name == 'nt':
 				w.connect (('127.9.9.9', 19999))
 			except:
 				pass
-			r, addr = a.accept ()
+			conn, addr = a.accept ()
 			a.close ()
 			w.setblocking (1)
 			self.trigger = w
                         #
-			async_core.Dispatcher.__init__ (self, r)
+                        self.set_connection (conn, addr)
 			self.lock = thread.allocate_lock ()
 			self.thunks = []
 			assert None == self.log ('open', 'debug')
@@ -150,10 +152,10 @@ elif os.name == 'nt':
                         self.trigger.send ('x')
 
 		def readable (self):
-			return 1
+			return True
 
 		def writable (self):
-			return 0
+			return False
 
 		def handle_connect (self):
 			pass
@@ -176,11 +178,12 @@ elif os.name == 'nt':
 				except:
 					self.loginfo_traceback ()
 
-                def handle_close (self):
-                        assert self.select_triggers == 0
-                        self.close ()
+                def close (self):
+                        self.del_channel ()
+                        self.socket.close ()
                         self.trigger.close ()
-                        assert None == self.log ('close', 'debug')
+                        self.connected = False
+                        self.closing = True
 
 else:
 	raise ImportError ('OS "%s" not supported, sorry :-(' % os.name)

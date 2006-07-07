@@ -25,22 +25,22 @@ from allegra import async_core
 class UDP_dispatcher (async_core.Dispatcher):
 
 	def __init__ (self, ip, port=None):
-		async_core.Dispatcher.__init__ (self)
+                # binds a channel to a given ip address, pick a random port
+                # above 8192 if none provided, and handle error.
+                #
 		self.create_socket (socket.AF_INET, socket.SOCK_DGRAM)
-		# binds a channel to a given ip address, pick a random port
-		# above 8192 if none provided, and handle error.
-		self.addr = ip, port or (
+		addr = ip, port or (
 			(abs (hash (random.random ())) >> 16) + 8192
 			)
-		assert None == self.log (
-			'bind ip="%s" port="%d"' % self.addr, 'debug'
-			)
 		try:
-			self.bind (self.addr)
+			self.bind (addr)
 		except socket.error:
 			self.handle_error ()
 		else:
-			self.connected = 1 # somehow connected ...
+			self.connected = True # ? somehow connected ...
+                        assert None == self.log (
+                                'bind ip="%s" port="%d"' % self.addr, 'debug'
+                                )
 
 	def __repr__ (self):
 		return 'udp-dispatcher id="%x"' % id (self)

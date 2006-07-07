@@ -5,7 +5,6 @@ from allegra import async_core, async_chat
 class Proxy_server (async_core.Dispatcher):
     
     def __init__ (self, host, port):
-        async_core.Dispatcher.__init__ (self)
         self.create_socket (socket.AF_INET, socket.SOCK_STREAM)
         self.set_reuse_addr()
         self.there = (host, port)
@@ -50,7 +49,8 @@ class Proxy_receiver (async_chat.Dispatcher):
     channel_counter = 0
 
     def __init__ (self, server, (conn, addr)):
-        async_chat.Dispatcher.__init__ (self, conn)
+        async_chat.Dispatcher.__init__ (self)
+        self.set_connection (conn, addr)
         self.set_terminator ('\n')
         self.server = server
         self.id = self.channel_counter

@@ -82,9 +82,9 @@ def pns_statement (self, encoded):
 
 class Dispatcher (async_net.Dispatcher):
 	
-	def __init__ (self, conn):
+	def __init__ (self):
+                async_net.Dispatcher.__init__ (self)
 		self.pns_subscribed = []
-		async_net.Dispatcher.__init__ (self, conn)
 
 	def __repr__ (self):
 		return 'session id="%x"' % id (self)

@@ -35,7 +35,7 @@ class Listen (async_core.Dispatcher):
                 self.Server_dispatcher = Dispatcher
                 self.server_precision = precision
                 #
-                async_core.Dispatcher.__init__ (self)
+                # async_core.Dispatcher.__init__ (self)
                 self.create_socket (family, socket.SOCK_STREAM)
                 self.set_reuse_addr ()
                 self.bind (addr)
@@ -141,8 +141,8 @@ class Listen (async_core.Dispatcher):
         def server_accept (self, conn, addr, name):
                 assert None == self.log ('accepted %r' % (addr,), 'debug')
                 now = time.time ()
-                dispatcher = self.Server_dispatcher (conn)
-                dispatcher.addr = addr #?
+                dispatcher = self.Server_dispatcher ()
+                dispatcher.set_connection (conn, addr)
                 dispatcher.server_name = name
                 dispatcher.server_when = now
                 dispatcher.async_server = self

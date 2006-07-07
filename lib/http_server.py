@@ -102,8 +102,8 @@ class Dispatcher (
 
 	http_version = '1.0'
 
-	def __init__ (self, conn):
-		async_chat.Dispatcher.__init__ (self, conn)
+	def __init__ (self):
+		async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n\r\n')
 
         def __repr__ (self):
