@@ -19,28 +19,44 @@
 
 import select, errno
 
-def async_concurrent (writable, readable, stalled, limit):
+# decorate async_loop._io
+
+from allegra import async_loop
+
+
+def _concurrent (limit, active, writable, readable, stalled):
+        "limit by priority the number of dispatchers polled concurrently"
+        a = active.items ()
+        limit -= len (a)
         w = writable.items ()[:limit]
-        rest = limit - len (w)
-        if rest > 0:
-                r = readable.items ()[:rest]
-                rest = rest - len (r)
-                if rest > 0:
-                        return w, r, stalled.items ()[:rest]
+        limit -= len (w)
+        if limit > 0:
+                r = readable.items ()[:limit]
+                limit -= len (r)
+                if limit > 0:
+                        s = stalled.items ()[:limit]
+                        return a, w, r, s, (limit - len (s))
 
-                return w, r, ()
+                return a, w, r, (), 0
 
-        return w, (), ()
+        return a, w, (), (), 0
 
-
-def async_select (
-        map, timeout, writable, readable, stalled, limit
+def _io_select_c10k (
+        map, timeout, limit, active, writable, readable, stalled
         ):
-        wd, rd, sd = async_concurrent (
-                writable, readable, stalled, limit
+        "poll for I/O a limited number of dispatchers, by priority"
+        ad, wd, rd, sd, rest = _concurrent (
+                limit, writable, readable, stalled
                 )
         w = []
         r = []
+        for fd, dispatcher in ad:
+                if dispatcher.writable ():
+                        w.append (fd)
+                        if dispatcher.readable ():
+                                r.append (fd)
+                elif dispatcher.readable ():
+                        r.append (fd)
         for fd, dispatcher in wd:
                 if dispatcher.writable ():
                         w.append (fd)
@@ -70,9 +86,9 @@ def async_select (
                 elif dispatcher.readable ():
                         readable[fd] = stalled.pop (fd)
                         r.append (fd)                
-        if not (writable or r):
+        if len (w) + len (r) == 0:
                 time.sleep (timeout)
-                return
+                return limit - rest, 0
         
         try:
                 r, w, e = select.select (r, w, [], timeout)
@@ -81,7 +97,7 @@ def async_select (
                     raise
                     
                 else:
-                    return
+                    return limit - rest, 0
 
         for fd in r:
                 try:
@@ -116,27 +132,27 @@ def async_select (
         #                stalled[fd] = writable.pop (fd)
         #        for fd in (inactive - w):
         #                stalled[fd] = readable.pop (fd)
+        return limit - rest, len (w) + len (r)
 
-
-def async_poll (
-        map, timeout, writable, readable, stalled, limit
+def _io_poll_c10k (
+        map, timeout, limit, active, writable, readable, stalled
         ):
-        "limit the connections tested and poll writable or readable only"
-        # first limit in the order of priority
-        #
-        wd, rd, sd = async_concurrent (
-                new, writable, readable, stalled, limit
+        "poll for I/O a limited number of dispatchers, by priority"
+        ad, wd, rd, sd, rest = _concurrent (
+                limit, active, writable, readable, stalled
                 )
-        #
-        # note that you can reload the select module.
-        #
         pollster = select.poll ()
         W = select.POLLOUT
         R = select.POLLIN | select.POLLPRI
         RW = R | W
-        #
-        # now the four loops: new, writable, readable and stalled:
-        #
+        for fd, dispatcher in ad:
+                if dispatcher.writable ():
+                        if dispatcher.readable ():
+                                pollster.register (fd, RW)
+                        else:
+                                pollster.register (fd, W)
+                elif dispatcher.readable ():
+                        pollster.register (R)
         for fd, dispatcher in wd:
                 if dispatcher.writable ():
                         if dispatcher.readable ():
@@ -191,38 +207,50 @@ def async_poll (
                                         dispatcher.handle_write_event()
                                 #elif readable.has_key (fd):
                                 #        stalled[fd] = readable.pop (fd)
-                                #else:
+                                #elif writable.has_key (fd):
                                 #        stalled[fd] = writable.pop (fd)
                         except Exit:
                                 raise
                                 
                         except:
                                 dispatcher.handle_error()
-        
-                
-if hasattr (select, 'poll'):
-        async_io_c10k = async_poll
-else:
-        async_io_c10k = async_select
-                   
-                        
-# decorate async_loop.async_io and async_core.Dispatcher
+        return limit - rest, len (p)
 
-from allegra import async_loop, async_core
+if hasattr (select, 'poll'):
+        _io_c10k = _io_poll_c10k
+else:
+        _io_c10k = _io_select_c10k
+                   
+_active = {}
+_writable = {}
+_readable = {}
+_stalled = {}
+
+def _io (map, timeout, limit):
+        return _io_c10k (
+                map, timeout, limit, 
+                _active, _writable, _readable, _stalled
+                )
+
+async_loop._io = _io
+
+# decorate async_core's Dispatcher
+
+from allegra import async_core
 
 Dispatcher = async_core.Dispatcher
 
-Dispatcher.async_writable = async_writable = {}
-Dispatcher.async_readable = async_readable = {}
-Dispatcher.async_stalled = async_stalled = {}
+Dispatcher.async_writable = _writable
+Dispatcher.async_readable = _readable
+Dispatcher.async_stalled = _stalled
 
-def add_channel (dispatcher):
+def add_stallable (dispatcher):
         fd = dispatcher._fileno
         dispatcher.async_map[fd] = dispatcher.async_readable[fd] = dispatcher
 
-Dispatcher.add_channel = add_channel
+Dispatcher.add_channel = add_stallable
 
-def del_channel (dispatcher):
+def del_stallable (dispatcher):
         fd = dispatcher._fileno
         dispatcher._fileno = None
         try:
@@ -238,15 +266,39 @@ def del_channel (dispatcher):
                         except KeyError:
                                 del dispatcher.async_stalled[fd]
 
-Dispatcher.del_channel = del_channel
+Dispatcher.del_channel = del_stallable
+
+# decorate the select_trigger.Trigger and async_server.Listen dispatchers
+
+from allegra import select_trigger, async_server
+
+def add_active (dispatcher):
+        fd = dispatcher._fileno
+        assert len (dispatcher.async_active[fd]) < async_loop.concurrency
+        dispatcher.async_map[fd] = dispatcher.async_active[fd] = dispatcher
+
+def del_active (dispatcher):
+        fd = dispatcher._fileno
+        dispatcher._fileno = None
+        try:
+                del dispatcher.async_map[fd]
+        except KeyError:
+                pass
+        else:
+                del dispatcher.async_active[fd]
+
+for Dispatcher in (select_trigger.Trigger, async_server.Listen):
+        Dispatcher.async_active = _active
+        Dispatcher.add_channel = add_active
+        Dispatcher.del_channel = del_active
+        
+del Dispatcher
                 
-concurrency = 512
-
-def async_io (map, timeout):
-        async_io_c10k (
-                map, timeout, 
-                async_writable, async_readable, async_stalled, 
-                concurrency
-                )
-
-async_loop.async_io = async_io
+# TODO: move from dictionnaries to pair of deques for the writable, readable
+#       and stalled priority queues, actually queuing instead of hashing.
+#       
+#       the problem with dictionnaries is the possibility for a stalled
+#       dispatcher to have a so high fileno that it will never be tested
+#       again as long as there are more writable and readable dispatchers
+#       below it than the concurrency limit, when new dispatchers get 
+#       assigned lower fd numbers.
