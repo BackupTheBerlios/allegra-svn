@@ -180,8 +180,7 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 	select_trigger = None
 
 	def __init__ (self):
-		"""open a Trigger for the Select_trigger class if none has
-		been yet and increase the Tigger reference count by one"""
+                "maybe open a new Trigger, increase its reference count"
 		if self.select_trigger == None:
 			Select_trigger.select_trigger = Trigger ()
 		self.select_trigger.select_triggers += 1
@@ -190,12 +189,11 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 		return 'select-trigger id="%x"' % id (self)
 		
 	def select_trigger_log (self, data, info=None):
-		"thunk a log call to the async loop via the select trigger"
+		"log asynchronously via the select trigger"
 		self.select_trigger ((self.log, (data, info)))
 		
 	def select_trigger_traceback (self):
-		"""return a compact traceback tuple and thunk its log via the
-		select_trigger to the async loop."""
+		"return a compact traceback tuple and log asynchronously"
 		ctb = prompt.compact_traceback ()
 		self.select_trigger ((self.loginfo_log, (
 			loginfo.compact_traceback_netstrings (ctb), 
@@ -204,7 +202,7 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 		return ctb
 
 	def finalization (self, finalized):
-		"decrease the Trigger's reference count and close it if zero"
+		"decrease the Trigger's reference count, maybe close it"
                 trigger = self.select_trigger
 		trigger.select_triggers -= 1
 		if trigger.select_triggers == 0:
