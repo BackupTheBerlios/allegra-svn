@@ -250,8 +250,9 @@ if __name__ == '__main__':
                 count = 0
                 try:
         		if command == 'outline':
+                                write = sys.stdout.write
         			for n in netpipe (more, buffer_max):
-        				sys.stdout.write (netlines (n))
+        				write (netlines (n))
                                         count += 1
         		else:
         			for n in netpipe (more, buffer_max):
@@ -259,18 +260,11 @@ if __name__ == '__main__':
                 finally:
                         assert None == sys.stderr.write ('%d' % count)
 	elif command == 'encode':
+                write = sys.stdout.write 
 		for line in sys.stdin.xreadlines ():
-			sys.stdout.write (
-				'%d:%s,' % (len (line)-1, line[:-1])
-				)
+			write ('%d:%s,' % (len (line)-1, line[:-1]))
 	else:
 		sys.stderr.write ('1 invalid command\n')
 		sys.exit (1)
 		
 	sys.exit (0)
-
-
-__doc__ = "http://laurentszyster.be/blog/netstring/"
-
-
-__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
