@@ -54,8 +54,6 @@ from allegra import loginfo, async_loop, finalization
 
 class Dispatcher (loginfo.Loginfo, finalization.Finalization):
         
-        async_map = async_loop._dispatched
-    
         connected = accepting = closing = False
 
         addr = None
@@ -75,21 +73,6 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                                 pass
                 else:
                         self.socket = None
-
-        def finalization (self, finalized):
-                assert None == self.log ('finalized', 'debug')
-
-        def add_channel (self):
-                "add the dispatcher to the asynchronous I/O map"
-                self.async_map[self._fileno] = self
-
-        def del_channel (self):
-                "removes the dispatcher from the asynchronous I/O map"
-                fd = self._fileno
-                try:
-                        del self.async_map[fd]
-                except KeyError:
-                        pass
 
         def create_socket (self, family, type):
                 "create a socket and add the dispatcher to the I/O map"
@@ -118,16 +101,6 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                                 )
                 except socket.error:
                         pass
-
-        def readable (self):
-                "predicate for inclusion as readable in the poll loop"
-                return True
-
-        def writable (self):
-                "predicate for inclusion as writable in the poll loop"
-                return True
-
-        # socket object methods.
 
         def listen (self, num):
                 "listen and set the dispatcher's accepting state"
@@ -165,10 +138,19 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         if why[0] == EWOULDBLOCK:
                                 pass
                         else:
-                                raise socket.error, why
+                                raise
+                        
+        def close (self):
+                "remove the dispatcher from the I/O map and close the socket"
+                self.del_channel ()
+                self.socket.close ()
+                self.connected = False
+                self.closing = True
+
+        # The transport API for stream and datagram sockets
 
         def send (self, data):
-                "try to send data through the socket"
+                "try to send data through a stream socket"
                 try:
                         result = self.socket.send (data)
                         return result
@@ -178,12 +160,12 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                                 return 0
                                 
                         else:
-                                raise socket.error, why
+                                raise
                                 
                         return 0
 
         def recv (self, buffer_size):
-                "try to receive buffer_size bytes through the socket"
+                "try to receive bytes from a stream socket or handle close"
                 try:
                         data = self.socket.recv (buffer_size)
                         if not data:
@@ -195,7 +177,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         else:
                                 return data
                         
-                except MemoryError:    
+                except MemoryError:
                         # according to Sam Rushing, this is a place where
                         # MemoryError tend to be raised by Medusa. the rational 
                         # is that under high load, like a DDoS (or the /.
@@ -211,9 +193,10 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                                 return ''
                                 
                         else:
-                                raise socket.error, why
+                                raise
 
         def sendto (self, data, peer):
+                "try to send data through a datagram socket or handle close"
                 try:
                         return self.socket.sendto (data, peer)
                 
@@ -222,6 +205,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         return 0
 
         def recvfrom (self, datagram_size):
+                "try to receive bytes from a datagram socket or handle close"
                 try:
                         return self.socket.recvfrom (datagram_size)
 
@@ -229,22 +213,39 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         self.handle_error ()
                         return '', None
 
-        def close (self):
-                "remove the dispatcher from the I/O map and close the socket"
-                self.del_channel ()  # async_loop.del_dispatcher (self)
-                self.socket.close ()
-                #
-                self.connected = False
-                self.closing = True
-                #
-                # added here because a closed channel state may be accessed
-                # by a scheduled event like a too-late timeout!
+        # The "iner" API applied in async_loop
+
+        async_map = async_loop._dispatched
+    
+        def add_channel (self):
+                "add the dispatcher to the asynchronous I/O map"
+                self.async_map[self._fileno] = self
+
+        def del_channel (self):
+                "removes the dispatcher from the asynchronous I/O map"
+                fd = self._fileno
+                try:
+                        del self.async_map[fd]
+                except KeyError:
+                        pass
+
+        def readable (self):
+                "predicate for inclusion as readable in the poll loop"
+                return True
+
+        def writable (self):
+                "predicate for inclusion as writable in the poll loop"
+                return True
 
         def handle_read_event (self):
                 "articulate read event as accept, connect or read."
                 if self.accepting:
                         # for an accepting socket, getting a read implies
                         # that we are connected
+                        #
+                        # TODO: is this actually usefull? I mean, a listener
+                        #       is not a stream connection, not really ...
+                        #
                         if not self.connected:
                                 self.connected = True
                         self.handle_accept ()
@@ -257,14 +258,16 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def handle_write_event (self):
                 "articulate write event as connect or write."
-                # getting a write implies that we are connected
                 if not self.connected:
+                        # getting a write implies that we are connected
                         self.handle_connect ()
                         self.connected = True
                 self.handle_write ()
+                
+        # The protocol API for stream and datagram sockets
 
         def handle_error (self):
-                "log a traceback or raise SystemExit again"
+                "log a traceback and close, or raise SystemExit again"
                 t, v = sys.exc_info ()[:2]
                 if t is SystemExit:
                         raise t, v
@@ -274,20 +277,30 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
 
         def handle_close (self):
                 "assert debug log and close the dispatcher"
-                assert None == self.log ('close', 'debug')
                 self.close()
+                assert None == self.log ('close', 'debug')
 
         def handle_read (self):
+                "to subclass: assert unhandled read event debug log"
                 assert None == self.log ('unhandled read event', 'debug')
 
         def handle_write (self):
+                "to subclass: assert unhandled write event debug log"
                 assert None == self.log ('unhandled write event', 'debug')
 
         def handle_connect (self):
+                "to subclass: assert unhandled connect event debug log"
                 assert None == self.log ('unhandled connect event', 'debug')
 
         def handle_accept (self):
+                "to subclass: assert unhandled accept event debug log"
                 assert None == self.log ('unhandled accept event', 'debug')
+                
+        # and finaly ...
+
+        def finalization (self, finalized):
+                "assert debug log of the instance finalization"
+                assert None == self.log ('finalized', 'debug')
 
 
 # Asynchronous File I/O: UNIX pipe and stdio only
