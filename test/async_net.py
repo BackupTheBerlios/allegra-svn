@@ -6,6 +6,9 @@ import collections
 from allegra import (
     async_loop, async_net, collector, async_client
     )
+    
+    
+# Logging QMTP client
 
 class QMTP (async_net.Dispatcher):
             
@@ -15,13 +18,13 @@ class QMTP (async_net.Dispatcher):
     def async_net_continue (self, string):
         code = string[0]
         if code == 'K':
-            loginfo.log (string)
+            self.log (string)
         elif code == 'Z':
-            loginfo.log (string, 'temporary failure')
+            self.log (string, 'temporary failure')
         elif code == 'D':
-            loginfo.log (string, 'permanent failure')
+            self.log (string, 'permanent failure')
         else:
-            loginfo.log (string, 'protocol error')
+            self.log (string, 'protocol error')
 
 qmtp = QMTP ()
 if async_client.connect (qmt, ('127.0.0.1', 209), 3):
@@ -36,7 +39,10 @@ if async_client.connect (qmt, ('127.0.0.1', 209), 3):
         '',
         netstring.encode (('to@you', 'cc@somebody'))
         ))
-    dispatch ()
+    async_loop.dispatch ()
+    
+    
+# Logging PIRP client
     
 class PIRP (async_net.Dispatcher):
             
@@ -45,7 +51,7 @@ class PIRP (async_net.Dispatcher):
 
     def __init__ (self):
         self.pirp_collectors = collections.deque ()
-        Async_net.__init__ (self)
+        async_net.Dispatcher.__init__ (self)
         
     def pirp_resolve (self, names, collector): 
         self.async_net_push (names)
@@ -65,4 +71,4 @@ if async_client.connect (pirp, ('127.0.0.1', 553), 3):
     collect = collector.LOGINFO
     pirp.pirp_resolve (('index', 'html', ''), collect)
     pirp.pirp_resolve (('rss20', 'xml', ''), collect)
-    dispatch ()
+    async_loop.dispatch ()
