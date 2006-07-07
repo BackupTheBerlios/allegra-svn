@@ -40,8 +40,9 @@
 
 import sys, os, socket, thread
 
-from allegra import \
+from allegra import (
 	netstring, prompt, loginfo, async_loop, finalization, async_core
+        )
 
 
 if os.name == 'posix':
@@ -63,12 +64,13 @@ if os.name == 'posix':
 			return 'trigger id="%x"' % id (self)
 
 		def __call__ (self, thunk):
+                        "acquire the trigger's lock, thunk and pull"
+                        self.lock.acquire ()
 			try:
-				self.lock.acquire ()
 				self.thunks.append (thunk)
 			finally:
 				self.lock.release ()
-			os.write (self.trigger, 'x')
+                        os.write (self.trigger, 'x')
 
 		def readable (self):
 			return 1
@@ -80,27 +82,29 @@ if os.name == 'posix':
 			pass
 
 		def handle_read (self):
-			self.recv (8192)
+                        try:
+			        self.recv (8192)
+                        except socket.error:
+                                return
+                        
+                        self.lock.acquire ()
 			try:
-				self.lock.acquire ()
 				thunks = self.thunks
 				self.thunks = []
 			finally:
 				self.lock.release ()
 			for thunk in thunks:
-				if thunk == None:
-					self.handle_close ()
-					break
-				
 				try:
 					thunk[0] (*thunk[1])
 				except:
 					self.loginfo_traceback ()
 				
-		def handle_close (self):
-			self.close ()
-			assert None == self.log ('close', 'debug')
-
+                def handle_close (self):
+                        assert self.select_triggers == 0
+                        self.close ()
+                        self.trigger.close ()
+                        assert None == self.log ('close', 'debug')
+                                
 elif os.name == 'nt':
 
 	# win32-safe version
@@ -109,42 +113,41 @@ elif os.name == 'nt':
                 
                 "Thunk back safely from threads into the asynchronous loop"
 
-		address = ('127.9.9.9', 19999)
-
 		def __init__ (self):
 			self.select_triggers = 0
+                        #
+                        # tricky: get a pair of connected sockets
+                        #
 			a = socket.socket (socket.AF_INET, socket.SOCK_STREAM)
 			w = socket.socket (socket.AF_INET, socket.SOCK_STREAM)
-
-			# tricky: get a pair of connected sockets
-			a.bind (self.address)
+			a.bind (('127.9.9.9', 19999))
 			a.listen (1)
 			w.setblocking (0)
 			try:
-				w.connect (self.address)
+				w.connect (('127.9.9.9', 19999))
 			except:
 				pass
 			r, addr = a.accept ()
 			a.close ()
 			w.setblocking (1)
 			self.trigger = w
-
+                        #
 			async_core.Dispatcher.__init__ (self, r)
 			self.lock = thread.allocate_lock ()
 			self.thunks = []
-			self._trigger_connected = 0
 			assert None == self.log ('open', 'debug')
 
 		def __repr__ (self):
 			return 'trigger id="%x"' % id (self)
 
 		def __call__ (self, thunk):
+                        "acquire the trigger's lock, thunk and pull"
+                        self.lock.acquire ()
 			try:
-				self.lock.acquire ()
 				self.thunks.append (thunk)
 			finally:
 				self.lock.release ()
-			self.trigger.send ('x')
+                        self.trigger.send ('x')
 
 		def readable (self):
 			return 1
@@ -156,31 +159,31 @@ elif os.name == 'nt':
 			pass
 
 		def handle_read (self):
-			self.recv (8192)
+                        try:
+                                self.recv (8192)
+                        except socket.error:
+                                return
+                        
+                        self.lock.acquire ()
 			try:
-				self.lock.acquire ()
 				thunks = self.thunks
 				self.thunks = []
 			finally:
 				self.lock.release ()
 			for thunk in thunks:
-				if thunk == None:
-					self.handle_close ()
-					break
-				
 				try:
 					thunk[0] (*thunk[1])
 				except:
 					self.loginfo_traceback ()
 
-		def handle_close (self):
-			self.close ()
-			assert None == self.log ('close', 'debug')
+                def handle_close (self):
+                        assert self.select_triggers == 0
+                        self.close ()
+                        self.trigger.close ()
+                        assert None == self.log ('close', 'debug')
 
 else:
 	raise ImportError ('OS "%s" not supported, sorry :-(' % os.name)
-
-Trigger.select_triggers = 0
 
 
 class Select_trigger (loginfo.Loginfo, finalization.Finalization):
@@ -229,10 +232,9 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 
 	def finalization (self, finalized):
 		"decrease the Trigger's reference count and close it if zero"
-		self.select_trigger.select_triggers -= 1
-		if self.select_trigger.select_triggers == 0:
-			self.select_trigger (None)
+                trigger = self.select_trigger
+		trigger.select_triggers -= 1
+		if trigger.select_triggers == 0:
+			trigger ((trigger.handle_close, ()))
 			Select_trigger.select_trigger = None
 		self.select_trigger = None
-
-		
