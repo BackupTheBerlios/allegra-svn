@@ -54,8 +54,11 @@ def _io_select (map, timeout, limit):
         r = []
         w = []
         concurrent = map.items ()
-        if len (concurrent) > limit:
+        rest = limit - len (concurrent)
+        if rest > 0:
                 concurrent = concurrent[:limit]
+        else:
+                rest = 0
         for fd, dispatcher in concurrent:
                 if dispatcher.readable ():
                         r.append (fd)
@@ -63,7 +66,7 @@ def _io_select (map, timeout, limit):
                         w.append (fd)
         if len (r) + len (w) == 0:
                 time.sleep (timeout)
-                return
+                return limit - rest, 0
 
         try:
                 r, w, e = select.select (r, w, [], timeout)
@@ -72,7 +75,7 @@ def _io_select (map, timeout, limit):
                     raise
                     
                 else:
-                    return
+                    return limit - rest, 0
 
         for fd in r:
                 try:
@@ -87,7 +90,6 @@ def _io_select (map, timeout, limit):
                         
                 except:
                         dispatcher.handle_error ()
-
         for fd in w:
                 try:
                         dispatcher = map[fd]
@@ -101,7 +103,11 @@ def _io_select (map, timeout, limit):
                         
                 except:
                         dispatcher.handle_error ()
-
+        return limit - rest, len (r) + len (w)
+        #
+        # note that the number of distinct active dispatchers may actually
+        # be lower than the one reported: to get an exact cound would
+        # require to use sets, something like: len (set (r) + set (w))
 
 def _io_poll (map, timeout, limit):
         "poll for I/O a limited number of writable/readable dispatchers"
@@ -111,8 +117,11 @@ def _io_poll (map, timeout, limit):
         W = select.POLLOUT
         RW = R | W
         concurrent = map.items ()
-        if len (concurrent) > limit:
+        rest = limit - len (concurrent)
+        if rest > 0:
                 concurrent = concurrent[:limit]
+        else:
+                rest = 0
         for fd, dispatcher in concurrent:
                 if dispatcher.readable ():
                         if dispatcher.writable ():
@@ -144,6 +153,7 @@ def _io_poll (map, timeout, limit):
                                 
                         except:
                                 dispatcher.handle_error()
+        return limit - rest, len (p)
 
 
 # select the best I/O poll function available for this system
@@ -206,7 +216,7 @@ def _clock ():
 _catchers = []
 
 def _catched ():
-        "call catchers on Exit exception"
+        "call async_loop.Exit exception catchers"
         assert None == loginfo.log ('async_catch', 'debug')
         if _catchers:
                 for catcher in tuple (_catchers):
@@ -264,29 +274,48 @@ def dispatch ():
         
         assert None == loginfo.log ('async_dispatch_stop', 'debug')
    
-        
+   
+def io_meter (loop, when=None):
+        "decorate the loop module's I/O poll function with meters, log info"
+        loop._io_when = when or time.time ()
+        loop._io_run = 0
+        loop._io_load = loop._io_concurrency = loop._io_activity = 0.0
+        def _io_metering (map, timeout, limit):
+                loop._io_run += 1
+                dispatched = len (loop._dispatched)
+                concurrent, polled = _io (map, timeout, limit)
+                if concurrent > 0:
+                        loop._io_activity += float (active) / concurrent
+                        concurrent = float (concurrent)
+                        loop._io_load += concurrent / limit
+                        loop._io_concurrency += concurrent / dispatched
 
-# Schedule
-#
-# Having now peaked at both twisted, ACE and the libevent interfaces, I can
-# proudly say that the async_loop.schedule and the timeouts.Timeouts
-# interfaces are better.
-#
-# Allegra offers three kind of time events: single events defered at a fixed 
-# interval of time (ie the classic timeout) and single or recurent events 
-# scheduled at varying interval.
-#
-# The async_schedule interface has one or two advantages over the
-# competing designs. First it provides a way to schedule recurrent events 
-# without some ugly callback, without pegging the heap queue of the event 
-# "clock" implementation, and with an interface that prove to be quite 
-# flexible and simple for general purpose applications (like zombie channel
-# scavenging, TPC server or UDP peer gracefull shutdown, etc ...).
-#
-# Second, it allows to schedule events at absolute point in time and provide
-# a very much usefull absolute scheduled time value to its handler. Moreover
-# the underlying implementation implies that time is stable, that the
-# scheduled event's notion of time does not drift even if polling time is
-# done with little precision.
-#
-#
+        loop._io_metered = loop._io
+        loop._io = _io_metering
+        loginfo.log ('io-metered', 'info')
+        
+def io_meters (loop):
+        "return statistics about a metered I/O loop"
+        return (
+                loop._io_when, loop._io_run,
+                loop._io_run / (time.time () - loop._io_when),
+                loop._io_load / loop._io_run,
+                loop._io_concurrency / loop._io_run,
+                loop._io_activity / loop._io_run
+                )
+
+def io_unmeter (loop):
+        "log meter statistics and remove the metering decoration"
+        meters = io_meters (loop)
+        loginfo.log (
+                'io-unmetered'
+                ' seconds="%f" run="%d"'
+                ' rps="%f" load="%f"'
+                ' concurrency="%f" activity="%f"' % meters, 'info'
+                )
+        del (
+                loop._io_when, loop._io_run, 
+                loop._io_load, _io_concurrency, loop._io_activity
+                )
+        loop._io = loop._io_metered
+        return meters
