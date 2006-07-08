@@ -227,15 +227,15 @@ class Listen (async_core.Dispatcher):
                 return True
                         
 
-def anonymous (server):
+def anonymous (listen):
         "allways resolved to the empty string"
-        server.server_resolved = (lambda addr: '')
-        server.server_resolve = None
-        return server
+        listen.server_resolved = (lambda addr: '')
+        listen.server_resolve = None
+        return listen
 
-def accept_all (server):
-        server.server_accepted = (lambda conn, addr, name: True)
-        return server
+def accept_all (listen):
+        listen.server_accepted = (lambda conn, addr, name: True)
+        return listen
 
 def accept_named (listen, limit):
         def accepted (conn, addr, name):
@@ -274,31 +274,31 @@ def meter (dispatcher, when):
                 
         dispatcher.handle_close = handle_close
 
-def metered (server, timeout=1<<32):
+def metered (listen, timeout=1<<32):
         "meter I/O for server streams"
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
                 dispatcher.limit_inactive = timeout
                 
-        server.server_decorate = decorate
-        server.server_inactive = timeout
-        server.server_limit = None
-        return server
+        listen.server_decorate = decorate
+        listen.server_inactive = timeout
+        listen.server_limit = None
+        return listen
 
 
-def inactive (server, timeout):
+def inactive (listen, timeout):
         "meter I/O and limit inactivity for server streams"
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
-                dispatcher.limit_inactive = server.server_inactive
+                dispatcher.limit_inactive = listen.server_inactive
                 
-        server.server_decorate = decorate
-        server.server_inactive = timeout
-        server.server_limit = async_limits.inactive
-        return server
+        listen.server_decorate = decorate
+        listen.server_inactive = timeout
+        listen.server_limit = async_limits.inactive
+        return listen
 
 
-def limited (server, timeout, inBps, outBps):
+def limited (listen, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for managed client streams"
         def unthrottle (dispatcher):
                 "remove limit decorators from a client dispatcher"
@@ -316,10 +316,10 @@ def limited (server, timeout, inBps, outBps):
                 async_limits.meter_send (dispatcher, when)
                 dispatcher.limit_inactive = timeout
                 async_limits.throttle_readable (
-                        dispatcher, when, server.ac_in_throttle_Bps
+                        dispatcher, when, listen.ac_in_throttle_Bps
                         )
                 async_limits.throttle_writable (
-                        dispatcher, when, server.ac_out_throttle_Bps
+                        dispatcher, when, listen.ac_out_throttle_Bps
                         )
                 def handle_close ():
                         assert None == dispatcher.log (
@@ -334,27 +334,27 @@ def limited (server, timeout, inBps, outBps):
                         
                 dispatcher.handle_close = handle_close
 
-        server.server_decorate = throttle
-        server.ac_in_throttle_Bps = inBps
-        server.ac_out_throttle_Bps = outBps
-        server.server_limit = async_limits.limit
-        return server
+        listen.server_decorate = throttle
+        listen.ac_in_throttle_Bps = inBps
+        listen.ac_out_throttle_Bps = outBps
+        listen.server_limit = async_limits.limit
+        return listen
 
 
-def rationed (server, timeout, inBps, outBps):
+def rationed (listen, timeout, inBps, outBps):
         "ration I/O and limit inactivity for managed client streams"
-        server.ac_in_ration_Bps = inBps
-        server.ac_out_ration_Bps = outBps
+        listen.ac_in_ration_Bps = inBps
+        listen.ac_out_ration_Bps = outBps
         def throttle_in ():
-                return int (server.ac_in_ration_Bps / max (len (
-                        server.server_dispatchers
+                return int (listen.ac_in_ration_Bps / max (len (
+                        listen.server_dispatchers
                         ), 1))
 
         def throttle_out ():
-                return int (server.ac_out_ration_Bps / max (len (
-                        server.server_dispatchers
+                return int (listen.ac_out_ration_Bps / max (len (
+                        listen.server_dispatchers
                         ), 1))
 
-        limited (server, timeout, throttle_in, throttle_out)
-        return server
+        limited (listen, timeout, throttle_in, throttle_out)
+        return listen
         
