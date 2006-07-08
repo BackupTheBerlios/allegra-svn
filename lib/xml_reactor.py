@@ -19,8 +19,9 @@ import time
 
 from xml.parsers import expat
 
+
 from allegra import (
-        finalization, producer, collector, 
+        finalization, async_chat, producer, collector, 
         xml_dom, xml_unicode, xml_utf8
         )
 
@@ -134,6 +135,36 @@ class XML_benchmark (XML_collector):
                                 self.xml_expat_ERROR (error)
                         self.xml_expat = None
                 return True
+
+
+class Dispatcher (async_chat.Dispatcher, xml_dom.XML_dom):
+                
+        def __init__ (
+                self, xml_types,
+                xml_type=xml_dom.XML_element, unicoding=0
+                ):
+                xml_dom.XML_dom.__init__ (self)
+                self.xml_types = xml_types
+                self.xml_type = xml_type
+                self.xml_parser_reset (unicoding)
+                async_chat.Dispatcher.__init__ (self)
+        
+        def __repr__ (self):
+                return 'async-xml id="%x"' % id (self)
+
+        def readable (self):
+                return True
+
+        def handle_read (self):
+                "buffer more input and try to parse the XML stream"
+                try:
+                        self.xml_expat.Parse (
+                                self.recv (self.ac_in_buffer_size), 0
+                                )
+                except expat.ExpatError, error:
+                        self.xml_expat_ERROR (error)
+                except:
+                        self.handle_error ()
 
 
 # Note about this implementation
