@@ -219,3 +219,49 @@ class Simple_collector (object):
                         async_chat.collect_chat (self.collector, self.buffer)
                 del collector.set_terminator, collector.get_terminator
                 return True # allways final
+        
+        
+def bind_simple (cin, cout):
+        "bind to a simple collector until found_terminator is True"
+        def found_terminator ():
+                if cout.found_terminator ():
+                        del (
+                                cin.collect_incoming_data,
+                                cin.found_terminator
+                                )
+                        cin.found_terminator ()
+                        return True
+                
+                return False
+
+        cin.collect_incoming_data = cout.collect_incoming_data
+        cin.found_terminator = found_terminator
+        return cin
+
+def bind_complex (cin, cout):
+        "bind to a complex collector until found_terminator is True"
+        cout.set_terminator = cin.set_terminator
+        cout.get_terminator = cin.get_terminator
+        def found_terminator ():
+                if cout.found_terminator ():
+                        del (
+                                cin.collect_incoming_data,
+                                cin.found_terminator,
+                                cout.set_terminator,
+                                cout.get_terminator
+                                )
+                        cin.found_terminator ()
+                        return True
+                
+                return False
+        
+        cin.collect_incoming_data = cout.collect_incoming_data
+        cin.found_terminator = found_terminator
+        return cin
+
+def bind (cin, cout):
+        "bind to a collector until found_terminator is True"
+        if cout.collector_is_simple:
+                return bind_simple (cin, cout)
+
+        return bind_complex (cin, cout)
