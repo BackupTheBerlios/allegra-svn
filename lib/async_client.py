@@ -217,12 +217,12 @@ class Pool (Connections):
         
         def __init__ (
                 self, Dispatcher, name, 
-                pool=2, timeout=3, precision=1, family=socket.AF_INET
+                size=2, timeout=3, precision=1, family=socket.AF_INET
                 ):
                 "initialize a new client pool"
                 assert pool > 1
                 self.client_managed = []
-                self.client_pool = pool
+                self.client_pool = size
                 self.client_name = name
                 self.client_called = 0
                 self.Client_dispatcher = Dispatcher
@@ -267,6 +267,7 @@ def resolved (connections):
         "allways resolved for unresolved dispatcher address"
         connections.client_resolved = (lambda name: True)
         connections.client_resolve = None
+        return connections
 
 
 def unmeter (dispatcher):
@@ -297,6 +298,7 @@ def inactive (connections, timeout):
         connections.client_decorate = decorate
         connections.client_inactive = timeout
         connections.client_limit = async_limits.inactive
+        return connections
 
 
 def limited (connections, timeout, inBps, outBps):
@@ -339,6 +341,7 @@ def limited (connections, timeout, inBps, outBps):
         connections.ac_in_throttle_Bps = inBps
         connections.ac_out_throttle_Bps = outBps
         connections.client_limit = async_limits.limit
+        return connections
 
 
 def rationed (connections, timeout, inBps, outBps):
@@ -355,7 +358,8 @@ def rationed (connections, timeout, inBps, outBps):
                         connections.client_managed
                         ), 1))
 
-        limited (connections, timeout, throttle_in, throttle_out)
+        return limited (connections, timeout, throttle_in, throttle_out)
+        
 
 
 class Pipeline (object):
