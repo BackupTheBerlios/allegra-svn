@@ -16,8 +16,6 @@ def test_unmanaged ():
                                 'Host: %s\r\n'
                                 '\r\n' % host
                                 )
-                else:
-                        dispatcher.handle_close ()
 
 test_unmanaged ()
 async_loop.dispatch ()
@@ -45,7 +43,7 @@ def test_connections (connections, hosts):
 def test_cache (cache, hosts):
         loginfo.log ('test_cache')
         for host in hosts:
-                push (cache (async_chat.Dispatcher, host), host)
+                push (cache (async_chat.Dispatcher, (host, 80)), host)
                         
 def test_pool (pool):
         loginfo.log ('test_pool')

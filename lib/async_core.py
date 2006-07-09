@@ -127,11 +127,13 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         
         def close (self):
                 "remove the dispatcher from the I/O map and close the socket"
+                try:
+                        self.socket.close ()
+                except:
+                        pass # closing a 
                 self.del_channel ()
-                self.socket.close ()
-                self.socket = None # make sure you don't open the same twice
                 self.connected = False
-                self.closing = True
+                self.closing = True # == (self.socket == None)
                 assert None == self.log ('close', 'debug')
 
         # The transport API for stream and datagram sockets

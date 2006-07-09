@@ -29,7 +29,7 @@ def connect (dispatcher, addr, timeout, family=socket.AF_INET):
         try:
                 dispatcher.create_socket (family, socket.SOCK_STREAM)
                 dispatcher.connect (addr)
-        except socket.error, why:
+        except:
                 dispatcher.loginfo_traceback ()
                 dispatcher.handle_close ()
                 return False
@@ -69,27 +69,26 @@ class Connections (loginfo.Loginfo):
                 
         def __call__ (self, dispatcher, name):
                 "registed, decorate and connect a new dispatcher"
-                now = time.time ()
-                dispatcher.async_client = self
-                self.client_decorate (dispatcher, now)
-                key = id (dispatcher)
-                self.client_managed[key] = dispatcher
-                dispatcher.client_key = key
-                if len (self.client_managed) == 1:
-                        self.client_start (now)
-                if not self.client_connect (dispatcher, name):
+                if self.client_connect (dispatcher, name):
+                        now = time.time ()
+                        dispatcher.async_client = self
+                        self.client_decorate (dispatcher, now)
+                        key = id (dispatcher)
+                        self.client_managed[key] = dispatcher
+                        dispatcher.client_key = key
+                        if len (self.client_managed) == 1:
+                                self.client_start (now)
+                else:
                         self.client_errors += 1
                 return dispatcher
                 
         def client_connect (self, dispatcher, name):
                 "resolve and/or connect a dispatcher"
                 if self.client_resolved (name):
-                        if not connect (
+                        return connect (
                                 dispatcher, name, 
                                 self.client_timeout, self.client_family
-                                ):
-                                dispatcher.handle_close ()
-                        return False
+                                )
 
                 if self.client_resolve == None:
                         self.client_unresolved (dispatcher, name)
@@ -98,11 +97,14 @@ class Connections (loginfo.Loginfo):
                 def resolve (addr):
                         if addr == None:
                                 self.client_unresolved (dispatcher, name)
-                        elif not connect (
+                                return
+                        
+                        if not connect (
                                 dispatcher, addr, 
                                 self.client_timeout, self.client_family
                                 ):
-                                dispatcher.handle_close ()
+                                self.client_errors += 1
+                                
                 self.client_resolve (name, resolve)
                 return True
                 
@@ -111,6 +113,7 @@ class Connections (loginfo.Loginfo):
                 assert None == dispatcher.log (
                         '%r unresolved' % name, 'debug'
                         )
+                self.client_errors += 1
                 dispatcher.handle_close ()
 
         def client_start (self, when):
@@ -206,15 +209,17 @@ class Cache (Connections):
                         
                 except KeyError:
                         pass
-                now = time.time ()
                 dispatcher = Dispatcher ()
-                dispatcher.async_client = self
-                self.client_decorate (dispatcher, now)
-                self.client_managed[name] = dispatcher
-                dispatcher.client_key = name
-                self.client_connect (dispatcher, name)
-                if len (self.client_managed) == 1:
-                        self.client_start (now)
+                if self.client_connect (dispatcher, name):
+                        now = time.time ()
+                        dispatcher.async_client = self
+                        self.client_decorate (dispatcher, now)
+                        self.client_managed[name] = dispatcher
+                        dispatcher.client_key = name
+                        if len (self.client_managed) == 1:
+                                self.client_start (now)
+                else:
+                        self.client_errors += 1
                 return dispatcher
 
 
@@ -227,7 +232,7 @@ class Pool (Connections):
                 size=2, timeout=3, precision=1, family=socket.AF_INET
                 ):
                 "initialize a new client pool"
-                assert pool > 1
+                assert size > 1
                 self.client_managed = []
                 self.client_pool = size
                 self.client_name = name
@@ -251,12 +256,14 @@ class Pool (Connections):
                 
                 now = time.time ()
                 dispatcher = self.Client_dispatcher ()
-                dispatcher.async_client = self
-                self.client_decorate (dispatcher, now)
-                self.client_managed.append (dispatcher)
-                self.client_connect (dispatcher, self.client_name)
-                if len (self.client_managed) == 1:
-                        self.client_start (now)
+                if self.client_connect (dispatcher, self.client_name):
+                        dispatcher.async_client = self
+                        self.client_decorate (dispatcher, now)
+                        self.client_managed.append (dispatcher)
+                        if len (self.client_managed) == 1:
+                                self.client_start (now)
+                else:
+                        self.client_errors += 1
                 return dispatcher
 
         def client_dispatchers (self):
