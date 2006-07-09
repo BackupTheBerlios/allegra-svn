@@ -55,7 +55,7 @@ class Connections (loginfo.Loginfo):
         "a connection manager for async_client.Dispatcher instances"
 
         ac_in_meter = ac_out_meter = 0
-        client_when = client_dispatched = 0
+        client_errors = client_when = client_dispatched = 0
         
         def __init__ (self, timeout, precision, family=socket.AF_INET):
                 "initialize a new client manager"
@@ -76,7 +76,8 @@ class Connections (loginfo.Loginfo):
                 dispatcher.client_key = key
                 if len (self.client_managed) == 1:
                         self.client_start (now)
-                self.client_connect (dispatcher, name)
+                if not self.client_connect (dispatcher, name):
+                        self.client_errors += 1
                 return dispatcher
                 
         def client_connect (self, dispatcher, name):
@@ -87,9 +88,12 @@ class Connections (loginfo.Loginfo):
                                 self.client_timeout, self.client_family
                                 ):
                                 dispatcher.handle_close ()
-                        return
+                        return False
 
-                assert self.client_resolve != None
+                if self.client_resolve == None:
+                        self.client_unresolved (dispatcher, name)
+                        return False
+                
                 def resolve (addr):
                         if addr == None:
                                 self.client_unresolved (dispatcher, name)
@@ -99,6 +103,7 @@ class Connections (loginfo.Loginfo):
                                 ):
                                 dispatcher.handle_close ()
                 self.client_resolve (name, resolve)
+                return True
                 
         def client_unresolved (self, dispatcher, name):
                 "assert debug log and close an unresolved dispatcher"
@@ -159,14 +164,15 @@ class Connections (loginfo.Loginfo):
         def client_stop (self, when):
                 "handle the client management stop"
                 assert None == self.log (
-                        'stop dispatched="%d"'
+                        'stop errors="%d" dispatched="%d"'
                         ' seconds="%f" in="%d" out="%d"' % (
+                                self.client_errors,
                                 self.client_dispatched,
                                 (when - self.client_when),
                                 self.ac_in_meter,
                                 self.ac_out_meter
                                 ), 'debug')
-                self.client_dispatched = \
+                self.client_errors = self.client_dispatched = \
                         self.ac_in_meter = self.ac_out_meter = 0
 
         def client_shutdown (self):
