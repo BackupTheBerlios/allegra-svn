@@ -190,7 +190,7 @@ class _A (Reactor):
                 return False
         
 
-class _NS (REACTOR):
+class _NS (Reactor):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -328,7 +328,7 @@ class Resolver (udp_peer.Bind):
                 # no cache entry, maybe bind and send a new request
                 #
                 if self.socket == None:
-                        if not udp_peer.bind (self.dns_ip):
+                        if not udp_peer.bind (self, self.dns_ip):
                                 resolve (None)
                                 return
                                 #

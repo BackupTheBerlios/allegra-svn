@@ -25,8 +25,8 @@ from allegra import async_core
 def my_ip ():
         return socket.gethostbyname (socket.gethostname ())
 
-def bind (dispatcher, ip, port=None):
-        addr = ip, port or (
+def bind (dispatcher, ip=None, port=None):
+        addr = ip or my_ip (), port or (
                 (abs (hash (random.random ())) >> 16) + 8192
                 )
         try:
@@ -43,7 +43,7 @@ def bind (dispatcher, ip, port=None):
         else:
                 # ? somehow connected ...
                 assert None == dispatcher.log (
-                        'bind ip="%s" port="%d"' % self.addr, 'debug'
+                        'bind ip="%s" port="%d"' % dispatcher.addr, 'debug'
                         )
                 return True
 
