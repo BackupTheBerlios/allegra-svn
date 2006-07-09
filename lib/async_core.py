@@ -129,8 +129,10 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                 "remove the dispatcher from the I/O map and close the socket"
                 self.del_channel ()
                 self.socket.close ()
+                self.socket = None # make sure you don't open the same twice
                 self.connected = False
                 self.closing = True
+                assert None == self.log ('close', 'debug')
 
         # The transport API for stream and datagram sockets
 
@@ -260,10 +262,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                 self.loginfo_traceback ()
                 self.close () # self.handle_close () ... or nothing?
 
-        def handle_close (self):
-                "assert debug log and close the dispatcher"
-                self.close()
-                assert None == self.log ('close', 'debug')
+        handle_close = close # shorter and faster
 
         def handle_read (self):
                 "to subclass: assert unhandled read event debug log"
