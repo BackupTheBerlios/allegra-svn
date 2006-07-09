@@ -135,7 +135,7 @@ class Padded_decoder (object):
         # Collect padded blocks to decode, for instance:
         #
         #        import base64
-        #        Padded_collector (collector, 20, base64.b64decode)
+        #        Padded_decoder (collector, 20, base64.b64decode)
         #
         # because padding does matter to the base binascii implementation,
         # and is not handled by the codecs module, a shame when a large
@@ -260,7 +260,8 @@ def bind_complex (cin, cout):
         return cin
 
 def bind (cin, cout):
-        "bind to a collector until found_terminator is True"
+        "bind a complex to a collector until found_terminator is True"
+        assert not cin.collector_is_simple
         if cout.collector_is_simple:
                 return bind_simple (cin, cout)
 
