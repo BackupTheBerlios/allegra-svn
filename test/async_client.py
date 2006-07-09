@@ -63,6 +63,7 @@ def test_managed ():
         async_loop.dispatch ()
         finalization.collect ()
 
+
 loginfo.log ('test_managed')
 
 connections = async_client.Connections (3, 1)
@@ -71,6 +72,7 @@ pool = async_client.Pool (
         async_chat.Dispatcher, (hosts[-1], 80), 2, 3, 1
         )
 test_managed ()
+
 
 loginfo.log ('test_limited')
 
@@ -82,6 +84,7 @@ pool = async_client.Pool (
 for client in (connections, cache, pool):
         async_client.limited (client, 6, (lambda: 1024), (lambda: 1024))
 test_managed ()
+
 
 loginfo.log ('test_rationed')
 

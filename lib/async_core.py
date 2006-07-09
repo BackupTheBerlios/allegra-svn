@@ -264,7 +264,8 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                 self.loginfo_traceback ()
                 self.close () # self.handle_close () ... or nothing?
 
-        handle_close = close # shorter and faster
+        def handle_close (self):
+                self.close () # shorter and faster
 
         def handle_read (self):
                 "to subclass: assert unhandled read event debug log"

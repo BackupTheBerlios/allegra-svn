@@ -255,24 +255,21 @@ def accept_named (listen, limit):
         listen.server_accepted = accepted 
         return listen
 
-def unmeter (dispatcher):
-        "remove stream decorators from a server dispatcher"
-        del (
-                dispatcher.recv, 
-                dispatcher.send, 
-                dispatcher.handle_close
-                )
 
 def meter (dispatcher, when):
         "decorate a server dispatcher with stream meters"
         async_limits.meter_recv (dispatcher, when)
         async_limits.meter_send (dispatcher, when)
-        def handle_close ():
-                unmeter (dispatcher)
-                dispatcher.handle_close ()
+        def close ():
+                del (
+                        dispatcher.recv, 
+                        dispatcher.send, 
+                        dispatcher.close
+                        )
+                dispatcher.close ()
                 dispatcher.async_server.server_close (dispatcher)
                 
-        dispatcher.handle_close = handle_close
+        dispatcher.close = close
 
 def metered (listen, timeout=1<<32):
         "meter I/O for server streams"
@@ -300,16 +297,6 @@ def inactive (listen, timeout):
 
 def limited (listen, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for managed client streams"
-        def unthrottle (dispatcher):
-                "remove limit decorators from a client dispatcher"
-                del (
-                        dispatcher.recv, 
-                        dispatcher.send, 
-                        dispatcher.readable,
-                        dispatcher.writable,
-                        dispatcher.handle_close
-                        )
-                
         def throttle (dispatcher, when):
                 "decorate a client dispatcher with stream limits"
                 async_limits.meter_recv (dispatcher, when)
@@ -321,18 +308,18 @@ def limited (listen, timeout, inBps, outBps):
                 async_limits.throttle_writable (
                         dispatcher, when, listen.ac_out_throttle_Bps
                         )
-                def handle_close ():
-                        assert None == dispatcher.log (
-                                'in="%d" out="%d"' % (
-                                        dispatcher.ac_in_meter, 
-                                        dispatcher.ac_out_meter
-                                        ),  'debug'
+                def close ():
+                        del (
+                                dispatcher.recv, 
+                                dispatcher.send, 
+                                dispatcher.readable,
+                                dispatcher.writable,
+                                dispatcher.close
                                 )
-                        unthrottle (dispatcher)
-                        dispatcher.handle_close ()
+                        dispatcher.close ()
                         dispatcher.async_server.server_close (dispatcher)
                         
-                dispatcher.handle_close = handle_close
+                dispatcher.close = close
 
         listen.server_decorate = throttle
         listen.ac_in_throttle_Bps = inBps
