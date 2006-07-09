@@ -138,7 +138,7 @@ def http_collector_continue (dispatcher, collected):
                 ).lower () == 'chunked':
                 # HTTP/1.1 mostly
                 if not collected.collector_is_simple:
-                        collected = collector.Simple_collector (collected)
+                        collected = collector.Simple (collected)
                 dispatcher.mime_collector_body = Chunk_collector (
                         collected,
                         dispatcher.set_terminator,
@@ -151,7 +151,7 @@ def http_collector_continue (dispatcher, collected):
                         )
                 if content_length:
                         if not collected.collector_is_simple:
-                                collected = collector.Simple_collector (
+                                collected = collector.Simple (
                                         collected
                                         )
                         dispatcher.set_terminator (int (content_length))

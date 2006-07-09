@@ -247,7 +247,7 @@ def post_rest (component, reactor, POST_LIMIT=1<<16):
                                 ] == 'application/x-www-form-urlencoded'
                         ):
                         reactor.mime_collector_body = \
-                                collector.Limited_collector (POST_LIMIT)
+                                collector.Limited (POST_LIMIT)
                         reactor.http_response = 200
                         reactor.http_continuation = component.presto
                 else:
@@ -298,7 +298,7 @@ def form_rest (component, reactor, POST_LIMIT=1<<16):
                         )
                 ):
                 reactor.mime_collector_body = \
-                        collector.Limited_collector (POST_LIMIT)
+                        collector.Limited (POST_LIMIT)
                 reactor.http_response = 200
                 reactor.http_continuation = component.presto
                 return

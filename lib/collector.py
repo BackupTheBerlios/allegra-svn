@@ -21,7 +21,7 @@
 from allegra import async_chat, loginfo
 
 
-class Null_collector (object):
+class Null (object):
 
         # collect data to /dev/null
 
@@ -34,10 +34,10 @@ class Null_collector (object):
                 return True
 
 
-DEVNULL = Null_collector ()
+DEVNULL = Null ()
 
 
-class Loginfo_collector (object):
+class Loginfo (object):
         
         # collect data to loginfo
         
@@ -53,10 +53,10 @@ class Loginfo_collector (object):
                 return True # final!
 
 
-LOGINFO = Loginfo_collector ()
+LOGINFO = Loginfo ()
                 
 
-class File_collector (object):
+class File (object):
         
         collector_is_simple = True
         
@@ -72,7 +72,7 @@ class File_collector (object):
                 
 def devnull (data): pass
                 
-class Limited_collector (object):
+class Limited (object):
         
         collector_is_simple = True
         
@@ -190,7 +190,7 @@ class Padded_decoder (object):
                 return self.collector.found_terminator ()
         
         
-class Simple_collector (object):
+class Simple (object):
 
         # wraps a complex collector with a simple interface
         

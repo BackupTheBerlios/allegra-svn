@@ -163,7 +163,7 @@ class MULTIPART_collector (object):
 			)
                 collector = self.multipart_factory (headers)
 		if not collector.collector_is_simple:
-			collector = Simple_collector (collector)
+			collector = Simple (collector)
 		self.multipart_parts.append (collector)
 		self.collect_incoming_data = collector.collect_incoming_data		
 		self.found_terminator = self.multipart_found_boundary
@@ -248,7 +248,7 @@ if __name__ == '__main__':
 				
 	mime_reactor = MIME_reactor ()
 	mime_reactor.mime_collector_finalize = mime_collector_finalize
-	simple_collector = Simple_collector (mime_reactor)
+	simple_collector = Simple (mime_reactor)
 	while True:
 		data = sys.stdin.read (4096)
 		if data:
