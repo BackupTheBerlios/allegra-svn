@@ -132,7 +132,7 @@ def presto_prompt_async (self, reactor):
                 )
         # 4. continue ...
         #
-        # return a string or an element, let the Composite_producer
+        # return a string or an element, let the Composite producer
         # do the right thing and glob all strings if possible to refill
         # the a 16KB buffer for instance.
         #

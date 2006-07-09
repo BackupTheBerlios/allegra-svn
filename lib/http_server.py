@@ -246,7 +246,7 @@ class Dispatcher (
                         # supply a response entity if one is required for the
                         # request's method and that none has been assigned
                         # by a previous handler
-                        reactor.mime_producer_body = producer.Simple_producer (
+                        reactor.mime_producer_body = producer.Simple (
                                 HTTP_RESPONSE % (
                                         reactor.http_response,
                                         HTTP_RESPONSES[reactor.http_response],
@@ -369,7 +369,7 @@ class File_cache (loginfo.Loginfo, finalization.Finalization):
                                 teed.mime_headers
                                 )
                         reactor.mime_producer_body = \
-                                producer.Tee_producer (teed)
+                                producer.Tee (teed)
                         reactor.http_response = 200
                         return False
 
@@ -381,7 +381,7 @@ class File_cache (loginfo.Loginfo, finalization.Finalization):
                         reactor.http_response = 404
                         return False
                         
-                teed = producer.File_producer (open (filename, 'rb'))
+                teed = producer.File (open (filename, 'rb'))
                 content_type, content_encoding = \
                         mimetypes.guess_type (filename)
                 teed.mime_headers = {
@@ -395,7 +395,7 @@ class File_cache (loginfo.Loginfo, finalization.Finalization):
                         teed.mime_headers['Content-Encoding'] = \
                                 content_encoding
                 reactor.mime_producer_headers.update (teed.mime_headers)
-                reactor.mime_producer_body = producer.Tee_producer (teed)
+                reactor.mime_producer_body = producer.Tee (teed)
                 reactor.http_response = 200
                 self.http_cached[filename] = weakref.ref (teed)
                 return False

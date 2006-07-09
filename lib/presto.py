@@ -370,7 +370,7 @@ class PRESTo_root (loginfo.Loginfo):
 def presto_producer (
         dom, attributes, result, encoding, globbing=1<<14 # 16KB glob
         ):
-        # return one single Composite_producer with a simplistic PRESTo
+        # return one single Composite with a simplistic PRESTo
         # envelope made of two elements: the accessed DOM root and the 
         # byte string, unicode string, xml element or producer returned by
         # a call to presto_rest.
@@ -381,7 +381,7 @@ def presto_producer (
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if dom.xml_pi:
                 head += xml_unicode.xml_pi (dom.xml_pi, encoding)
-        return producer.Composite_producer (
+        return producer.Composite (
                 head, xml_unicode.xml_prefixed (
                         e, prefixes, xml_unicode.xml_ns (prefixes), encoding
                         ), globbing
@@ -416,7 +416,7 @@ class PRESTo_benchmark (object):
 def presto_benchmark (
         dom, attributes, result, encoding, benchmark, globbing=512
         ):
-        # return one single Composite_producer with a simplistic PRESTo
+        # return one single Composite with a simplistic PRESTo
         # envelope made of two elements: the accessed DOM root and the 
         # byte string, unicode string, xml element or producer returned by
         # a call to presto_rest.
@@ -429,7 +429,7 @@ def presto_benchmark (
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if dom.xml_pi:
                 head += xml_unicode.xml_pi (dom.xml_pi, encoding)
-        return producer.Composite_producer (
+        return producer.Composite (
                 head, xml_unicode.xml_prefixed (
                         e, prefixes, xml_unicode.xml_ns (prefixes), encoding
                         ), globbing

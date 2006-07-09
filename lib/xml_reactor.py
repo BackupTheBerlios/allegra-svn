@@ -30,7 +30,7 @@ def xml_producer_unprefixed_utf8 (root, pi=None, globbing=512):
         head = '<?xml version="1.0" encoding="UTF-8"?>'
         if pi:
                 head += xml_utf8.xml_pi (pi)
-        return producer.Composite_producer (
+        return producer.Composite (
                 head, xml_utf8.xml_unprefixed (root), globbing
                 )
          
@@ -39,7 +39,7 @@ def xml_producer_utf8 (root, prefixes, pi=None, globbing=512):
         head = '<?xml version="1.0" encoding="UTF-8"?>'
         if pi:
                 head += xml_utf8.xml_pi (pi)
-        return producer.Composite_producer (
+        return producer.Composite (
                 head, xml_utf8.xml_prefixed (
                         root, prefixes, xml_utf8.xml_ns (prefixes)
                         ), globbing
@@ -52,7 +52,7 @@ def xml_producer_unprefixed_unicode (
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if pi:
                 head += xml_unicode.xml_pi (pi, encoding)
-        return producer.Composite_producer (
+        return producer.Composite (
                 head, xml_unicode.xml_unprefixed (root, encoding), globbing
                 )
          
@@ -63,7 +63,7 @@ def xml_producer_unicode (
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if pi:
                 head += xml_unicode.xml_pi (pi, encoding)
-        return producer.Composite_producer (
+        return producer.Composite (
                 head, xml_unicode.xml_prefixed (
                         root, prefixes, xml_unicode.xml_ns (prefixes), 
                         encoding

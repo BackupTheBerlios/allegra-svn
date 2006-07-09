@@ -268,7 +268,7 @@ class Dispatcher (async_core.Dispatcher):
 # This implementation use collection.deque for output FIFO queues instead 
 # of a class wrapper, and the push () method actually does what it is 
 # supposed to do and pushes a string at the end that output queue, not a 
-# Simple_producer instance.
+# Simple instance.
 #
 # The channel's method collect_incoming_data is called to collect data 
 # between terminators. Its found_terminator method is called whenever

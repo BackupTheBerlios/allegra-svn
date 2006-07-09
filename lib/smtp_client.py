@@ -304,7 +304,7 @@ if __name__ == '__main__':
 #        >>> smtp_client.SMTP_client_channel ((
 #                '127.0.0.1', 25)).smtp_mailto (
 #                'me@home', ('you@work', 'me@work')
-#                ) (Simple_producer ('Subject: Test\r\n\r\nHello World?'))
+#                ) (producer.Simple ('Subject: Test\r\n\r\nHello World?'))
 #        >>>
 #
 # This module implements an SMTP client pipeline interface that will behave

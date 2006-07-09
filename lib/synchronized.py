@@ -59,7 +59,7 @@ def sync_close (self, mode):
         self.sync_file = None
         
 
-class File_producer (object):
+class File (object):
 
         synchronizer = None
         synchronizer_size = 2

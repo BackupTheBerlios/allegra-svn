@@ -21,7 +21,7 @@
 import types
 
 
-class File_producer (object):
+class File (object):
         
         "producer wrapper for file[-like] objects"
 
@@ -36,7 +36,7 @@ class File_producer (object):
                 return False
         
 
-class Simple_producer (object):
+class Simple (object):
         
         "scanning producer for a large string"
 
@@ -84,7 +84,7 @@ class Stalled_generator (object):
                 return self.generator == None
         
 
-class Composite_producer (object):
+class Composite (object):
 	
 	# This is a more "modern" composite producer than the original
 	# one, with support for stalled producers and generators. it is the
@@ -159,7 +159,7 @@ class Composite_producer (object):
         # buffers more efficiently for TCP/IP.
 
 
-class Tee_producer (object):
+class Tee (object):
         
         def __init__ (self, producer):
                 self.index = -1
