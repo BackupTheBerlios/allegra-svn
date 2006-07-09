@@ -29,8 +29,9 @@ def connect (dispatcher, addr, timeout, family=socket.AF_INET):
         try:
                 dispatcher.create_socket (family, socket.SOCK_STREAM)
                 dispatcher.connect (addr)
-        except:
+        except socket.error, why:
                 dispatcher.loginfo_traceback ()
+                dispatcher.handle_close ()
                 return False
                 
         assert None == dispatcher.log ('connect', 'debug')

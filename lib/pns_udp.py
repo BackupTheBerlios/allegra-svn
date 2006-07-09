@@ -17,7 +17,7 @@
 
 ""
 
-from allegra import netstring, timeouts, udp_peer, pns_model
+from allegra import netstring, async_core, timeouts, udp_peer, pns_model
 
 
 def is_ip (name):
@@ -44,7 +44,7 @@ def long_ip (i):
 	return '.'.join (l)
 
 
-class PNS_circle (udp_peer.UDP_dispatcher):
+class PNS_circle (async_core.Dispatcher):
 	
 	def __init__ (self, pns_peer, name, subscribers=None):
 		self.PNS_SP= '%d:%s,0:,' % (len (name), name)
@@ -359,10 +359,13 @@ class PNS_circle (udp_peer.UDP_dispatcher):
 
 	def pns_join (self, left):
 		assert None == self.log ('join ip="%s"' % left, 'debug')
-		if not self.connected:
-			UDP_dispatcher.__init__ (
-				self, self.pns_peer.pns_udp.addr[0]
-				)
+		if self.socket == None:
+			if not udp_peer.bind (
+                                self, self.pns_peer.pns_udp.addr[0]
+                                ):
+                                self.pns_left = None # failed to join
+                                return
+                                
 		if self.sendto (self.PNS_SP, (left, 3534)) > 0:
 			# joining now
 			self.pns_statements[self.PNS_SP] = self.pns_left = left
@@ -370,8 +373,7 @@ class PNS_circle (udp_peer.UDP_dispatcher):
 				self.pns_name, self.PNS_SP
 				))
 		else:
-			# failed to join
-			self.pns_left = None
+			self.pns_left = None # failed to join
 		
 	def pns_joined (self, right):
 		if self.pns_right:
@@ -434,12 +436,11 @@ class PNS_circle (udp_peer.UDP_dispatcher):
 				)
 			
 	def pns_root (self, right):
-		# set the L=R, bind a UDP port if joined and set the 
-		# state to in-circle
+		# set the L=R, bind a UDP port and move to "in-circle" state
 		assert None == self.log ('root ip="%s"' % right[0], 'debug')
 		self.pns_left = right[0]
-		if not self.connected:
-			udp_peer.UDP_dispatcher.__init__ (
+		if self.socket == None:
+			udp_peer.bind (
 				self, self.pns_peer.pns_udp.addr[0]
 				)
 		self.pns_in_circle (right)
@@ -563,7 +564,7 @@ class PNS_axis (PNS_circle):
 		self.log ('joined-drop ip="%s"' % right[0], 'error')
 
 
-class PNS_UDP_peer (udp_peer.UDP_dispatcher, timeouts.Timeouts):
+class PNS_UDP_peer (async_core.Dispatcher, timeouts.Timeouts):
 
 	# PNS/UDP, at 320Kbps may set 80 timeouts per seconds, one every
 	# 12,5 millisecond which would amount to 240 timeouts in 3 seconds.
@@ -588,14 +589,15 @@ class PNS_UDP_peer (udp_peer.UDP_dispatcher, timeouts.Timeouts):
 		self.pns_joined = {}
 		self.pns_accepted = {}
 		timeouts.Timeouts.__init__ (self, self.pns_timeout, 3, 0.3)
-		udp_peer.UDP_dispatcher.__init__ (self, ip, 3534)
-		for name in self.pns_peer.pns_subscribed.keys ():
-			self.pns_peer.pns_subscribed[
-				name
-				] = self.pns_subscribe (
-					name,
-					self.pns_peer.pns_subscriptions[name]
+		if udp_peer.bind (self, ip, 3534):
+                        subscribed = pns_peer.pns_subscribed
+                        subscriptions = pns_peer.pns_subscriptions
+        		for name in subscribed.keys ():
+        			subscribed[name] = self.pns_subscribe (
+					name, subscriptions[name]
 					)
+                #
+                # keep trying ... but later ;-)
 
 	def __repr__ (self):
 		return 'pns-udp'

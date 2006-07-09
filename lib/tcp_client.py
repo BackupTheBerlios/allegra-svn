@@ -22,46 +22,44 @@ import socket
 from allegra import async_client, dns_client
 
 
-def connect (
-        dispatcher, name, timeout, 
-        resolved=dns_client.ip_resolved, resolve=resolve_dns_A
-        ):
-        "resolve and maybe connect a dispatcher, close on error"
-        if resolved (name):
-                if not async_client.connect (
-                        dispatcher, name, timeout, socket.AF_INET
-                        ):
-                        dispatcher.handle_close ()
-                        return False
-                
-                return True
-
-        if resolve == None:
-                dispatcher.handle_close ()
-                return False
-        
-        def resolve (addr):
-                if addr == None or not async_client.connect (
-                        dispatcher, addr, timeout, socket.AF_INET
-                        ):
-                        dispatcher.handle_close ()
-        client_resolve (name, resolve)
-        return True
-
-
-def dns_A_resolved (connections, resolver=None):
-        if resolver == None:
-                resolver = DNS_client (dns_servers ())
+def dns_A_resolved (connections):
+        assert dns_client.RESOLVER != None
         def async_client_resolve (name, resolve):
                 def dns_resolve (resolved):
                         if resolved.dns_resources:
                                 resolve (resolved.dns_resources[0])
                         else:
                                 resolve (None)
-                resolver.dns_resolve ((name, 'A'), dns_resolve)
+                dns_client.RESOLVER ((name, 'A'), dns_resolve)
         
-        connections.client_resolved = ip_resolved
+        connections.client_resolved = dns_client.ip_resolved
         connections.client_resolve = async_client_resolve
+
+
+def connect (
+        dispatcher, name, timeout, 
+        resolved=dns_client.ip_resolved, resolve=dns_A_resolved
+        ):
+        "resolve and maybe connect a dispatcher, close on error"
+        if resolved (name):
+                return async_client.connect (
+                        dispatcher, name, timeout, socket.AF_INET
+                        )
+
+        if resolve == None:
+                return False
+        
+        def resolve (addr):
+                if addr == None:
+                        dispatcher.handle_close ()
+                else:
+                        async_client.connect (
+                                dispatcher, addr, timeout, socket.AF_INET
+                                )
+                                
+        client_resolve (name, resolve)
+        return True
+
 
 # conveniences for named TCP/IP connections
 
