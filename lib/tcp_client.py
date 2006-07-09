@@ -47,6 +47,7 @@ def connect (
                         )
 
         if resolve == None:
+                dispatcher.handle_close ()
                 return False
         
         def resolve (addr):
