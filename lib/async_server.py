@@ -109,8 +109,10 @@ class Listen (async_core.Dispatcher):
                                 self.server_named[name] += 1
                         except KeyError:
                                 self.server_named[name] = 1
-                        if name == None:
+                        if (
+                                name == None and 
                                 self.server_unresolved (conn, addr)
+                                ):
                                 conn.close ()
                         elif self.server_accepted (conn, addr, name):
                                 self.server_accept (
@@ -137,6 +139,7 @@ class Listen (async_core.Dispatcher):
                 
         def server_unresolved (self, conn, addr):
                 assert None == self.log ('unresolved %r' % (addr,), 'debug')
+                return False # don't care!
 
         def server_accept (self, conn, addr, name):
                 assert None == self.log ('accepted %r' % (addr,), 'debug')
