@@ -31,6 +31,11 @@ class Listen (async_core.Dispatcher):
                 self, Dispatcher, addr, precision, max, 
                 family=socket.AF_INET
                 ):
+                assert (
+                        type (precision) == int and precision > 0 and
+                        type (max) == int and max > 0 and
+                        family in (socket.AF_INET, socket.AF_UNIX)
+                        )
                 self.server_dispatchers = []
                 self.server_named = {}
                 self.Server_dispatcher = Dispatcher
@@ -289,6 +294,7 @@ def metered (listen, timeout=1<<32):
 
 def inactive (listen, timeout):
         "meter I/O and limit inactivity for server streams"
+        assert type (timeout) == int and timeout > 0
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
                 dispatcher.limit_inactive = listen.server_inactive
@@ -301,6 +307,11 @@ def inactive (listen, timeout):
 
 def limited (listen, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for managed client streams"
+        assert (
+                type (timeout) == int and timeout > 0 and
+                type (inBps ()) == int and inBps () > 0 and
+                type (outBps ()) == int and outBps () > 0
+                )
         def throttle (dispatcher, when):
                 "decorate a client dispatcher with stream limits"
                 async_limits.meter_recv (dispatcher, when)
@@ -334,6 +345,11 @@ def limited (listen, timeout, inBps, outBps):
 
 def rationed (listen, timeout, inBps, outBps):
         "ration I/O and limit inactivity for managed client streams"
+        assert (
+                type (timeout) == int and timeout > 0 and
+                type (inBps) == int and inBps > 0 and
+                type (outBps) == int and outBps > 0
+                )
         listen.ac_in_ration_Bps = inBps
         listen.ac_out_ration_Bps = outBps
         def throttle_in ():

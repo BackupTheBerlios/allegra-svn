@@ -321,9 +321,7 @@ def meter (dispatcher, when):
 
 def inactive (connections, timeout):
         "meter I/O and limit inactivity for client streams"
-        assert (
-                type (timeout) == int and timeout > 0
-                )
+        assert type (timeout) == int and timeout > 0
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
                 dispatcher.limit_inactive = connections.client_inactive
