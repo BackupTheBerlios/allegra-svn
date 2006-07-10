@@ -427,7 +427,7 @@ def ip_resolved (addr):
                         n for n in addr[0].split ('.') 
                         if -1 < int (n) < 255
                         ]) == 4:
-                        return addr[0]
+                        return addr
                 
         except:
                 pass

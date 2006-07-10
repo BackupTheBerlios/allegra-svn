@@ -65,36 +65,24 @@ def dns_A_resolved (connections):
         assert dns_client.RESOLVER != None
         connections.client_resolved = dns_client.ip_resolved
         connections.client_resolve = dns_A_resolve
+        return connections
 
-
-def Connections (
-        timeout, precision, 
-        resolution=dns_A_resolved
-        ):
-        connections = async_clientConnections (
+def Connections (timeout, precision, resolution=dns_A_resolved):
+        return resolution (async_client.Connections (
                 timeout, precision, socket.AF_INET
-                )
-        connections.client_resolved = resolution (connections)
-        return connections
+                ))
 
-def Cache (
-        Dispatcher, timeout, precision, 
-        resolution=dns_A_resolved
-        ):
-        connections = async_client.Connections (
-                Dispatcher, timeout, precision, socket.AF_INET
-                )
-        connections.client_resolved = resolution (connections)
-        return connections
+def Cache (timeout, precision, resolution=dns_A_resolved):
+        return resolution (async_client.Cache (
+                timeout, precision, socket.AF_INET
+                ))
 
 def Pool (
         Dispatcher, name, size, timeout, precision, 
         resolution=dns_A_resolved
         ):
-        connections = async_client.Connections (
+        return resolution (async_client.Pool (
                 Dispatcher, timeout, precision, socket.AF_INET
-                )
-        connections.client_resolved = resolution (connections)
-        return connections
+                ))
 
 # 

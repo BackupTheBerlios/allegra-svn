@@ -69,7 +69,7 @@ class Bind (async_core.Dispatcher):
                 #
                 #     not (not (deque ((1,)))) == True
                 #
-                # fast and very practical
+                # fast and practical
 
 	# ECONNRESET, ENOTCONN, ESHUTDOWN
 	#
@@ -103,6 +103,12 @@ class Bind (async_core.Dispatcher):
                 # to build up big queues for UDP applications! if it slows
                 # down because of large queues, there's a problem with the
                 # application, the API can't do any good to handle that.
+                #
+                # Note that attributing any iterable will do to:
+                #
+                #     self.udp_peer_fifo = iter ()
+                #
+                # That's practical too.
 
         def handle_write (self):
                 sendto = self.sendto
@@ -131,7 +137,5 @@ class Bind (async_core.Dispatcher):
                 # upload bandwith than you can send and no router to drop,
                 # never put the breaks and use sendto directly at all times.
 
-        #
         # small is beautifull
-
-# TODO: add a UDP pipeline implementation that behaves like asynchat?
+        

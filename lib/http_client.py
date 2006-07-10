@@ -17,12 +17,12 @@
 
 ""
 
-import re
+import re, socket
 
 from allegra import (
 	loginfo, finalization, 
-        async_chat, producer, collector, async_client, 
-        dns_client, mime_headers, mime_reactor, http_reactor
+        async_chat, producer, collector, async_client,
+        tcp_client, mime_headers, mime_reactor, http_reactor
         )
 
 
@@ -71,7 +71,6 @@ class Dispatcher (
         def __repr__ (self):
                 return 'http-client-pipeline id="%x"' % id (self)
 
-        #__call__ = tcp_client.Pipeline.pipeline
         __call__ = async_client.Pipeline.pipeline
 
 	# Asynchat
@@ -122,9 +121,6 @@ class Dispatcher (
 		else:
 			reactor.mime_producer_headers['connection'] = 'close'
 		self.http_client_continue (reactor)
-		# self.handle_write ()
-                #
-                # do not iniate send, wait for the write event instead
 
 	def pipeline_wake_up_11 (self):
 		# HTTP/1.1 pipeline, send all at once and maybe close when
@@ -147,9 +143,7 @@ class Dispatcher (
                         # close when done and not kept alive
                         reactor.mime_producer_headers['connection'] = 'close'
 		self.http_client_continue (reactor)
-                # 
-		# self.handle_write ()
-		
+ 		
 	# MIME collector
 
 	def mime_collector_continue (self):
@@ -267,9 +261,18 @@ class Dispatcher (
 
 class Cache (async_client.Cache):
 
+        def __init__ (
+                self, timeout=3, precision=1, 
+                resolution=tcp_client.dns_A_resolved
+                ):
+                async_client.Cache.__init__ (
+                        self, timeout, precision, socket.AF_INET
+                        )
+                resolution (self)
+
 	def __call__ (self, host, port=80, version='1.1'):
                 dispatcher = async_client.Cache.__call__ (
-                        Dispatcher, (host, port)
+                        self, Dispatcher, (host, port)
                         )
                 if dispatcher.closing:
                         return
@@ -293,12 +296,6 @@ class Cache (async_client.Cache):
                                 ), 'debug'
                         )
                 async_client.Cache.client_close (self, dispatcher)
-
-
-def Cache (timeout, precision, resolver=None):
-        client = Cache (timeout, precision)
-        dns_client.client_resolution (client, resolver)
-        return client
         
 
 def GET (pipeline, url, headers=None):
