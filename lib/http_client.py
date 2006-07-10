@@ -35,6 +35,7 @@ class Reactor (
         def __init__ (
                 self, pipeline, url, headers, command, body
                 ):
+                headers ['Host'] = pipeline.http_host
                 self.http_pipeline = pipeline
                 self.http_urlpath = url
                 self.http_command = command
@@ -325,18 +326,41 @@ class Cache (async_client.Cache):
                 return dispatcher
 
 
+class Pool (async_client.Pool):
+
+        def __init__ (
+                self, host, port=80, version='1.1',
+                size=2, timeout=3, precision=1
+                ):
+                assert (
+                        type (host) == str and type (port) == int and
+                        version in ('1.1', '1.0')
+                        )
+                if port == 80:
+                        self.http_host = host
+                else:
+                        self.http_host = '%s:%d' % (host, port)
+                self.http_version = version
+                async_client.Pool.__init__ (
+                        self, Dispatcher, (host, port), 
+                        size, timeout, precision, socket.AF_INET
+                        )
+
+        def __call__ (self):
+                dispatcher = async_client.Pool.__call__ (self)
+                dispatcher.http_host = self.http_host
+                dispatcher.http_version = self.http_version
+                return dispatcher
+        
+
 def GET (pipeline, url, headers=None):
-        if headers == None:
-                headers = {'Host': pipeline.http_host}
-        return Reactor (pipeline, url, headers, 'GET', None)
+        return Reactor (pipeline, url, headers or {}, 'GET', None)
                 
 def POST (pipeline, url, body, headers=None):
         if headers == None:
                 headers = {
-                        'Host': pipeline.http_host, 
                         'Content-Type': 'application/x-www-form-urlencoded'
                         }
-        return Reactor (pipeline, url, headers, 'POST', body)
-                
+        return Reactor (pipeline, url, headers, 'POST', body)                
 
 # RE_URL = re.compile ('http://([^/:]+)[:]?([0-9]+)?(/.+)')
