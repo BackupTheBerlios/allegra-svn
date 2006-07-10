@@ -183,14 +183,6 @@ class Dispatcher (
 			return True
 
                 self.http_version = http_version[-3:]
-                #version = http_version[-3:]
-                #if (
-                #        version == '1.1' and 
-                #        self.pipeline_wake_up != self.pipeline_wake_up_11
-                #        ):
-		#	self.pipeline_wake_up = self.pipeline_wake_up_11
-                #elif self.http_version != '1.0':
-		#        self.http_version = '1.0'
 		reactor.mime_collector_headers = \
 			self.mime_collector_headers = \
 			mime_headers.map (self.mime_collector_lines)
@@ -222,14 +214,13 @@ class Dispatcher (
                 return False
 
 	# HTTP/1.1 client reactor
-
-        http_version = '1.1'
-
-	http_collector_continue = http_reactor.http_collector_continue
-
-	http_collector_error = async_chat.Dispatcher.handle_close
         
+        http_host = None
+        http_version = '1.1'
         http_requests = http_responses = 0
+
+        http_collector_error = handle_close
+	http_collector_continue = http_reactor.http_collector_continue
 
         def http_client_continue (self, reactor):
                 # push one string and maybe a producer in the output fifo ...
@@ -272,6 +263,26 @@ class Dispatcher (
                 # ready to send.
                 
 
+def pipeline (host, port=80, version='1.1'):
+        assert (
+                type (host) == str and type (port) == int and
+                version in ('1.1', '1.0')
+                )
+        dispatcher = Dispatcher ()
+        if port == 80:
+                dispatcher.http_host = host
+        else:
+                dispatcher.http_host = '%s:%d' % (host, port)
+        dispatcher.http_version = version
+        return dispatcher
+
+
+def connect (host, port=80, version='1.1', timeout=3):
+        dispatcher = pipeline (host, port, version)
+        tcp_client.connect (dispatcher, (host, port), timeout)
+        return dispatcher
+
+
 class Connections (async_client.Connections):
 
         def __init__ (
@@ -284,21 +295,12 @@ class Connections (async_client.Connections):
                 resolution (self)
 
         def __call__ (self, host, port=80, version='1.1'):
-                assert (
-                        type (host) == str and type (port) == int and
-                        version in ('1.1', '1.0')
-                        )
                 dispatcher = async_client.Connections.__call__ (
-                        self, Dispatcher (), (host, port)
+                        self, pipeline (host, port, version), (host, port)
                         )
                 if dispatcher.closing:
                         return
 
-                if port == 80:
-                        dispatcher.http_host = host
-                else:
-                        dispatcher.http_host = '%s:%d' % (host, port)
-                dispatcher.http_version = version
                 return dispatcher
 
 
@@ -315,16 +317,11 @@ class Cache (async_client.Cache):
 
 	def __call__ (self, host, port=80, version='1.1'):
                 dispatcher = async_client.Cache.__call__ (
-                        self, Dispatcher, (host, port)
+                        self, pipeline (host, port, version), (host, port)
                         )
                 if dispatcher.closing:
                         return
 
-                if port == 80:
-                        dispatcher.http_host = host
-                else:
-                        dispatcher.http_host = '%s:%d' % (host, port)
-                dispatcher.http_version = version
                 return dispatcher
 
 
