@@ -23,12 +23,12 @@ from allegra import async_client, dns_client
 
 
 def dns_A_resolve (addr, resolve):
-        def dns_resolve (resolved):
-                if resolved.dns_resources:
-                        resolve ((resolved.dns_resources[0], addr[1]))
+        def resolved (request):
+                if request.dns_resources:
+                        resolve ((request.dns_resources[0], addr[1]))
                 else:
                         resolve (None)
-        dns_client.RESOLVER ((addr[0], 'A'), dns_resolve)
+        dns_client.RESOLVER ((addr[0], 'A'), resolved)
 
 
 def connect (

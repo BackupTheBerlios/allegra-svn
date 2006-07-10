@@ -17,10 +17,6 @@
 
 ""
 
-# TODO: handle PTR right, handle non-existing domain/host and other
-#        DNS error conditions, change the DNS predicates to QCLASS
-#        and QTYPE values? ...
-
 import time
 
 from allegra import async_loop, async_core, udp_peer
@@ -420,6 +416,11 @@ def resolver ():
 
 RESOLVER = resolver () # never finalized, but not allways binded
         
+        
+def name_resolved (addr):
+        if addr[0].startswith ('127.'):
+                return addr
+        
 
 def ip_resolved (addr):
         try:
@@ -432,7 +433,7 @@ def ip_resolved (addr):
         except:
                 pass
 
-def resolution (
+def ip_resolution (
         name, resolve, resolver, 
         predicate='A', extract=(lambda: r[0])
         ):
@@ -461,8 +462,10 @@ if __name__ == '__main__':
                         model.append (netstring.encode (
                                 request.dns_resources
                                 ))
-                else:
+                elif request.dns_resources:
                         model.append (request.dns_resources[0])
+                else:
+                        model.append ('')
                 model.append (request.dns_peer[0])
                 loginfo.log (netstring.encode (model))
                 

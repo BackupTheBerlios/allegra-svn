@@ -17,4 +17,19 @@
 
 ""
 
-# TODO: factor out conveniences for TCP/IP server (resolution etc ...)
+import socket
+
+from allegra import async_client, dns_client
+
+
+def dns_PTR_resolve (addr, resolve):
+        def resolved (request):
+                if request.dns_resources:
+                        resolve ((request.dns_resources[0], addr[1]))
+                else:
+                        resolve (None)
+        l = addr[0].split ('.')
+        l.reverse ()
+        l.extend (('in-addr', 'arpa'))
+        dns_client.RESOLVER (('.'.join (l), 'PTR'), resolved)
+
