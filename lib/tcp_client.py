@@ -62,7 +62,6 @@ def connect (
 # conveniences for named TCP/IP connections
 
 def dns_A_resolved (connections):
-        assert dns_client.RESOLVER != None
         connections.client_resolved = dns_client.ip_resolved
         connections.client_resolve = dns_A_resolve
         return connections
