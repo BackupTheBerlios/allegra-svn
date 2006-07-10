@@ -28,7 +28,8 @@ class Listen (async_core.Dispatcher):
         server_when = server_dispatched = 0
         
         def __init__ (
-                self, Dispatcher, addr, precision, max, family
+                self, Dispatcher, addr, precision, max, 
+                family=socket.AF_INET
                 ):
                 self.server_dispatchers = []
                 self.server_named = {}
