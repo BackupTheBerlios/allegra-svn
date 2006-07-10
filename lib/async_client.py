@@ -24,7 +24,11 @@ from allegra import loginfo, async_loop, async_limits
         
 def connect (dispatcher, addr, timeout, family=socket.AF_INET):
         "create a socket, try to connect it and schedule a timeout"
-        assert not dispatcher.connected
+        assert (
+                not dispatcher.connected and
+                type (timeout) == int and timeout > 0 and
+                family in (socket.AF_INET, socket.AF_UNIX)
+                )
         dispatcher.client_when = time.time ()
         try:
                 dispatcher.create_socket (family, socket.SOCK_STREAM)
@@ -60,6 +64,11 @@ class Connections (loginfo.Loginfo):
         
         def __init__ (self, timeout, precision, family=socket.AF_INET):
                 "initialize a new client manager"
+                assert (
+                        type (timeout) == int and timeout > 0 and
+                        type (precision) == int and precision > 0 and
+                        family in (socket.AF_INET, socket.AF_UNIX)
+                        )
                 self.client_managed = {}
                 self.client_timeout = timeout
                 self.client_precision = precision
@@ -194,6 +203,11 @@ class Cache (Connections):
                 self, timeout=3, precision=1, family=socket.AF_INET
                 ):
                 "initialize a new client cache"
+                assert (
+                        type (timeout) == int and timeout > 0 and
+                        type (precision) == int and precision > 0 and
+                        family in (socket.AF_INET, socket.AF_UNIX)
+                        )
                 self.client_managed = {}
                 self.client_timeout = timeout
                 self.client_precision = precision
@@ -233,7 +247,12 @@ class Pool (Connections):
                 size=2, timeout=3, precision=1, family=socket.AF_INET
                 ):
                 "initialize a new client pool"
-                assert size > 1
+                assert (
+                        type (size) == int and size > 1 and
+                        type (timeout) == int and timeout > 0 and
+                        type (precision) == int and precision > 0 and
+                        family in (socket.AF_INET, socket.AF_UNIX)
+                        )
                 self.client_managed = []
                 self.client_pool = size
                 self.client_name = name
@@ -302,6 +321,9 @@ def meter (dispatcher, when):
 
 def inactive (connections, timeout):
         "meter I/O and limit inactivity for client streams"
+        assert (
+                type (timeout) == int and timeout > 0
+                )
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
                 dispatcher.limit_inactive = connections.client_inactive
@@ -314,6 +336,11 @@ def inactive (connections, timeout):
 
 def limited (connections, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for managed client streams"
+        assert (
+                type (timeout) == int and timeout > 0 and
+                type (inBps ()) == int and inBps () > 0 and
+                type (outBps ()) == int and outBps () > 0
+                )
         def throttle (dispatcher, when):
                 "decorate a client dispatcher with stream limits"
                 async_limits.meter_recv (dispatcher, when)
@@ -347,6 +374,11 @@ def limited (connections, timeout, inBps, outBps):
 
 def rationed (connections, timeout, inBps, outBps):
         "ration I/O and limit inactivity for managed client streams"
+        assert (
+                type (timeout) == int and timeout > 0 and
+                type (inBps) == int and inBps > 0 and
+                type (outBps) == int and outBps > 0
+                )
         connections.ac_in_ration_Bps = inBps
         connections.ac_out_ration_Bps = outBps
         def throttle_in ():
