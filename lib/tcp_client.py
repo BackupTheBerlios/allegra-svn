@@ -44,7 +44,7 @@ def dns_A_resolve (addr, resolve):
 
 def connect (
         dispatcher, name, timeout, 
-        resolved=dns_client.ip_resolved, resolve=dns_A_resolve
+        resolved=ip_resolved, resolve=dns_A_resolve
         ):
         "resolve and maybe connect a dispatcher, close on error"
         assert not dispatcher.connected
