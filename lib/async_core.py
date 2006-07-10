@@ -126,11 +126,12 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                                 raise
                         
         def close (self):
-                "remove the dispatcher from the I/O map and close the socket"
+                "close the socket and remove the dispatcher from the I/O map"
                 try:
                         self.socket.close ()
                 except:
-                        pass # closing a 
+                        pass # closing a
+                self.socket = None 
                 self.del_channel ()
                 self.connected = False
                 self.closing = True # == (self.socket == None)
