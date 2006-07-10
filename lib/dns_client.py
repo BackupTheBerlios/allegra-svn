@@ -421,13 +421,13 @@ def resolver ():
 RESOLVER = resolver () # never finalized, but not allways binded
         
 
-def ip_resolved (host):
+def ip_resolved (addr):
         try:
                 if len ([
-                        n for n in host[0].split ('.') 
+                        n for n in addr[0].split ('.') 
                         if -1 < int (n) < 255
                         ]) == 4:
-                        return host[0]
+                        return addr[0]
                 
         except:
                 pass

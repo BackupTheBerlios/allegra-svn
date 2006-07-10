@@ -67,9 +67,9 @@ class Connections (loginfo.Loginfo):
                 resolved (self)
                 inactive (self, timeout)
                 
-        def __call__ (self, dispatcher, addr):
+        def __call__ (self, dispatcher, name):
                 "registed, decorate and connect a new dispatcher"
-                if self.client_connect (dispatcher, addr):
+                if self.client_connect (dispatcher, name):
                         now = time.time ()
                         dispatcher.async_client = self
                         self.client_decorate (dispatcher, now)
@@ -82,37 +82,37 @@ class Connections (loginfo.Loginfo):
                         self.client_errors += 1
                 return dispatcher
                 
-        def client_connect (self, dispatcher, addr):
+        def client_connect (self, dispatcher, name):
                 "resolve and/or connect a dispatcher"
-                ip = self.client_resolved (addr)
-                if ip != None:
+                addr = self.client_resolved (name)
+                if addr != None:
                         return connect (
                                 dispatcher, addr, 
                                 self.client_timeout, self.client_family
                                 )
 
                 if self.client_resolve == None:
-                        self.client_unresolved (dispatcher, addr[0])
+                        self.client_unresolved (dispatcher, addr)
                         return False
                 
-                def resolve (ip):
+                def resolve (addr):
                         if addr == None:
-                                self.client_unresolved (dispatcher, addr[0])
+                                self.client_unresolved (dispatcher, name)
                                 return
                         
                         if not connect (
-                                dispatcher, (ip, add[1]), 
+                                dispatcher, addr, 
                                 self.client_timeout, self.client_family
                                 ):
                                 self.client_errors += 1
                                 
-                self.client_resolve (add[0], resolve)
+                self.client_resolve (name, resolve)
                 return True
                 
         def client_unresolved (self, dispatcher, name):
                 "assert debug log and close an unresolved dispatcher"
                 assert None == dispatcher.log (
-                        '%r unresolved' % name, 'debug'
+                        '%r unresolved' % (name, ), 'debug'
                         )
                 self.client_errors += 1
                 dispatcher.handle_close ()
@@ -280,7 +280,7 @@ class Pool (Connections):
 
 def resolved (connections):
         "allways resolved for unresolved dispatcher address"
-        connections.client_resolved = (lambda addr: addr[0])
+        connections.client_resolved = (lambda addr: addr)
         connections.client_resolve = None
         return connections
 

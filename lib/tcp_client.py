@@ -22,23 +22,23 @@ import socket
 from allegra import async_client, dns_client
 
 
-def dns_A_resolve (name, resolve):
+def dns_A_resolve (addr, resolve):
         def dns_resolve (resolved):
                 if resolved.dns_resources:
-                        resolve (resolved.dns_resources[0])
+                        resolve ((resolved.dns_resources[0], addr[1]))
                 else:
                         resolve (None)
-        dns_client.RESOLVER ((name, 'A'), dns_resolve)
+        dns_client.RESOLVER ((addr[0], 'A'), dns_resolve)
 
 
 def connect (
-        dispatcher, addr, timeout, 
+        dispatcher, name, timeout, 
         resolved=dns_client.ip_resolved, resolve=dns_A_resolve
         ):
         "resolve and maybe connect a dispatcher, close on error"
         assert not dispatcher.connected
-        ip = resolved (addr)
-        if ip != None:
+        addr = resolved (name)
+        if addr != None:
                 return async_client.connect (
                         dispatcher, addr, timeout, socket.AF_INET
                         )
@@ -47,16 +47,15 @@ def connect (
                 dispatcher.handle_close ()
                 return False
         
-        def connect_or_close (ip):
-                if ip == None:
+        def connect_or_close (addr):
+                if addr == None:
                         dispatcher.handle_close ()
                 else:
                         async_client.connect (
-                                dispatcher, (ip, addr[1]), timeout, 
-                                socket.AF_INET
+                                dispatcher, addr, timeout, socket.AF_INET
                                 )
                                 
-        resolve (addr[0], connect_or_close)
+        resolve (name, connect_or_close)
         return True
 
 
