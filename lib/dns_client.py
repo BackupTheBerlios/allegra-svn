@@ -416,23 +416,6 @@ def resolver ():
 
 RESOLVER = resolver () # never finalized, but not allways binded
         
-        
-def name_resolved (addr):
-        if addr[0].startswith ('127.'):
-                return addr
-        
-
-def ip_resolved (addr):
-        try:
-                if len ([
-                        n for n in addr[0].split ('.') 
-                        if -1 < int (n) < 255
-                        ]) == 4:
-                        return addr
-                
-        except:
-                pass
-
 def ip_resolution (
         name, resolve, resolver, 
         predicate='A', extract=(lambda: r[0])

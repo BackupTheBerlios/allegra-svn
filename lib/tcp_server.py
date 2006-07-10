@@ -22,6 +22,11 @@ import socket
 from allegra import async_client, dns_client
 
 
+def name_resolved (addr):
+        if addr[0].startswith ('127.'):
+                return addr
+        
+
 def dns_PTR_resolve (addr, resolve):
         def resolved (request):
                 if request.dns_resources:
@@ -32,4 +37,10 @@ def dns_PTR_resolve (addr, resolve):
         l.reverse ()
         l.extend (('in-addr', 'arpa'))
         dns_client.RESOLVER (('.'.join (l), 'PTR'), resolved)
+
+
+def dns_PTR_resolved (listen):
+        listen.server_resolved = name_resolved
+        listen.server_resolve = dns_PTR_resolve
+        return listen
 

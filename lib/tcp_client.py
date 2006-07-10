@@ -22,6 +22,17 @@ import socket
 from allegra import async_client, dns_client
 
 
+def ip_resolved (addr):
+        try:
+                if len ([
+                        n for n in addr[0].split ('.') 
+                        if -1 < int (n) < 255
+                        ]) == 4:
+                        return addr
+                
+        except:
+                pass
+
 def dns_A_resolve (addr, resolve):
         def resolved (request):
                 if request.dns_resources:
@@ -62,7 +73,7 @@ def connect (
 # conveniences for named TCP/IP connections
 
 def dns_A_resolved (connections):
-        connections.client_resolved = dns_client.ip_resolved
+        connections.client_resolved = ip_resolved
         connections.client_resolve = dns_A_resolve
         return connections
 
