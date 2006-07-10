@@ -24,7 +24,7 @@ from allegra import loginfo, async_loop, async_limits
         
 def connect (dispatcher, addr, timeout, family=socket.AF_INET):
         "create a socket, try to connect it and schedule a timeout"
-        assert not dispatcher.connected and dispatcher.socket == None
+        assert not dispatcher.connected
         dispatcher.client_when = time.time ()
         try:
                 dispatcher.create_socket (family, socket.SOCK_STREAM)
@@ -67,9 +67,9 @@ class Connections (loginfo.Loginfo):
                 resolved (self)
                 inactive (self, timeout)
                 
-        def __call__ (self, dispatcher, name):
+        def __call__ (self, dispatcher, addr):
                 "registed, decorate and connect a new dispatcher"
-                if self.client_connect (dispatcher, name):
+                if self.client_connect (dispatcher, addr):
                         now = time.time ()
                         dispatcher.async_client = self
                         self.client_decorate (dispatcher, now)
@@ -82,30 +82,31 @@ class Connections (loginfo.Loginfo):
                         self.client_errors += 1
                 return dispatcher
                 
-        def client_connect (self, dispatcher, name):
+        def client_connect (self, dispatcher, addr):
                 "resolve and/or connect a dispatcher"
-                if self.client_resolved (name):
+                ip = self.client_resolved (addr)
+                if ip != None:
                         return connect (
-                                dispatcher, name, 
+                                dispatcher, addr, 
                                 self.client_timeout, self.client_family
                                 )
 
                 if self.client_resolve == None:
-                        self.client_unresolved (dispatcher, name)
+                        self.client_unresolved (dispatcher, addr[0])
                         return False
                 
-                def resolve (addr):
+                def resolve (ip):
                         if addr == None:
-                                self.client_unresolved (dispatcher, name)
+                                self.client_unresolved (dispatcher, addr[0])
                                 return
                         
                         if not connect (
-                                dispatcher, addr, 
+                                dispatcher, (ip, add[1]), 
                                 self.client_timeout, self.client_family
                                 ):
                                 self.client_errors += 1
                                 
-                self.client_resolve (name, resolve)
+                self.client_resolve (add[0], resolve)
                 return True
                 
         def client_unresolved (self, dispatcher, name):
@@ -279,7 +280,7 @@ class Pool (Connections):
 
 def resolved (connections):
         "allways resolved for unresolved dispatcher address"
-        connections.client_resolved = (lambda name: True)
+        connections.client_resolved = (lambda addr: addr[0])
         connections.client_resolve = None
         return connections
 

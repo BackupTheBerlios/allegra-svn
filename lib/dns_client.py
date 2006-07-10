@@ -23,7 +23,7 @@
 
 import time
 
-from allegra import async_loop, udp_peer
+from allegra import async_loop, async_core, udp_peer
 
 
 # a bit of OS specific code to get the addresses of the DNS name
@@ -267,7 +267,7 @@ class _PTR (Reactor):
 
 
 
-class Resolver (udp_peer.Bind):
+class Resolver (async_core.Dispatcher):
 
         # Parameters
         #
@@ -325,20 +325,25 @@ class Resolver (udp_peer.Bind):
                                 resolve (request)
                                 return
 
-                # no cache entry, maybe bind and send a new request
+                # no cache entry, send a new request
                 #
-                if self.socket == None:
-                        if not udp_peer.bind (self, self.dns_ip):
-                                resolve (None)
-                                return
-                                #
-                                # in case of failure, just keep trying.
-
                 request = self.DNS_reactors[question[1]] (
                         question, self.dns_servers
                         )
                 request.dns_client = self
                 request.dns_resolve = [resolve]
+                #
+                self.dns_send (request, when)
+                
+        def dns_send (self, request, when):
+                if not self.connected:
+                        if not udp_peer.bind (self, self.dns_ip):
+                                for resolve in request.dns_resolve:
+                                        resolve (None)
+                                return
+                                #
+                                # in case of failure, just keep trying.
+
                 assert None == self.log (
                         'send pending="%d" sent="%d"' % (
                                 len (self.dns_pending), self.dns_sent
@@ -364,6 +369,9 @@ class Resolver (udp_peer.Bind):
                         request.dns_continue
                         )
                 self.dns_sent += 1
+                
+        def writable (self):
+                return False # UDP/IP is never writable
                                 
         def handle_read (self):
                 # match the datagram's UID with the pending DNS requests
@@ -394,9 +402,8 @@ class Resolver (udp_peer.Bind):
                         )
                 dns_request.dns_unpack (datagram)
                 if not self.dns_pending:
-                        self.dns_done ()
+                        self.handle_close ()
 
-        dns_done = udp_peer.Bind.handle_close # == async_core.close :-)
         #
         # by default close when done and make sure the dispatcher does not
         # live to read for spam when it has nothing left to resolve.
@@ -414,17 +421,16 @@ def resolver ():
 RESOLVER = resolver () # never finalized, but not allways binded
         
 
-def ip_resolved (name):
+def ip_resolved (host):
         try:
-                return len ([
+                if len ([
                         n for n in host[0].split ('.') 
                         if -1 < int (n) < 255
-                        ]) == 4
-                                
+                        ]) == 4:
+                        return host[0]
+                
         except:
-                return False
-
-is_ip = ip_resolved # TODO: rename instead
+                pass
 
 def resolution (
         name, resolve, resolver, 

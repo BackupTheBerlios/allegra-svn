@@ -45,7 +45,9 @@ def long_ip (i):
 
 
 class PNS_circle (async_core.Dispatcher):
-	
+
+        udp_datagram_size = 1024
+                        	
 	def __init__ (self, pns_peer, name, subscribers=None):
 		self.PNS_SP= '%d:%s,0:,' % (len (name), name)
 		self.pns_peer = pns_peer
@@ -59,8 +61,9 @@ class PNS_circle (async_core.Dispatcher):
 
 	# asyncore dispatcher's methods 
 	
-	udp_datagram_size = 1024
-			
+        def writable (self):
+                return False
+        
 	def handle_read (self):
 		datagram, peer = self.recvfrom ()
 		if peer == None:
@@ -584,6 +587,8 @@ class PNS_UDP_peer (async_core.Dispatcher, timeouts.Timeouts):
 	# which are either simple and fast to handle (remove the timeout
 	# entry).
 
+        pns_datagram_size = 512
+                        
 	def __init__ (self, pns_peer, ip):
 		self.pns_peer = pns_peer
 		self.pns_joined = {}
@@ -602,8 +607,9 @@ class PNS_UDP_peer (async_core.Dispatcher, timeouts.Timeouts):
 	def __repr__ (self):
 		return 'pns-udp'
 
-	pns_datagram_size = 512
-			
+        def writable (self):
+                return False
+
 	def handle_read (self):
 		datagram, peer = self.recvfrom (pns_datagram_size)
 		if peer == None:
