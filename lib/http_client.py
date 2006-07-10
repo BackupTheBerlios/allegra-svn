@@ -83,7 +83,20 @@ class Dispatcher (
 			self.pipeline_wake_up ()
 		else:
 			self.pipeline_sleeping = True
-		
+
+        def handle_close (self):
+                assert None == self.log (
+                        'pipelined '
+                        ' requests="%d" responses="%d"'
+                        ' pending="%d" failed="%d"' % (
+                                self.http_requests, 
+                                self.http_responses,
+                                len (self.pipeline_requests),
+                                len (self.pipeline_responses)
+                                ), 'debug'
+                        )
+		self.close ()
+                
 	# Pipeline
 
         pipeline_keep_alive = False
@@ -259,6 +272,36 @@ class Dispatcher (
                 # ready to send.
                 
 
+class Connections (async_client.Connections):
+
+        def __init__ (
+                self, timeout=3, precision=1, 
+                resolution=tcp_client.dns_A_resolved
+                ):
+                async_client.Connections.__init__ (
+                        self, timeout, precision, socket.AF_INET
+                        )
+                resolution (self)
+
+        def __call__ (self, host, port=80, version='1.1'):
+                assert (
+                        type (host) == str and type (port) == int and
+                        version in ('1.1', '1.0')
+                        )
+                dispatcher = async_client.Connections.__call__ (
+                        self, Dispatcher (), (host, port)
+                        )
+                if dispatcher.closing:
+                        return
+
+                if port == 80:
+                        dispatcher.http_host = host
+                else:
+                        dispatcher.http_host = '%s:%d' % (host, port)
+                dispatcher.http_version = version
+                return dispatcher
+
+
 class Cache (async_client.Cache):
 
         def __init__ (
@@ -284,19 +327,6 @@ class Cache (async_client.Cache):
                 dispatcher.http_version = version
                 return dispatcher
 
-        def client_close (self, dispatcher):
-                assert None == dispatcher.log (
-                        'pipelined '
-                        ' requests="%d" responses="%d"'
-                        ' pending="%d" failed="%d"' % (
-                                dispatcher.http_requests, 
-                                dispatcher.http_responses,
-                                len (dispatcher.pipeline_requests),
-                                len (dispatcher.pipeline_responses)
-                                ), 'debug'
-                        )
-                async_client.Cache.client_close (self, dispatcher)
-        
 
 def GET (pipeline, url, headers=None):
         if headers == None:

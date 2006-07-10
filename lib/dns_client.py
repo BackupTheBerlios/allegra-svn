@@ -344,11 +344,6 @@ class Resolver (async_core.Dispatcher):
                                 #
                                 # in case of failure, just keep trying.
 
-                assert None == self.log (
-                        'send pending="%d" sent="%d"' % (
-                                len (self.dns_pending), self.dns_sent
-                                ), 'debug'
-                        )
                 request.dns_when = when
                 request.dns_uid = self.dns_sent % (1<<16)
                 request.dns_peer = (request.dns_servers[0], 53)
@@ -369,6 +364,11 @@ class Resolver (async_core.Dispatcher):
                         request.dns_continue
                         )
                 self.dns_sent += 1
+                assert None == self.log (
+                        'send pending="%d" sent="%d"' % (
+                                len (self.dns_pending), self.dns_sent
+                                ), 'debug'
+                        )
                 
         def writable (self):
                 return False # UDP/IP is never writable
