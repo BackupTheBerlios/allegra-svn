@@ -73,8 +73,10 @@ HTTP_RESPONSES = {
 
 if os.name == 'nt':
         allegra_time = time.clock
+        _LISTEN_MAX = 5
 else:
         allegra_time = time.time
+        _LISTEN_MAX = 1024
 
 
 class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
@@ -409,9 +411,10 @@ class File_cache (loginfo.Loginfo, finalization.Finalization):
 class Listen (async_server.Listen):
         
         http_hosts = {}
-
+        
         def __init__ (
-                self, addr, precision=3, max=5, family=socket.AF_INET
+                self, addr, precision=3, max=_LISTEN_MAX, 
+                family=socket.AF_INET
                 ):
                 async_server.Listen.__init__ (
                         self, Dispatcher, addr, precision, max, family 
