@@ -26,11 +26,9 @@ from allegra import (
         )
 
 
-class Reactor (
-        mime_reactor.MIME_producer, finalization.Finalization
-        ):
+class Reactor (finalization.Finalization):
                 
-        mime_collector_headers = http_response = None
+        http_response = mime_collector_headers = mime_collector_body = None
         
         def __init__ (
                 self, pipeline, url, headers, command, body
@@ -225,7 +223,7 @@ class Dispatcher (
 
         def http_client_continue (self, reactor):
                 # push one string and maybe a producer in the output fifo ...
-                line = '%s %s HTTP/%s\r\n' % (
+                request = '%s %s HTTP/%s\r\n' % (
                         reactor.http_command, 
                         reactor.http_urlpath, 
                         self.http_version
@@ -236,7 +234,7 @@ class Dispatcher (
                         lines = mime_headers.lines (
                                 reactor.mime_producer_headers
                                 )
-                        lines.insert (0, line)
+                        lines.insert (0, request)
                         self.output_fifo.append (''.join (lines))
                 else:
                         # POST and PUT ...
@@ -252,7 +250,7 @@ class Dispatcher (
                         lines = mime_headers.lines (
                                 reactor.mime_producer_headers
                                 )
-                        lines.insert (0, line)
+                        lines.insert (0, request)
                         self.output_fifo.append (''.join (lines))
                         self.output_fifo.append (
                                 reactor.mime_producer_body
@@ -296,14 +294,10 @@ class Connections (async_client.Connections):
                 resolution (self)
 
         def __call__ (self, host, port=80, version='1.1'):
-                dispatcher = async_client.Connections.__call__ (
+                return async_client.Connections.__call__ (
                         self, pipeline (host, port, version), (host, port)
                         )
-                if dispatcher.closing:
-                        return
-
-                return dispatcher
-
+                        
 
 class Cache (async_client.Cache):
 
@@ -317,13 +311,9 @@ class Cache (async_client.Cache):
                 resolution (self)
 
 	def __call__ (self, host, port=80, version='1.1'):
-                dispatcher = async_client.Cache.__call__ (
+                return async_client.Cache.__call__ (
                         self, pipeline (host, port, version), (host, port)
                         )
-                if dispatcher.closing:
-                        return
-
-                return dispatcher
 
 
 class Pool (async_client.Pool):
@@ -354,7 +344,10 @@ class Pool (async_client.Pool):
         
 
 def GET (pipeline, url, headers=None):
-        return Reactor (pipeline, url, headers or {}, 'GET', None)
+        if headers == None:
+                headers = {}
+        return Reactor (pipeline, url, headers, 'GET', None)
+                
                 
 def POST (pipeline, url, body, headers=None):
         if headers == None:
