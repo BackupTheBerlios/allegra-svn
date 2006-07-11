@@ -90,11 +90,11 @@ class PRESTo_async (
 # Most "real-world" implementation should validate all requests
 # asynchronously and then eventually invoke synchronized methods.
 
-class PRESTo_reactor_sync (reactor.Buffer_reactor):
+class PRESTo_reactor_sync (reactor.Buffer):
         
         def __init__ (self, select_trigger):
                 self.select_trigger = select_trigger
-                reactor.Buffer_reactor.__init__ (self)
+                reactor.Buffer.__init__ (self)
                 
         def __call__ (self, data):
                 assert type (data) == types.StringType

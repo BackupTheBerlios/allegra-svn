@@ -16,8 +16,9 @@
 
 ""
 
-from allegra import \
-	finalization, async_chat, collector, producer, reactor, mime_headers
+from allegra import (
+	finalization, collector, producer, reactor, mime_headers
+        )
 
 
 class MIME_producer (object):
@@ -109,7 +110,7 @@ class MIME_collector (object):
 			return self.mime_collector_finalize ()
 
 	def mime_collector_continue (self):
-		self.mime_collector_body = reactor.Buffer_reactor ()
+		self.mime_collector_body = reactor.Buffer ()
                 return False
 
 	def mime_collector_finalize (self, reactor):
@@ -161,11 +162,11 @@ class MULTIPART_collector (object):
 		headers = mime_headers.map (
 			mime_headers.split (self.multipart_buffer)
 			)
-                collector = self.multipart_factory (headers)
-		if not collector.collector_is_simple:
-			collector = Simple (collector)
-		self.multipart_parts.append (collector)
-		self.collect_incoming_data = collector.collect_incoming_data		
+                collect = self.multipart_factory (headers)
+		if not collect.collector_is_simple:
+			collect = collector.Simple (collect)
+		self.multipart_parts.append (collect)
+		self.collect_incoming_data = collect.collect_incoming_data		
 		self.found_terminator = self.multipart_found_boundary
 		self.set_terminator (self.multipart_boundary)
 		return False
@@ -223,7 +224,7 @@ class MIME_reactor (
 
 	def mime_collector_continue (self):
                 # a proxy buffer implementation
-		body = reactor.Buffer_reactor ()
+		body = reactor.Buffer ()
                 self.mime_producer_headers = self.mime_collector_headers
                 self.mime_producer_body = body
 		return body
@@ -260,7 +261,7 @@ if __name__ == '__main__':
 	# collecting its parts and reproducing the input. Finalization(s) are
 	# dumped to STDERR.
 			
-# A MIME reactor that uses a reactor.Buffer_reactor to proxy the collected
+# A MIME reactor that uses a reactor.Buffer to proxy the collected
 # headers and body to an asynchat channel simply by pushing the
 # reactor in its output_fifo queue. It may be used to proxy any
 # kind of MIME protocols, including HTTP, SMTP, POP3, etc.
@@ -268,7 +269,7 @@ if __name__ == '__main__':
 # The lifecycle of a one way MIME proxy is usally this one:
 #
 #	0. instanciated, completed and set as its mime_collector_body
-#          by the MIME collector channel, with a Buffer_reactor as body
+#          by the MIME collector channel, with a Buffer as body
 #	1. pushed to the MIME producer channel with its mime_producer_body
 #	   set to its mime_collector_body
 #	2. dereferenced by the collector channel when collected

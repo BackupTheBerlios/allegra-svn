@@ -88,7 +88,7 @@ class Composite (object):
 	
 	# This is a more "modern" composite producer than the original
 	# one, with support for stalled producers and generators. it is the
-	# bread & butter of Allegra's PRESTo! with the Buffer_reactor.
+	# bread & butter of Allegra's PRESTo! with the Buffer.
 	
         def __init__ (self, head, body, glob=1<<14): # 16KB globber
         	assert (

@@ -19,7 +19,7 @@
 "http://laurentszyster.be/blog/reactor/"
 
 
-class Buffer_reactor (object):
+class Buffer (object):
 
 	"a buffer reactor, usefull for asynchronous/synchronous proxy"
 
