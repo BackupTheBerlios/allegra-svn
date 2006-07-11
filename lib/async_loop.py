@@ -180,6 +180,10 @@ def _finalize ():
                         finalized.finalization = finalized.finalization (
                                finalized
                                ) # finalize and maybe continue ...
+                except Exit:
+                        finalized.finalization = None
+                        raise
+                
                 except:
                         finalized.finalization = None
                         loginfo.loginfo_traceback () # log exception
@@ -202,6 +206,9 @@ def _clock ():
 		try:
 			# ... do defer and ...
 			continued = event[1] (event[0])
+                except Exit:
+                        raise
+                
 		except:
 			loginfo.loginfo_traceback ()
 		else:
