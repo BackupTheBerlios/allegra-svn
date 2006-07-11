@@ -19,9 +19,10 @@
 
 import socket, time
 
-from allegra import \
-        loginfo, finalization, async_chat, tcp_client, \
-        dns_client, mime_headers, mime_reactor
+from allegra import (
+        loginfo, finalization, async_chat, producer, async_client,
+        dns_client, tcp_client, mime_headers, mime_reactor
+        )
 
 
 HOSTNAME = socket.gethostname ()
@@ -80,37 +81,31 @@ SMTP_RESPONSE_CLOSE = frozenset ((
         # close this unreliable pipeline.
 
 
-class SMTP_client_reactor (finalization.Finalization):
+class Request (finalization.Finalization):
 
         smtp_recipient = 0
 
-        def __init__ (self, mail_from, rcpt_to, body, headers):
+        def __init__ (self, mail_from, rcpt_to, body, headers=()):
                 self.smtp_when = time.time ()
                 self.smtp_mail_from = mail_from
                 self.smtp_rcpt_to = rcpt_to
                 self.smtp_responses = []
                 self.mime_producer_body = body
-                self.mime_producer_headers = headers
-
-        def more (self):
-                if self.producer_stalled ():
-                        return ''
-                      
-                if self.smtp_recipient < 0:
-                        return '%s\r\n' % self.smtp_responses[-1]
-                        
-                self.smtp_recipient = -1
-                return ''.join ([
-                        '%s\r\n' % l for l in self.smtp_responses
-                        ])
-                
-        def producer_stalled (self):
-                return -1 < self.smtp_recipient < len (self.smtp_rcpt_to)
+                self.mime_producer_headers = {
+                        'Message-id': '<%f.%d@%s>' % (
+                                self.smtp_when, id (self), HOSTNAME
+                                ),
+                        'Date': '%s %s' % (
+                                time.asctime (time.gmtime (self.smtp_when)),
+                                time.timezone
+                                ),
+                        'From': mail_from,
+                        'To': ', '.join (rcpt_to)
+                        }
+                self.mime_producer_headers.update (headers)
 
 
-class SMTP_client_channel (
-        tcp_client.Pipeline, tcp_client.TCP_client, async_chat.Dispatcher, 
-        ):
+class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
 
         # This SMTP client waits for 220 to wake up the pipeline, then uses 
         # the RSET command after each request is completed, in effect leaving
@@ -119,7 +114,7 @@ class SMTP_client_channel (
 
         def __init__ (self):
                 self.smtp_response = ''
-                tcp_client.Pipeline.__init__ (self)
+                self.pipeline_set ()
                 async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n')
                 
@@ -157,16 +152,16 @@ class SMTP_client_channel (
                                 reactor.smtp_recipient = 0
                                 self.pipeline_responses.append (reactor)
                         elif self.pipeline_keep_alive:
-                                self.pipeline_sleeping = 1
+                                self.pipeline_sleeping = True
                         else:
-                                self.push ('QUIT\r\n')
+                                self.output_fifo.append ('QUIT\r\n')
                         return
                 
                 # response expected ...
                 reactor = self.pipeline_responses[0]
                 if reactor.smtp_recipient < len (reactor.smtp_rctp_to):
                         # RCPT TO command for next recipient
-                        self.push (
+                        self.output_fifo.append (
                                 'RCPT TO: %s\r\n'
                                 '' % reactor.smtp_rcpt_to[
                                         reactor.smtp_recipient
@@ -176,165 +171,23 @@ class SMTP_client_channel (
                 elif reactor.smtp_responses[-1] != '354':
                         # send DATA command or mail input
                         if response == '354':
+                                push = self.output_fifo.append 
                                 # start mail input, end with <CRLF>.<CRLF>
-                                self.output_fifo.append (''.join (
-                                        mime_headers.lines (
-                                                reactor.mime_producer_headers
-                                                )
+                                push (''.join (mime_headers.lines (
+                                        reactor.mime_producer_headers
+                                        )))
+                                push (mime_reactor.Escaping_producer (
+                                        reactor.mime_producer_body
                                         ))
-                                self.output_fifo.append (
-                                        mime_reactor.Escaping_producer (
-                                                reactor.mime_producer_body
-                                                )
-                                        )
-                                self.output_fifo.append ('\r\n.\r\n')
+                                push ('\r\n.\r\n')
                                 self.handle_write ()
                         else:
                                 self.push ('DATA\r\n')
                 else:
                         # reactor completed, 
                         self.pipeline_responses.popleft ()
-                        self.push ('RSET\r\n')
+                        self.output_fifo.append ('RSET\r\n')
                 reactor.smtp_responses.append (response)
                 
         def pipeline_wake_up (self):
-                self.push ('NOOP\r\n')
-
-
-class SMTP_exchange_reactor (finalization.Finalization):
-        
-        def __init__ (
-                self, mail_from, rcpt_to, body, headers=None
-                ):
-                # assert debug type check, complete headers if None specified,
-                # index recipients per domain and send the body 
-                #
-                assert (
-                        type (mail_from) == str and 
-                        hasattr (rcpt_to, '__iter__') and
-                        len (rcpt_to) == len ([
-                                s for s in rcpt_to if type (s) == str
-                                ]) and
-                        hasattr (body, 'more') and
-                        headers == None or type (headers) == dict
-                        )
-                if headers == None:
-                        headers = {}
-                        headers['message-id'] = '<%f.%d@%s>' % (
-                               self.smtp_when, id (self), HOSTNAME
-                               )
-                        headers['date'] = '%s %s' % (
-                               time.asctime (time.gmtime (self.smtp_when)),
-                               time.timezone
-                               )
-                        headers['from'] = mail_from
-                        headers['to'] = ',\r\n'.join (rcpt_to)
-                # index recipient by domains name, use "127.0.0.1" as default
-                recipients = {}
-                for recipient in rcpt_to:
-                        try:
-                                domain = recipient.split ('@', 1)[1]
-                        except:
-                                domain = '127.0.0.1'
-                        recipients.setdefault (domain, []).append (recipient)
-                # instanciate one SMTP reactor per domain
-                self.smtp_client_reactors = dict ([(domain, SMTP_reactor (
-                        mail_from, recipients[domain], body, headers
-                        )) for domain in recipients.keys ()])
-                #for domain in recipients.keys ():
-                #        client.tcp_client ((ip, 25), timeout).smtp_client (
-                #                ).pipeline ()
-
-        def __call__ (self, finalized):
-                pass
-                
-
-class SMTP_client (dns_client.TCP_client_DNS):
-        
-        # manages a cache of one SMTP pipelines per server's IP address.
-        
-        TCP_CLIENT_CHANNEL = SMTP_client_channel
-        
-        def tcp_client_close (self, channel):
-                TCP_client.tcp_client_close (self, channel)
-                channel.pipeline_requests = channel.pipeline_responses = None
-                
-        def tcp_client_dns (self, channel, addr, resolved):
-                if len (resolved.dns_resources) > 0:
-                        # DNS address resolved, connect ...
-                        channel.tcp_connect ((
-                                resolved.dns_resources[0], addr[1]
-                                ))
-                else:
-                        del self.tcp_client_channels[addr]
-                        self.tcp_client_dns_error (channel, addr)
-                
-
-if __name__ == '__main__':
-        pass
-        #
-        # pipe the content of a mailbox archive to the network ...
-        
-        
-# Note about this implementation
-#
-# The purpose of this implementation is to provide a simple SMTP client 
-# interface to send mail directly from a peer to the recipient's relay,
-# bypassing any forward queue and concurrently delivering mail to
-# distinct mail exchanges.
-#
-# In effect Allegra's SMTP client will deliver much higher performance
-# and reliability to its applications, simply because it sticks to the
-# peer architecture supported by the protocol (which is why SMTP is such
-# a slow cow when it comes to handle large message queues: it was never
-# intended for such job).
-#
-# Synopsis
-#
-#        python -OO smtp_client.py sender, [recipients] < mailbox.txt
-#
-# API
-#
-#        python -OO sync_stdio.py -d
-#
-#        info
-#        Allegra Console - ...
-#
-#        >>> from allegra import smtp_client
-#        >>> smtp_client.SMTP_client_channel ((
-#                '127.0.0.1', 25)).smtp_mailto (
-#                'me@home', ('you@work', 'me@work')
-#                ) (producer.Simple ('Subject: Test\r\n\r\nHello World?'))
-#        >>>
-#
-# This module implements an SMTP client pipeline interface that will behave
-# identically wether the server supports or not pipelining, that is without
-# actually using ESMTP capabilities. Because the protocol syntax does not 
-# allow true pipelining since each MAIL FROM and RCPT TO practically require
-# the client to wait for an approval. If you *need* pipelining for obvious
-# performance reasons, use DJBernstein amazing software and the QMTP or QMQP 
-# protocols instead.
-#
-# This module is of course usefull only when relaying mail directly to
-# the final recipients' relays, resolve their domain mail exchanges
-# and relay one copy of the mail to the first available MX peer of
-# each domain.
-#
-# The purpose of is to enable SMTP mail relay for a mobile peer, regardless 
-# of the restrictions set by the outgoing relay(s) available where it is 
-# connected. The benefit for its applications is the absence of configuration
-# problems, the immediate error reporting, the increased confidentiality
-# of the mail not relayed locally and probably better average delivery 
-# performances for a peer thanks to distribution.
-#
-# Allegra is designed for peer networking, and in this case mail traffic
-# will most probably be very "localized" and consist mainly of mails with 
-# relatively few recipients belonging to fewer distinct domains. So, when 
-# mail distribution is taken care at the peer itself, without relay, an
-# absolute performance gain is made from the absence of latency induced by
-# a central queue. And since what matters is the instant nature of messaging
-# for a peer, the absence of fail-over retry made possible by that queue is
-# not a missing function. Instead, the peer's user can immediately have an
-# acknowledgement of delivery or a failure notice from which to react.
-#
-# It is an ideal SMTP mail client for a personal network peer
+                self.output_fifo.append ('NOOP\r\n')
