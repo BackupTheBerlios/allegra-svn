@@ -105,7 +105,7 @@ if os.name == 'posix':
                         self.lock.release ()
                 os.write (self.trigger, 'x')
         
-        def poxis_trigger_close (self):
+        def posix_trigger_close (self):
                 "close the trigger"
                 async_core.Dispatcher.close (self)
                 os.close (self.trigger)
