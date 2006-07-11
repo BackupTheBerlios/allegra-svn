@@ -18,6 +18,7 @@
 "A collection of functions to tokenize and parse MIME headers"
 
 def lines (headers):
+        "returns a list of MIME header lines from a dictionnary"
         l = ['%s: %s\r\n' % (n, v) for n,v in headers.items ()]
         l.append ('\r\n')
         return l
@@ -59,6 +60,7 @@ def map (lines):
         
         
 def options (headers, name):
+        "get a list of options for a named header in a dictionnary"
         options = headers.get (name)
         if options == None:
                 return (None, )
@@ -67,6 +69,7 @@ def options (headers, name):
         
 
 def preferences (headers, name, default=None):
+        "get a list of sorted preferences for a named header in a dictionnary"
         options = headers.get (name)
         if options == None:
                 return (default, )
