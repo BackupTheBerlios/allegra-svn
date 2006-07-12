@@ -34,7 +34,7 @@ class PNS_peer (loginfo.Loginfo):
 		self.pns_resolution = pns_resolution.PNS_resolution (self)
 		self.pns_inference = pns_inference.PNS_inference (self)
                 self.pns_tcp = pns_tcp.Listen (self, tcp_ip)
-		self.pns_udp = pns_udp.PNS_UDP_peer (self, self.pns_name)
+		self.pns_udp = pns_udp.Peer (self, self.pns_name)
 			
 	def __repr__ (self):
 		return 'pns-peer'

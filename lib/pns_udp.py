@@ -44,10 +44,10 @@ def long_ip (i):
 	return '.'.join (l)
 
 
-class PNS_circle (async_core.Dispatcher):
-
-        udp_datagram_size = 1024
+class Circle (async_core.Dispatcher):
                         	
+        pns_datagram_size = 1024
+                                
 	def __init__ (self, pns_peer, name, subscribers=None):
 		self.PNS_SP= '%d:%s,0:,' % (len (name), name)
 		self.pns_peer = pns_peer
@@ -65,7 +65,7 @@ class PNS_circle (async_core.Dispatcher):
                 return False
         
 	def handle_read (self):
-		datagram, peer = self.recvfrom ()
+		datagram, peer = self.recvfrom (self.pns_datagram_size)
 		if peer == None:
 			assert None == self.log ('nop', 'debug')
 			return
@@ -517,7 +517,7 @@ class PNS_circle (async_core.Dispatcher):
 			self.pns_right = self.pns_left = None
 
 
-class PNS_axis (PNS_circle): 
+class Axis (Circle): 
 
 	# An axis is restricted to peers which IP addresses mask its name.
 	# Their purpose is to seed the network and let peers connect the grid
@@ -546,28 +546,28 @@ class PNS_axis (PNS_circle):
 
 	def __init__ (self, pns_peer, name, subscribers):
 		self.pns_netmask = ip_long (name)
-		PNS_circle.__init__ (self, pns_peer, name, subscribers)
+		Circle.__init__ (self, pns_peer, name, subscribers)
 
 	def __repr__ (self):
 		return 'pns-udp-axis name="%s"' % self.pns_name
 		
 	def pns_join (self, left):
 		if ip_long (left) & self.pns_netmask == self.pns_netmask:
-			PNS_circle.pns_join (self, left)
+			Circle.pns_join (self, left)
 			return
 			
 		self.log ('pns-join-drop ip="%s"' % left, 'error')
 
 	def pns_joined (self, right):
 		if ip_long (right[0]) & self.pns_netmask == self.pns_netmask:
-			PNS_circle.pns_joined (self, right)
+			Circle.pns_joined (self, right)
 			return
 
 		# TODO: ban ?
 		self.log ('joined-drop ip="%s"' % right[0], 'error')
 
 
-class PNS_UDP_peer (async_core.Dispatcher, timeouts.Timeouts):
+class Peer (async_core.Dispatcher, timeouts.Timeouts):
 
 	# PNS/UDP, at 320Kbps may set 80 timeouts per seconds, one every
 	# 12,5 millisecond which would amount to 240 timeouts in 3 seconds.
@@ -667,9 +667,9 @@ class PNS_UDP_peer (async_core.Dispatcher, timeouts.Timeouts):
 
 	def pns_subscribe (self, name, subscribers=None):
 		if is_ip (name):
-			return PNS_axis (self.pns_peer, name, subscribers)
+			return Axis (self.pns_peer, name, subscribers)
 			
-		return PNS_circle (self.pns_peer, name, subscribers)
+		return Circle (self.pns_peer, name, subscribers)
 		
 	def pns_quit (self):
 		assert None == self.log ('quit', 'debug')
@@ -755,7 +755,7 @@ if __name__ == '__main__':
 			self.pns_subscriptions = {}
 			self.pns_resolution = PNS_resolution ()
 			self.pns_inference = PNS_inference ()
-			self.pns_udp = PNS_UDP_peer (self, self.pns_name)
+			self.pns_udp = Peer (self, self.pns_name)
 			self.pns_udp_finalize = self.pns_exit
 
 		def __repr__ (self):
@@ -809,7 +809,7 @@ if __name__ == '__main__':
 	else:
 		PNS_run = PNS_peer
 	PNS_run (sys.argv[1])
-	async_loop.loop ()
+	async_loop.dispatch ()
 		
 # The Longest Modules! PNS/UDP is a nice state machine ;-)
 #
