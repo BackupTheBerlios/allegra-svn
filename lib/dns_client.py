@@ -44,7 +44,7 @@ def _peers ():
                     
         elif os.name == 'posix':
                 return re.compile ('nameserver[ ]+(.+)').findall (
-                        open ('/etc/resolve.conf', 'r').read ()
+                        open ('/etc/resolv.conf', 'r').read ()
                         )
                         
         return ['127.0.0.1'] # expect a local dns cache!
