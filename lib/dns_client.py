@@ -17,7 +17,7 @@
 
 ""
 
-import time
+import time, re
 
 from allegra import async_loop, async_core, udp_peer
 
@@ -32,7 +32,6 @@ def _peers ():
                 # avoid Win32: parse XP's "ipconfig /all" instead accessing 
                 # the Microsoft API, ymmv. 
                 # 
-                import re
                 m = re.search (
                         'DNS[.\s]+?:\s+?'
                         '([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).+?'
@@ -44,9 +43,11 @@ def _peers ():
                         return m.groups ()
                     
         elif os.name == 'posix':
-                # TODO: parse /etc/resolve.conf for UNIX-like systems,
-                #
-                return ['127.0.0.1'] # expect a local djbdns cache!
+                return re.compile ('nameserver[ ]+(.+)').findall (
+                        open ('/etc/resolve.conf', 'r').read ()
+                        )
+                        
+        return ['127.0.0.1'] # expect a local dns cache!
 
 # unpack and parse names, ttl and preference from resource DNS records
 
