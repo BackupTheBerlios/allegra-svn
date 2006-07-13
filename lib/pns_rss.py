@@ -193,7 +193,7 @@ if __name__ == '__main__':
         else:
                 benchmark = __debug__
         t = time.clock ()
-        http = http_client.HTTP_client ()
+        http = http_client.Cache ()
         if len (sys.argv) > 2:
                 from allegra import netstring, pns_model, pns_client
                 pns = pns_client.Cache ()
