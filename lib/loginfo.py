@@ -21,6 +21,20 @@ import sys, types
 
 from allegra import netstring, prompt
 
+# CAVEAT!
+#
+# since Loginfo instances update their own namespace with bound methods,
+# they actually cycle, referencing themselves. so, when toggling off is
+# a requirement if you need to finalize an instance that has been 
+# explicitely logged in or out.
+#
+# the trade-off is the following: most toggling happens at the class level
+# in practice. From development to production, instance loginfo toggling
+# will disapear. And if you ask to log an object at runtime, it's a practical
+# way to *not* finalize it: you're observing something! And that's even more
+# true if you have to manipulate instances in production ...
+#
+# Simple but not obvious :-)
 
 class Write_and_flush (object):
 	
@@ -201,11 +215,6 @@ def loginfo_traceback (ctb=None):
 		)
 	return ctb
 
-
-__doc__ = "http://laurentszyster.be/blog/loginfo/"
-
-__author__ = 'Laurent A.V. Szyster <contact@laurentszyster.be>'
-        
 
 # SYNOPSIS
 #
