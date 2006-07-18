@@ -19,6 +19,11 @@
 
 import time, socket, collections
 
+try:
+        SOCKET_FAMILIES = (socket.AF_INET, socket.AF_UNIX)
+except:
+        SOCKET_FAMILIES = (socket.AF_INET, )
+
 from allegra import loginfo, async_loop, async_limits
         
         
@@ -27,7 +32,7 @@ def connect (dispatcher, addr, timeout, family=socket.AF_INET):
         assert (
                 not dispatcher.connected and
                 type (timeout) == int and timeout > 0 and
-                family in (socket.AF_INET, socket.AF_UNIX)
+                family in SOCKET_FAMILIES
                 )
         dispatcher.client_when = time.time ()
         try:
@@ -67,7 +72,7 @@ class Connections (loginfo.Loginfo):
                 assert (
                         type (timeout) == int and timeout > 0 and
                         type (precision) == int and precision > 0 and
-                        family in (socket.AF_INET, socket.AF_UNIX)
+                        family in SOCKET_FAMILIES
                         )
                 self.client_managed = {}
                 self.client_timeout = timeout
@@ -206,7 +211,7 @@ class Cache (Connections):
                 assert (
                         type (timeout) == int and timeout > 0 and
                         type (precision) == int and precision > 0 and
-                        family in (socket.AF_INET, socket.AF_UNIX)
+                        family in SOCKET_FAMILIES
                         )
                 self.client_managed = {}
                 self.client_timeout = timeout
@@ -251,7 +256,7 @@ class Pool (Connections):
                         type (size) == int and size > 1 and
                         type (timeout) == int and timeout > 0 and
                         type (precision) == int and precision > 0 and
-                        family in (socket.AF_INET, socket.AF_UNIX)
+                        family in SOCKET_FAMILIES
                         )
                 self.client_managed = []
                 self.client_pool = size
