@@ -39,7 +39,7 @@
 
 "http://laurentszyster.be/blog/async_loop/"
 
-import select, errno, time, collections, heapq
+import gc, select, errno, time, collections, heapq
 
 from allegra import loginfo
 
@@ -267,7 +267,7 @@ _dispatched = {}
 def dispatch ():
         "dispatch I/O, time and finalization events"
         assert None == loginfo.log ('async_dispatch_start', 'debug')
-        while _dispatched or _scheduled or _finalized:
+        while _dispatched or _scheduled or _finalized or gc.collect () > 0:
                 try:
                         _io (_dispatched, precision, concurrency)
                         _clock ()
