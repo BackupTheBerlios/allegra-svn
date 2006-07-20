@@ -111,7 +111,7 @@ class Dispatcher (async_core.Dispatcher):
         
         terminator = None
         collector_stalled = False
-        collector_is_simple = True
+        collector_is_simple = False
         
         def __init__ (self):
                 self.ac_in_buffer = ''
