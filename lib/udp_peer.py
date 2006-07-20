@@ -53,6 +53,7 @@ def bind (dispatcher, ip=None, port=None):
 class Bind (async_core.Dispatcher):
         
         udp_peer_fifo = None
+        datagram_size = 512 
         
 	def __repr__ (self):
 		return 'udp-peer id="%x"' % id (self)
@@ -82,7 +83,7 @@ class Bind (async_core.Dispatcher):
 
 	def handle_read (self):
 		# to subclass
-		data, peer = self.recvfrom ()
+		data, peer = self.recvfrom (self.datagram_size)
 		if peer != None:
 			assert None == self.log (
 				'recvfrom ip="%s" port"%d" bytes="%d"' % (
@@ -94,6 +95,11 @@ class Bind (async_core.Dispatcher):
 
 
         def udp_peer_push (self, datagram_to):
+                assert (
+                        len (datagram) == 2 and 
+                        type (datagram[0]) == str and
+                        type (datagram[1]) == int
+                        )
                 try:
                         self.udp_peer_fifo.append (datagram_to)
                 except:
@@ -114,6 +120,13 @@ class Bind (async_core.Dispatcher):
                 sendto = self.sendto
                 for datagram_to in self.udp_peer_fifo: 
                         sendto (*datagram_to)
+                        assert None == self.log (
+                                'sendto ip="%s" port"%d" bytes="%d"' % (
+                                        datagram_to[1][0], 
+                                        datagram_to[1][1], 
+                                        len (datagram_to[0])
+                                        ), 'debug'
+                                )
                 self.udp_peer_fifo = None
                 #
                 # the "gist" of that default implementation, is that it
