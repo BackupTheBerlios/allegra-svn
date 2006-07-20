@@ -17,7 +17,7 @@
 
 ""
 
-from allegra import netstring, async_core, timeouts, udp_peer, pns_model
+from allegra import netstring, async_core, timeouts, ip_peer, pns_model
 
 
 def is_ip (name):
@@ -363,7 +363,7 @@ class Circle (async_core.Dispatcher):
 	def pns_join (self, left):
 		assert None == self.log ('join ip="%s"' % left, 'debug')
 		if self.socket == None:
-			if not udp_peer.bind (
+			if not ip_peer.udp_bind (
                                 self, self.pns_peer.pns_udp.addr[0]
                                 ):
                                 self.pns_left = None # failed to join
@@ -443,7 +443,7 @@ class Circle (async_core.Dispatcher):
 		assert None == self.log ('root ip="%s"' % right[0], 'debug')
 		self.pns_left = right[0]
 		if self.socket == None:
-			udp_peer.bind (
+			ip_peer.udp_bind (
 				self, self.pns_peer.pns_udp.addr[0]
 				)
 		self.pns_in_circle (right)
@@ -594,7 +594,7 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 		self.pns_joined = {}
 		self.pns_accepted = {}
 		timeouts.Timeouts.__init__ (self, self.pns_timeout, 3, 0.3)
-		if udp_peer.bind (self, ip, 3534):
+		if ip_peer.udp_bind (self, ip, 3534):
                         subscribed = pns_peer.pns_subscribed
                         subscriptions = pns_peer.pns_subscriptions
         		for name in subscribed.keys ():

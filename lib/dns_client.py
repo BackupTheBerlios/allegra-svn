@@ -19,7 +19,7 @@
 
 import time, re
 
-from allegra import async_loop, async_core, udp_peer
+from allegra import async_loop, async_core, ip_peer
 
 
 # a bit of OS specific code to get the addresses of the DNS name
@@ -334,7 +334,7 @@ class Resolver (async_core.Dispatcher):
                 
         def dns_send (self, request, when):
                 if not self.connected:
-                        if not udp_peer.bind (self, self.dns_ip):
+                        if not ip_peer.udp_bind (self, self.dns_ip):
                                 for resolve in request.dns_resolve:
                                         resolve (None)
                                 return

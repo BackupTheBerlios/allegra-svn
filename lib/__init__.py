@@ -30,7 +30,7 @@ __all__ = [
         #
         # Major Internet Application Protocols
         #
-        'udp_peer', 'dns_client', 
+        'ip_peer', 'dns_client', 
         'tcp_server', 'tcp_client', 
         'mime_headers', 'mime_reactor',
         # 'smtp_client', 'pop_client', 'nnrp_client', 
