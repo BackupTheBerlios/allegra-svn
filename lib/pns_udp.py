@@ -20,30 +20,6 @@
 from allegra import netstring, async_core, timeouts, ip_peer, pns_model
 
 
-def is_ip (name):
-	return len ([
-		digit for digit in name.split ('.')
-		if digit.isdigit () and -1 < int (digit) < 256
-		]) == 4
-
-def ip_long (s):
-	l = map (long, s.split ('.'))
-	i = l.pop (0)
-	while l:
-		i = (i << 8) + l.pop (0)
-	return i
-
-def long_ip (i):
-	i, rest = divmod (i, 16777216)
-	l = [str (i)]
-	i, rest = divmod (rest, 65536)
-	l.append (str (i))
-	i, rest = divmod (rest, 256)
-	l.append (str (i))
-	l.append (str (rest))
-	return '.'.join (l)
-
-
 class Circle (async_core.Dispatcher):
                         	
         pns_datagram_size = 1024
@@ -141,7 +117,7 @@ class Circle (async_core.Dispatcher):
 		if datagram.startswith ('0:,'):
 			# command: quit right
 			model = list (netstring.decode (datagram))
-			if len (model) == 2 and is_ip (model[1]):
+			if len (model) == 2 and ip_peer.is_ip (model[1]):
 				self.pns_quit_right (model[1])
 				return
 
@@ -226,7 +202,7 @@ class Circle (async_core.Dispatcher):
 				if (
 					len (model) == 3 and
 					model[1] == '' and
-					is_ip (model[2])
+					ip_peer.is_ip (model[2])
 					):
 					# bounce to join left or right of L
 					self.pns_join (model[2])
@@ -242,7 +218,7 @@ class Circle (async_core.Dispatcher):
 			# handle protocol statement
 			model = list (netstring.decode (datagram))
 			if not (len (model) == 3 and (
-				model[2] == '' or is_ip (model[2])
+				model[2] == '' or ip_peer.is_ip (model[2])
 				)):
 				assert None == self.log (
 					datagram, 'invalid-protocol-answer'
@@ -545,21 +521,25 @@ class Axis (Circle):
 	# and by subscribing to it you allow any peer to join.
 
 	def __init__ (self, pns_peer, name, subscribers):
-		self.pns_netmask = ip_long (name)
+		self.pns_netmask = ip_peer.ip_long (name)
 		Circle.__init__ (self, pns_peer, name, subscribers)
 
 	def __repr__ (self):
 		return 'pns-udp-axis name="%s"' % self.pns_name
 		
 	def pns_join (self, left):
-		if ip_long (left) & self.pns_netmask == self.pns_netmask:
+		if ip_peer.ip_long (
+                        left
+                        ) & self.pns_netmask == self.pns_netmask:
 			Circle.pns_join (self, left)
 			return
 			
 		self.log ('pns-join-drop ip="%s"' % left, 'error')
 
 	def pns_joined (self, right):
-		if ip_long (right[0]) & self.pns_netmask == self.pns_netmask:
+		if ip_peer.ip_long (
+                        right[0]
+                        ) & self.pns_netmask == self.pns_netmask:
 			Circle.pns_joined (self, right)
 			return
 
@@ -666,7 +646,7 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 		del self.pns_peer
 
 	def pns_subscribe (self, name, subscribers=None):
-		if is_ip (name):
+		if ip_peer.is_ip (name):
 			return Axis (self.pns_peer, name, subscribers)
 			
 		return Circle (self.pns_peer, name, subscribers)

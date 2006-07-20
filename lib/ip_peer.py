@@ -15,15 +15,46 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/ip_peer/"
 
 import socket, random #, errno ?
 
-from allegra import async_core
+
+def is_ip (name):
+        return len (tuple ((
+                digit for digit in name.split ('.')
+                if digit.isdigit () and -1 < int (digit) < 256
+                ))) == 4
+
+
+def in_addr_arpa (s):
+        l = s.split ('.')
+        l.reverse ()
+        l.extend (('in-addr', 'arpa'))
+        return '.'.join (l)
+        
+
+def ip_long (s):
+        l = [long (n) for n in s.split ('.')]
+        i = l.pop (0)
+        while l:
+                i = (i << 8) + l.pop (0)
+        return i
+
+def long_ip (i):
+        i, rest = divmod (i, 16777216)
+        l = [str (i)]
+        i, rest = divmod (rest, 65536)
+        l.append (str (i))
+        i, rest = divmod (rest, 256)
+        l.append (str (i))
+        l.append (str (rest))
+        return '.'.join (l)
 
 
 def my_ip ():
         return socket.gethostbyname (socket.gethostname ())
+
 
 def udp_bind (dispatcher, ip=None, port=None):
         addr = ip or my_ip (), port or (

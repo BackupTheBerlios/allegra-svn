@@ -19,19 +19,12 @@
 
 import socket
 
-from allegra import async_client, dns_client
+from allegra import async_client, ip_peer, dns_client
 
 
 def ip_resolved (addr):
-        try:
-                if len ([
-                        n for n in addr[0].split ('.') 
-                        if -1 < int (n) < 255
-                        ]) == 4:
-                        return addr
-                
-        except:
-                pass
+        if ip_peer.is_ip (addr[0]):
+                return addr
 
 def dns_A_resolve (addr, resolve):
         def resolved (request):

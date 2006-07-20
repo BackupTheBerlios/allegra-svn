@@ -19,7 +19,7 @@
 
 import socket
 
-from allegra import async_client, dns_client
+from allegra import async_client, ip_peer, dns_client
 
 
 def name_resolved (addr):
@@ -33,10 +33,10 @@ def dns_PTR_resolve (addr, resolve):
                         resolve ((request.dns_resources[0], addr[1]))
                 else:
                         resolve (None)
-        l = addr[0].split ('.')
-        l.reverse ()
-        l.extend (('in-addr', 'arpa'))
-        dns_client.RESOLVER (('.'.join (l), 'PTR'), resolved)
+        
+        dns_client.RESOLVER ((
+                ip_peer.in_addr_arpa (addr[0]), 'PTR'
+                ), resolved)
 
 
 def dns_PTR_resolved (listen):
