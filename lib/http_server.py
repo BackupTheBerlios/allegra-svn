@@ -118,7 +118,7 @@ class Dispatcher (
                         ):
 			self.mime_collector_lines.pop (0)
                 if not self.mime_collector_lines:
-                        return False
+                        return self.closing
                         #
                         # From Medusa's http_server.py Original Comment:
                         #
@@ -152,7 +152,7 @@ class Dispatcher (
                         reactor.http_response = 400
                         self.http_reactor = reactor
                         self.mime_collector_finalize ()
-                        return False
+                        return self.closing
                         #
                         # 400 - invalid
 
@@ -184,14 +184,11 @@ class Dispatcher (
                 if self.async_server.http_continue (reactor):
                         if reactor.http_request[0] in ('POST', 'PUT'):
                                 return True
-                        #
-                        # it is up to the reactor's handler to properly
-                        # finalize the HTTP response, here one of the the
-                        # server's virtual hosts instance.
-                        #
-                        # return False and stall the collector we expect a
-                        # MIME body collector to be provided ...
-                        return False
+                                #
+                                # it is up to the reactor's handler to 
+                                # finalize the HTTP response ...
+
+                        return self.closing
                 
                 return self.http_continue (reactor)
                 
@@ -310,7 +307,7 @@ class Dispatcher (
                 #assert None == reactor.log (
                 #        reactor.mime_producer_lines[0][:-2], 'response'
                 #        )
-                return False
+                return self.closing
 
         # Support for stalled producers is a requirement for programming
         # asynchronous peer. It is also a practical solution for simple 

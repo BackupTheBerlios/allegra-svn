@@ -47,8 +47,6 @@ class Reactor (finalization.Finalization):
                 return self
                         
 
-# HTTP_RESPONSE_RE = re.compile ('.+?/([0-9.]+) ([0-9]{3}) (.*)')
-
 class Dispatcher (
         mime_reactor.MIME_collector,
 	async_chat.Dispatcher, 
@@ -165,7 +163,10 @@ class Dispatcher (
                         ):
                         self.mime_collector_lines.pop (0)
                 if not self.mime_collector_lines:
-                        return False
+                        return self.closing
+                        #
+                        # make sure that the collector is stalled once the
+                        # dispatcher has been closed.
                 
 		reactor = self.pipeline_responses[0]
 		try:
@@ -194,7 +195,7 @@ class Dispatcher (
 		        self.http_collector_continue (
                                 reactor.mime_collector_body
                                 )
-                return False
+                return self.closing
 		
 	def mime_collector_finalize (self):
                 # reset the channel state to collect the next request ...
@@ -210,7 +211,7 @@ class Dispatcher (
                         self.pipeline_wake_up ()
                 if not self.pipeline_responses:
                         self.pipeline_sleeping = True
-                return False
+                return self.closing
 
 	# HTTP/1.1 client reactor
         
@@ -281,6 +282,8 @@ def connect (host, port=80, version='1.1', timeout=3):
         tcp_client.connect (dispatcher, (host, port), timeout)
         return dispatcher
 
+
+# conveniences
 
 class Connections (async_client.Connections):
 
@@ -356,4 +359,3 @@ def POST (pipeline, url, body, headers=None):
                         }
         return Reactor (pipeline, url, headers, 'POST', body)                
 
-# RE_URL = re.compile ('http://([^/:]+)[:]?([0-9]+)?(/.+)')
