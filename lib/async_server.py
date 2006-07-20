@@ -19,6 +19,11 @@
 
 import socket, time
 
+try:
+        SOCKET_FAMILIES = (socket.AF_INET, socket.AF_UNIX)
+except:
+        SOCKET_FAMILIES = (socket.AF_INET, )
+
 from allegra import async_loop, async_core, async_limits
 
 
@@ -34,7 +39,7 @@ class Listen (async_core.Dispatcher):
                 assert (
                         type (precision) == int and precision > 0 and
                         type (max) == int and max > 0 and
-                        family in (socket.AF_INET, socket.AF_UNIX)
+                        family in SOCKET_FAMILIES
                         )
                 self.server_dispatchers = []
                 self.server_named = {}
