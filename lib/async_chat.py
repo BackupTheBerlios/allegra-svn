@@ -109,6 +109,10 @@ class Dispatcher (async_core.Dispatcher):
 
         ac_in_buffer_size = ac_out_buffer_size = 4096
         
+        terminator = None
+        collector_stalled = False
+        collector_is_simple = True
+        
         def __init__ (self):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
@@ -117,8 +121,6 @@ class Dispatcher (async_core.Dispatcher):
         def __repr__ (self):
                 return 'async-chat id="%x"' % id (self)
         
-        collector_stalled = False
-                
         def readable (self):
                 "predicate for inclusion in the poll loop for input"
                 return not (
@@ -204,6 +206,14 @@ class Dispatcher (async_core.Dispatcher):
                 else:
                         self.ac_out_buffer = ''
                         
+        def handle_close (self):
+                self.close ()
+                if not self.collector_stalled:
+                        while not self.found_terminator (): pass
+                #
+                # close the socket and exhaust the collector if it is not
+                # yet stalled.
+                        
         def close_when_done (self):
                 """automatically close this channel once the outgoing queue 
                 is empty, or handle close now if it is allready empty"""
@@ -227,8 +237,6 @@ class Dispatcher (async_core.Dispatcher):
                                 self, self.ac_in_buffer
                                 )
 
-        terminator = None
-
         def set_terminator (self, terminator):
                 "set the channel's terminator"
                 self.terminator = terminator
@@ -246,7 +254,7 @@ class Dispatcher (async_core.Dispatcher):
                 assert None == self.log (
                         self.get_terminator (), 'found-terminator'
                         )
-                return False # collector NOT stalled
+                return True # do not pipeline 
         
 # Note about this implementation
 #
