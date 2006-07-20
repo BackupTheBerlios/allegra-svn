@@ -229,8 +229,7 @@ def bind_simple (cin, cout):
                                 cin.collect_incoming_data,
                                 cin.found_terminator
                                 )
-                        cin.found_terminator ()
-                        return True
+                        return cin.found_terminator ()
                 
                 return False
 
@@ -250,8 +249,7 @@ def bind_complex (cin, cout):
                                 cout.set_terminator,
                                 cout.get_terminator
                                 )
-                        cin.found_terminator ()
-                        return True
+                        return cin.found_terminator ()
                 
                 return False
         
