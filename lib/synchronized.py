@@ -136,6 +136,7 @@ class File_collector (object):
                 
         def found_terminator (self):
                 self.synchronized ((sync_close, (self, 'w', )))
+                return True
 
         def async_open (self, mode): pass
         
