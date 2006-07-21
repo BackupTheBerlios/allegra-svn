@@ -29,8 +29,7 @@ def _peers ():
         # called once
         import os
         if os.name == 'nt':
-                # avoid Win32: parse XP's "ipconfig /all" instead accessing 
-                # the Microsoft API, ymmv. 
+                # avoid _winreg: parse XP's "ipconfig /all" instead ...
                 # 
                 m = re.search (
                         'DNS[.\s]+?:\s+?'
@@ -416,18 +415,9 @@ def resolver ():
 
 
 RESOLVER = resolver () # never finalized, but not allways binded
-        
-def ip_resolution (
-        name, resolve, resolver, 
-        predicate='A', extract=(lambda: r[0])
-        ):
-        def dns_resolve (resolved):
-                if resolved.dns_resources:
-                        resolve (extract (resolved.dns_resources))
-                else:
-                        resolve (None)
-        resolver.dns_resolve ((name, predicate), dns_resolve)
 
+resolve = RESOLVER.dns_resolve
+        
                 
 if __name__ == '__main__':
         import sys
@@ -438,7 +428,7 @@ if __name__ == '__main__':
                 'info'
                 )
                        
-        def resolve (request):
+        def resolved (request):
                 model = list (request.dns_question)
                 if request.dns_resources == None:
                         model.append ('')
@@ -464,7 +454,7 @@ if __name__ == '__main__':
                         question = (sys.argv[1], 'A')
         else:
                 question = ('localhost', 'A')
-        Resolver (servers) (question, resolve)
+        Resolver (servers) (question, resolved)
         async_loop.dispatch ()
         
         
@@ -512,3 +502,9 @@ if __name__ == '__main__':
 # credibility of an answer. DNS is not supposed to produce dissent. Any
 # name about which there is dissent is not safe for public use.
 #
+#
+# Only IPv4
+#
+# IPv6 is not expected to take over the world any time soon ...
+#
+# http://cr.yp.to/djbdns/ipv6mess.html
