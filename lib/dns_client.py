@@ -166,8 +166,9 @@ class Reactor (object):
                         resolve (self)
                 self.dns_resolve = None
                 if len (self.dns_client.dns_pending) == 0:
-                        self.dns_client.close ()
+                        self.dns_client.handle_close ()
                 self.dns_client = None
+                
 
 class _A (Reactor):
 
