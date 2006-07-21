@@ -34,7 +34,7 @@ def _peers ():
                 m = re.search (
                         'DNS[.\s]+?:\s+?'
                         '([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).+?'
-                        '([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)',
+                        '([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?',
                         os.popen ('ipconfig /all','r').read (),
                         flags=re.DOTALL
                         )
@@ -103,6 +103,7 @@ class Reactor (object):
         def __init__ (self, question, servers):
                 self.dns_question = question
                 self.dns_servers = servers
+                self.dns_peer = (servers[0], 53)
 
         def dns_unpack (self, datagram):
                 self.dns_response = datagram
@@ -140,12 +141,7 @@ class Reactor (object):
                 try:
                         del self.dns_client.dns_pending[self.dns_uid]
                 except KeyError:
-                        for resolve in self.dns_resolve:
-                                resolve (self)
-                        self.dns_resolve = None
-                        if len (self.dns_client.dns_pending) == 0:
-                                self.dns_client.close ()
-                        self.dns_client = None
+                        self.dns_finalize ()
                         return
                         
                 self.dns_failover += 1
@@ -160,11 +156,18 @@ class Reactor (object):
                                                 )
                                         ], 53
                                 )
-                        self.dns_client.dns_send (self, time.time ())
+                        self.dns_client.dns_send (self, when)
                 else:
                         # ... or finalize ...
-                        self.dns_client = None # break circular ref?
+                        self.dns_finalize ()
 
+        def dns_finalize (self):
+                for resolve in self.dns_resolve:
+                        resolve (self)
+                self.dns_resolve = None
+                if len (self.dns_client.dns_pending) == 0:
+                        self.dns_client.close ()
+                self.dns_client = None
 
 class _A (Reactor):
 
@@ -332,7 +335,7 @@ class Resolver (async_core.Dispatcher):
                 self.dns_send (request, when)
                 
         def dns_send (self, request, when):
-                if not self.connected:
+                if self.socket == None:
                         if not ip_peer.udp_bind (self, self.dns_ip):
                                 for resolve in request.dns_resolve:
                                         resolve (None)
@@ -342,7 +345,6 @@ class Resolver (async_core.Dispatcher):
 
                 request.dns_when = when
                 request.dns_uid = self.dns_sent % (1<<16)
-                request.dns_peer = (request.dns_servers[0], 53)
                 self.dns_pending[request.dns_uid] = request
                 self.sendto (
                         request.DNS_DATAGRAM % (
@@ -361,7 +363,8 @@ class Resolver (async_core.Dispatcher):
                         )
                 self.dns_sent += 1
                 assert None == self.log (
-                        'send pending="%d" sent="%d"' % (
+                        'send ip="%s" port="%d" pending="%d" sent="%d"' % (
+                                request.dns_peer[0], request.dns_peer[1],
                                 len (self.dns_pending), self.dns_sent
                                 ), 'debug'
                         )
@@ -373,6 +376,9 @@ class Resolver (async_core.Dispatcher):
                 # match the datagram's UID with the pending DNS requests
                 #
                 datagram, peer = self.recvfrom (512)
+                if peer == None:
+                        return
+                
                 uid = (ord (datagram[0]) << 8) + ord (datagram[1])
                 try:
                         dns_request = self.dns_pending.pop (uid)
@@ -415,19 +421,23 @@ def resolver ():
 
 
 RESOLVER = resolver () # never finalized, but not allways binded
-
-resolve = RESOLVER.dns_resolve
         
                 
 if __name__ == '__main__':
         import sys
-        from allegra import netstring, loginfo
+        from allegra import netstring, loginfo, finalization
         assert None == loginfo.log (
                 'Allegra DNS/UDP Client'
                 ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
                 'info'
                 )
-                       
+        if len (sys.argv) < 2:
+                assert None == loginfo.log (
+                        'dns_client.py NAME [TYPE=A [SERVER [SERVER ...]]',
+                        'info'
+                        )
+                sys.exit (1)
+                
         def resolved (request):
                 model = list (request.dns_question)
                 if request.dns_resources == None:
@@ -447,16 +457,14 @@ if __name__ == '__main__':
                 servers = sys.argv[3:]
         else:
                 servers = _peers ()
-        if len (sys.argv) > 1:
-                if len (sys.argv) > 2:
-                        question = tuple (sys.argv[1:3])
-                else:
-                        question = (sys.argv[1], 'A')
+        if len (sys.argv) > 2:
+                question = tuple (sys.argv[1:3])
         else:
-                question = ('localhost', 'A')
+                question = (sys.argv[1], 'A')
         Resolver (servers) (question, resolved)
         async_loop.dispatch ()
-        
+        assert None == finalization.collect ()
+        sys.exit (0)
         
 # Note about this implementation
 #
