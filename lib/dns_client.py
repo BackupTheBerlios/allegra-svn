@@ -271,7 +271,7 @@ class Resolver (async_core.Dispatcher):
 
         # Parameters
         #
-        dns_failover = 2
+        dns_failover = 1
         dns_timeout = 1
         DNS_reactors = {'A': _A, 'NS': _NS, 'MX': _MX, 'PTR': _PTR}
         #
@@ -411,7 +411,8 @@ class Resolver (async_core.Dispatcher):
         # by default close when done and make sure the dispatcher does not
         # live to read for spam when it has nothing left to resolve.
 
-# The "outer API", to be applied ...
+
+# The convenience "outer API", to be applied ...
 
 def resolver ():
         addresses = _peers ()
@@ -421,8 +422,46 @@ def resolver ():
         raise Exception ('No Resolver Address Available')
 
 
-RESOLVER = resolver () # never finalized, but not allways binded
+lookup = RESOLVER = resolver () # never finalized, but not allways binded
         
+
+def reverse_lookup (name, resolved, lookup=RESOLVER):
+        def resolved_A (request_A):
+                try:
+                        ip = request_A.dns_resources[0]
+                except:
+                        resolved (None)
+                        return
+                
+                def resolved_PTR (request_PTR):
+                        try:
+                                cn = request_PTR.dns_resources[0]
+                        except:
+                                resolved (None)
+                                return
+                        
+                        def resolved_A_PTR (request_A_PTR):
+                                try:
+                                        iprev = request_A_PTR.dns_resources[0]
+                                except:
+                                        resolved (None)
+                                        return
+                                
+                                if iprev == ip:
+                                        resolved (ip)
+                                else:
+                                        resolved (None)
+                                        
+                        lookup ((
+                                request_PTR.dns_resources[0], 'A'
+                                ), resolved_A_PTR)
+                                
+                lookup ((
+                        ip_peer.in_addr_arpa (ip), 'PTR'
+                        ), resolved_PTR)
+                        
+        lookup ((name, 'A'), resolved_A)
+                
                 
 if __name__ == '__main__':
         import sys
@@ -439,7 +478,7 @@ if __name__ == '__main__':
                         )
                 sys.exit (1)
                 
-        def resolved (request):
+        def resource_resolved (request):
                 model = list (request.dns_question)
                 if request.dns_resources == None:
                         model.append ('')
@@ -454,6 +493,10 @@ if __name__ == '__main__':
                 model.append (request.dns_peer[0])
                 loginfo.log (netstring.encode (model))
                 
+        def reverse_resolved (ip):
+                if ip != None:
+                        loginfo.log (ip)
+                
         if len (sys.argv) > 3:
                 servers = sys.argv[3:]
         else:
@@ -462,7 +505,12 @@ if __name__ == '__main__':
                 question = tuple (sys.argv[1:3])
         else:
                 question = (sys.argv[1], 'A')
-        Resolver (servers) (question, resolved)
+        if question[1] == 'reverse':
+                reverse_lookup (
+                        question[0], reverse_resolved, Resolver (servers)
+                        )
+        else:
+                Resolver (servers) (question, resource_resolved)
         async_loop.dispatch ()
         assert None == finalization.collect ()
         sys.exit (0)
