@@ -112,6 +112,7 @@ class Dispatcher (async_core.Dispatcher):
         terminator = None
         collector_stalled = False
         collector_is_simple = False
+        collector_depth = 32
         
         def __init__ (self):
                 self.ac_in_buffer = ''
@@ -206,13 +207,18 @@ class Dispatcher (async_core.Dispatcher):
                 else:
                         self.ac_out_buffer = ''
                         
-        def handle_close (self):
-                self.close ()
+        def close (self):
+                "close the dispatcher and maybe terminate the collector"
+                async_core.Dispatcher.close (self)
                 if not self.collector_stalled:
-                        while not self.found_terminator (): pass
-                #
-                # close the socket and exhaust the collector if it is not
-                # yet stalled.
+                        depth = self.collector_depth
+                        while depth and not self.found_terminator (): 
+                                depth -= 1
+                        if depth < 1:
+                                self.log (
+                                        '%d' % self.collector_depth,
+                                        'collector-leak'
+                                        )
                         
         def close_when_done (self):
                 """automatically close this channel once the outgoing queue 
