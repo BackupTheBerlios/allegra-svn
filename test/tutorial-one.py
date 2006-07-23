@@ -28,9 +28,7 @@ if async_client.connect (
     dispatcher, ('66.249.91.99', 80), 3
     ):
     dispatcher.async_chat_push (
-        "GET / HTTP/1.1\r\n"
-        "host: 66.249.91.99\r\n"
-        "Connection: close\r\n"
+        "GET / HTTP/1.0\r\n"
         "\r\n"
         )
     collector.bind (
@@ -51,8 +49,8 @@ if async_client.connect (
     ):
     dispatcher.async_chat_push (
         "GET / HTTP/1.1\r\n"
-        "host: 66.249.91.99\r\n"
-        "Connection: close\r\n"
+        "Host: 66.249.91.99\r\n"
+        "Connection: keep-alive\r\n"
         "\r\n"
         )
     collector.bind (
@@ -82,8 +80,8 @@ dispatcher.finalization = (
     )
 dispatcher.async_chat_push (
     "GET / HTTP/1.1\r\n"
-    "host: 66.249.91.99\r\n"
-    "Connection: close\r\n"
+    "Host: 66.249.91.99\r\n"
+    "Connection: keep-alive\r\n"
     "\r\n"
     )
 collector.bind (
