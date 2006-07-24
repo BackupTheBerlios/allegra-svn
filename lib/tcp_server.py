@@ -34,7 +34,7 @@ def dns_PTR_resolve (addr, resolve):
                 else:
                         resolve (None)
         
-        dns_client.RESOLVER ((
+        dns_client.lookup ((
                 ip_peer.in_addr_arpa (addr[0]), 'PTR'
                 ), resolved)
 

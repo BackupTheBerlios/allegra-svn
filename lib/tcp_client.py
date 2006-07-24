@@ -32,7 +32,7 @@ def dns_A_resolve (addr, resolve):
                         resolve ((request.dns_resources[0], addr[1]))
                 else:
                         resolve (None)
-        dns_client.RESOLVER ((addr[0], 'A'), resolved)
+        dns_client.lookup ((addr[0], 'A'), resolved)
 
 
 def connect (

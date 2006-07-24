@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/dns_client/"
 
 import time, re
 
@@ -305,7 +305,7 @@ class Resolver (async_core.Dispatcher):
         def __repr__ (self):
                 return 'dns-client id="%x"' % id (self)
                         
-        def __call__ (self, question, resolve):
+        def __call__ (self, question, resolve=RESOLVED):
                 # first check the cache for a valid response or a 
                 # pending request ...
                 #
@@ -385,15 +385,15 @@ class Resolver (async_core.Dispatcher):
                         dns_request = self.dns_pending.pop (uid)
                 except:
                         self.log (
-                                'maybe-poison ip="%s" port="%d"' % peer, 
-                                'fraud'
+                                'redundant ip="%s" port="%d"' % peer, 
+                                'security'
                                 )
                         return
                 
                 if dns_request.dns_peer != peer:
                         self.log (
                                 'impersonate ip="%s" port="%d"' % peer, 
-                                'fraud'
+                                'security'
                                 )
                         return
                         
@@ -422,35 +422,53 @@ def resolver ():
         raise Exception ('No Resolver Address Available')
 
 
-lookup = RESOLVER = resolver () # never finalized, but not allways binded
-        
+lookup = resolver () # never finalized, but not allways binded
 
-def reverse_lookup (name, resolved, lookup=RESOLVER):
+
+def RESOLVED (request):
+        assert None == lookup.log ('%r' % request.__dict__, 'debug')
+
+def first_mail_lookup (name, resolved=RESOLVED):
+        def resolved_MX (request_MX):
+                try:
+                        mx1 = request_MX.dns_resources[0]
+                except:
+                        resolved (None)
+                        return
+                
+                lookup ((mx1, 'A'), resolved)
+        lookup ((name, 'MX'), resolved_MX)                  
+
+
+def REVERSED (ip): 
+        assert None == lookup.log ('%r' % ip, 'debug')
+
+def reverse_lookup (name, reversed):
         def resolved_A (request_A):
                 try:
                         ip = request_A.dns_resources[0]
                 except:
-                        resolved (None)
+                        reversed (None)
                         return
                 
                 def resolved_PTR (request_PTR):
                         try:
                                 cn = request_PTR.dns_resources[0]
                         except:
-                                resolved (None)
+                                reversed (None)
                                 return
                         
                         def resolved_A_PTR (request_A_PTR):
                                 try:
                                         iprev = request_A_PTR.dns_resources[0]
                                 except:
-                                        resolved (None)
+                                        reversed (None)
                                         return
                                 
                                 if iprev == ip:
-                                        resolved (ip)
+                                        reversed (ip)
                                 else:
-                                        resolved (None)
+                                        reversed (None)
                                         
                         lookup ((
                                 request_PTR.dns_resources[0], 'A'
