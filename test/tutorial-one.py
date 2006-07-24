@@ -73,23 +73,23 @@ finalization.collect ()
 # Decouple A Lot
 
 dispatcher = async_chat.Dispatcher ()
+async_limits.limit_recv (
+    dispatcher, 3, 1, (lambda: 1<<13)
+    )
 dispatcher.finalization = (
     lambda finalized: finalized.log (
         'bytes in="%d"' % finalized.ac_in_meter
         )
+    )
+collector.bind (
+    dispatcher,
+    synchronized.File_collector ('response.txt')
     )
 dispatcher.async_chat_push (
     "GET / HTTP/1.1\r\n"
     "Host: 66.249.91.99\r\n"
     "Connection: keep-alive\r\n"
     "\r\n"
-    )
-collector.bind (
-    dispatcher,
-    synchronized.File_collector ('response.txt')
-    )
-async_limits.limit_recv (
-    dispatcher, 3, 1, (lambda: 1<<13)
     )
 async_client.connect (
     dispatcher, ('66.249.91.99', 80), 3
