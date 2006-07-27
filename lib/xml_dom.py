@@ -26,7 +26,7 @@ class XML_element (object):
         
         "The simplest ELEMENT type possible"
 
-        def __init__ (self, name, attributes):
+        def __init__ (self, name, attributes): #? , dom) ?
                 if name != self.xml_name:
                         self.xml_name = name
                 if attributes:
