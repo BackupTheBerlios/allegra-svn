@@ -370,7 +370,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                                 )
                                         ], 53
                                 )
-                        self.dns_send (request, when)
+                        self.dns_send (request, time.time ())
                 else:
                         # ... or finalize ...
                         self.dns_finalize (request)
