@@ -638,10 +638,10 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 		self.close ()
 		for circle in self.pns_joined.values ():
 			circle.handle_close ()
-		self.timeouts_continue = self.timeouts_stop
+		# self.timeouts_continue = self.timeouts_stop
 
-	def timeouts_stop (self, when):
-		timeouts.Timeouts.timeouts_stop (self, when)
+	def timeouts_stop (self):
+		self.timeouts_timeout = None
 		self.pns_peer.pns_udp_finalize ()
 		del self.pns_peer
 

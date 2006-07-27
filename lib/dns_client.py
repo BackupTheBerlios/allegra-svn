@@ -19,7 +19,7 @@
 
 import time, re
 
-from allegra import async_loop, async_core, ip_peer
+from allegra import async_loop, async_core, timeouts, ip_peer
 
 
 # a bit of OS specific code to get the addresses of the DNS name
@@ -137,38 +137,6 @@ class Reactor (object):
         def dns_collected (self):
                 return True
 
-        def dns_continue (self, when):
-                try:
-                        del self.dns_client.dns_pending[self.dns_uid]
-                except KeyError:
-                        self.dns_finalize ()
-                        return
-                        
-                self.dns_failover += 1
-                if self.dns_failover < (
-                        len (self.dns_servers) * self.dns_client.dns_failover
-                        ):
-                        # continue with the next peer and a new time
-                        self.dns_peer = (
-                                self.dns_servers[
-                                        self.dns_failover % len (
-                                                self.dns_servers
-                                                )
-                                        ], 53
-                                )
-                        self.dns_client.dns_send (self, when)
-                else:
-                        # ... or finalize ...
-                        self.dns_finalize ()
-
-        def dns_finalize (self):
-                for resolve in self.dns_resolve:
-                        resolve (self)
-                self.dns_resolve = None
-                if len (self.dns_client.dns_pending) == 0:
-                        self.dns_client.handle_close ()
-                self.dns_client = None
-                
 
 class _A (Reactor):
 
@@ -266,46 +234,27 @@ class _PTR (Reactor):
                 return False
 
 
+class Resolver (async_core.Dispatcher, timeouts.Timeouts):
 
-class Resolver (async_core.Dispatcher):
-
-        # Parameters
-        #
-        dns_failover = 1
-        dns_timeout = 1
         DNS_reactors = {'A': _A, 'NS': _NS, 'MX': _MX, 'PTR': _PTR}
-        #
-        # one second timeout, enough to notice the delay, reduce to a lower
-        # figure as you expand the number of servers and failovers.
-        #
-        # check for inactive DNS client after 1 seconds and close if no
-        # pending requests. re-open the channel at will, binding each time
-        # to a new port with a new socket.
-        #
-        # Note:
-        #
-        # In effect, a DNS client will be kept alive 1 seconds after the 
-        # first request and at most 1 seconds after the last one.
-        #
-        # Practically, this is the desired behaviour of a decent DNS cache, 
-        # bind only when miss and keep alive if there is a high load (like
-        # a web proxy or an smtp relay).
-        #
-        # A DNS client waits for the first request before binding, and then
-        # only starts to defer for dns_keep_alive the close_when_done 
-        # event. 
 
-        def __init__ (self, servers, ip=None):
-                self.dns_sent = 0
-                self.dns_pending = {}
-                self.dns_cache = {}
+        def __init__ (
+                self, servers, failover=1, timeout=2, precision=1, ip=None
+                ):
                 self.dns_servers = servers
+                self.dns_failover = failover
+                timeouts.Timeouts.__init__ (
+                        self, self.dns_timedout, timeout, precision
+                        )
                 self.dns_ip = ip
+                self.dns_sent = 0
+                self.dns_cache = {}
+                self.dns_pending = {}
                 
         def __repr__ (self):
                 return 'dns-client id="%x"' % id (self)
                         
-        def __call__ (self, question, resolve=RESOLVED):
+        def __call__ (self, question, resolve):
                 # first check the cache for a valid response or a 
                 # pending request ...
                 #
@@ -330,45 +279,12 @@ class Resolver (async_core.Dispatcher):
                 request = self.DNS_reactors[question[1]] (
                         question, self.dns_servers
                         )
-                request.dns_client = self
+                # request.dns_client = self
                 request.dns_resolve = [resolve]
-                #
                 self.dns_send (request, when)
                 
-        def dns_send (self, request, when):
-                if self.socket == None:
-                        if not ip_peer.udp_bind (self, self.dns_ip):
-                                for resolve in request.dns_resolve:
-                                        resolve (None)
-                                return
-                                #
-                                # in case of failure, just keep trying.
-
-                request.dns_when = when
-                request.dns_uid = self.dns_sent % (1<<16)
-                self.dns_pending[request.dns_uid] = request
-                self.sendto (
-                        request.DNS_DATAGRAM % (
-                                chr ((request.dns_uid>>8)&0xff),
-                                chr (request.dns_uid&0xff),
-                                ''.join ([
-                                        '%c%s' % (chr (len (part)), part)
-                                        for part 
-                                        in request.dns_question[0].split ('.')
-                                        ])
-                                ), request.dns_peer
-                        )
-                async_loop.schedule (
-                        request.dns_when + self.dns_timeout,
-                        request.dns_continue
-                        )
-                self.dns_sent += 1
-                assert None == self.log (
-                        'send ip="%s" port="%d" pending="%d" sent="%d"' % (
-                                request.dns_peer[0], request.dns_peer[1],
-                                len (self.dns_pending), self.dns_sent
-                                ), 'debug'
-                        )
+        #def close (self):
+        #        async_core.Dispatcher.close (self)
                 
         def writable (self):
                 return False # UDP/IP is never writable
@@ -382,7 +298,7 @@ class Resolver (async_core.Dispatcher):
                 
                 uid = (ord (datagram[0]) << 8) + ord (datagram[1])
                 try:
-                        dns_request = self.dns_pending.pop (uid)
+                        request = self.dns_pending.pop (uid)
                 except:
                         self.log (
                                 'redundant ip="%s" port="%d"' % peer, 
@@ -390,7 +306,7 @@ class Resolver (async_core.Dispatcher):
                                 )
                         return
                 
-                if dns_request.dns_peer != peer:
+                if request.dns_peer != peer:
                         self.log (
                                 'impersonate ip="%s" port="%d"' % peer, 
                                 'security'
@@ -403,14 +319,70 @@ class Resolver (async_core.Dispatcher):
                 assert None == self.log (
                         'signal ip="%s" port="%d"' % peer, 'debug'
                         )
-                dns_request.dns_unpack (datagram)
-                if not self.dns_pending:
-                        self.handle_close ()
+                request.dns_unpack (datagram)
+                self.dns_finalize (request)
 
-        #
-        # by default close when done and make sure the dispatcher does not
-        # live to read for spam when it has nothing left to resolve.
+        def dns_send (self, request, when):
+                if self.socket == None:
+                        if not ip_peer.udp_bind (self, self.dns_ip):
+                                self.dns_finalize (request)
+                                #
+                                # in case of failure, just keep trying.
 
+                request.dns_when = when
+                request.dns_uid = uid = self.dns_sent % (1<<16)
+                self.dns_pending[uid] = request
+                self.sendto (
+                        request.DNS_DATAGRAM % (
+                                chr ((uid>>8)&0xff), chr (uid&0xff),
+                                ''.join ([
+                                        '%c%s' % (chr (len (part)), part)
+                                        for part 
+                                        in request.dns_question[0].split ('.')
+                                        ])
+                                ), request.dns_peer
+                        )
+                self.dns_sent += 1
+                self.timeouts_start (when)
+                self.timeouts_deque.append ((when, uid))
+                assert None == self.log (
+                        'send ip="%s" port="%d" pending="%d" sent="%d"' % (
+                                request.dns_peer[0], request.dns_peer[1],
+                                len (self.dns_pending), self.dns_sent
+                                ), 'debug'
+                        )
+                        
+        def dns_timedout (self, uid):
+                try:
+                        request = self.dns_pending.pop (uid)
+                except KeyError:
+                        return
+                        
+                request.dns_failover += 1
+                if request.dns_failover < (
+                        len (request.dns_servers) * self.dns_failover
+                        ):
+                        # continue with the next peer and a new time
+                        request.dns_peer = (
+                                request.dns_servers[
+                                        request.dns_failover % len (
+                                                request.dns_servers
+                                                )
+                                        ], 53
+                                )
+                        self.dns_send (request, when)
+                else:
+                        # ... or finalize ...
+                        self.dns_finalize (request)
+
+        def dns_finalize (self, request):
+                for resolve in request.dns_resolve:
+                        resolve (request)
+                request.dns_resolve = None
+
+        def timeouts_stop (self):
+                self.timeouts_timeout = None
+                self.handle_close ()
 
 # The convenience "outer API", to be applied ...
 
@@ -437,7 +409,7 @@ def first_mail_lookup (name, resolved=RESOLVED):
                         return
                 
                 lookup ((mx1, 'A'), resolved)
-        lookup ((name, 'MX'), resolved_MX)                  
+        lookup ((name, 'MX'), resolved_MX)            
 
 
 def REVERSED (ip): 
@@ -532,54 +504,3 @@ if __name__ == '__main__':
         async_loop.dispatch ()
         assert None == finalization.collect ()
         sys.exit (0)
-        
-# Note about this implementation
-#
-# This is a very "strict" DNS client indeed, because it will wait all the
-# timeout period set before finalization of the request instance it manages.
-#
-# Effectively, dns_client.py wait for the full timeout for requests that do
-# not belong to its cache and only then continue, callback the resolver or
-# do whatever was assigned to the request instance. Cached entry on the 
-# contrary are resolved immediately, as fast as it is possible.
-#
-# Practically this DNS client is only very slow once in a while and blazing 
-# fast thereafter. It is a good client for any DNS system, and it supports
-# a simple PNS/DNS peer that safeguard DNS resolution.
-#
-# Allegra's DNS client is designed to provide a cache and support recursive
-# domain name resolution or domain MX lookup. Its design is inspired from 
-# pns_client.py and pns_articulator.py, but without one level of articulation
-# as it is just a sound base for a DNS peer with a cache, not a multiplexer.
-#
-# The final purpose is to provide HTTP and SMTP clients with a DNS interface,
-# then to build a DNS/PNS gateway that provides DNS *and* PNS resolution to 
-# other applications than Allegra's PRESTo web peer.
-#
-# This DNS client may cache responses but not requests: two distinct clients 
-# "speaking-over" each other will not see their requests chained. TCP and UDP
-# clients should hold a cache of named channels, and they therefore do not 
-# require such feature from a DNS resolver.
-# 
-# One thing specific to DNS is the need for "fail-over" servers and "retry". 
-#
-# DNS is broken, so every request that times-out is sent to the next of the 
-# request's asigned dns_servers (usually at the class level, by the module 
-# loader), one or more times.
-#
-#
-# Caveat!
-#
-# The UID used by this client are predictable. A clever attacker may flood
-# it with probable sequences of UID and try to poison it. Or choose an even
-# worse DNS relay as a media for his attack. What no attacker can do is
-# escape the audit of unsollicited responses, wich of course undermine the
-# credibility of an answer. DNS is not supposed to produce dissent. Any
-# name about which there is dissent is not safe for public use.
-#
-#
-# Only IPv4
-#
-# IPv6 is not expected to take over the world any time soon ...
-#
-# http://cr.yp.to/djbdns/ipv6mess.html
