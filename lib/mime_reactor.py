@@ -66,6 +66,7 @@ class MIME_collector (object):
                         self.mime_collector_lines = mime_headers.split (
                                 self.mime_collector_buffer
                                 )
+                        self.mime_collector_buffer = ''
                         return self.mime_collector_continue ()
                         
                 elif self.mime_collector_body.found_terminator ():
@@ -81,7 +82,6 @@ class MIME_collector (object):
 
         def mime_collector_finalize (self, reactor):
                 # reset MIME collector's state
-                self.mime_collector_buffer = ''
                 self.mime_collector_headers = \
                         self.mime_collector_lines = \
                         self.mime_collector_body = None
@@ -121,7 +121,7 @@ class Escaping_producer (object):
 
         # Common usage: escaping the CRLF.CRLF sequence in SMTP, NNTP, etc ...
 
-        def __init__ (self, producer, esc_from='\r\n.', esc_to='\r\n..'):
+        def __init__ (self, producer, esc_from='\r\n..', esc_to='\r\n.'):
                 self.producer = producer
                 self.esc_from = esc_from
                 self.esc_to = esc_to
