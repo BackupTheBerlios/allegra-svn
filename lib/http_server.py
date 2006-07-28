@@ -421,10 +421,15 @@ class Listen (async_server.Listen):
                 return 'http-listen'
 
         def http_continue (self, reactor):
-                handler = self.http_hosts.get (
-                        reactor.mime_collector_headers.get ('host')
-                        )
-                if handler == None:
+                #handler = self.http_hosts.get (
+                #        reactor.mime_collector_headers.get ('host')
+                #        )
+                #if handler == None:
+                try:
+                        handler = self.http_hosts[
+                                reactor.mime_collector_headers['host']
+                                ]
+                except KeyError:
                         reactor.http_response = 404 # Not Found
                         return False
         
