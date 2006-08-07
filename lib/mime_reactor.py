@@ -40,6 +40,10 @@ class MIME_producer (object):
 	def producer_stalled (self):
                 return self.mime_producer_lines == None
 
+if __debug__:
+        mime_collect_default = (lambda headers: collector.DEVNULL)
+else:
+        mime_collect_default = (lambda headers: collector.LOGINFO)
 
 class MIME_collector (object):
         
@@ -77,7 +81,9 @@ class MIME_collector (object):
 
         def mime_collector_continue (self):
                 self.set_terminator (None)
-                self.mime_collector_body = reactor.Buffer ()
+                self.mime_collector_body = mime_collect_default (
+                        self.mime_collector_headers
+                        )
                 return False
 
         def mime_collector_finalize (self, reactor):
@@ -122,14 +128,14 @@ class Escaping_producer (object):
         # Common usage: escaping the CRLF.CRLF sequence in SMTP, NNTP, etc ...
 
         def __init__ (self, producer, esc_from='\r\n..', esc_to='\r\n.'):
-                self.producer = producer
                 self.esc_from = esc_from
                 self.esc_to = esc_to
-                self.buffer = ''
+                self.esc_buffer = ''
+                self.producer = producer
                 self.producer_stalled = self.producer.producer_stalled
 
         def more (self):
-                buffer = self.buffer + self.producer.more ()
+                buffer = self.esc_buffer + self.producer.more ()
                 if buffer:
                         buffer = string.replace (
                                 buffer, self.esc_from, self.esc_to
@@ -139,11 +145,11 @@ class Escaping_producer (object):
                                 )
                         if i:
                                 # we found a prefix
-                                self.buffer = buffer[-i:]
+                                self.esc_buffer = buffer[-i:]
                                 return buffer[:-i]
                         
                         # no prefix, return it all
-                        self.buffer = ''
+                        self.esc_buffer = ''
                         return buffer
                         
                 return buffer
@@ -152,56 +158,80 @@ class Escaping_producer (object):
 class Escaping_collector (object):
 
         "A collector that escapes a stream of characters"
+        
+        collector_is_simple = True
 
         def __init__ (self, collect, esc_from='\r\n.', esc_to='\r\n..'):
-                self.escaped = collect
                 self.esc_from = esc_from
                 self.esc_to = esc_to
-                self.buffer = ''
+                self.esc_buffer = ''
+                self.collector = collect
 
         def collect_incoming_data (self, data):
                 buffer = string.replace (
-                        self.buffer + data, self.esc_from, self.esc_to
+                        self.esc_buffer + data, self.esc_from, self.esc_to
                         )
                 i = async_chat.find_prefix_at_end (
                         buffer, self.esc_from
                         )
                 if i > 0:
-                        self.escaped.collect_incoming_data (buffer[-i:])
-                        self.buffer = buffer[:-i]
+                        self.collector.collect_incoming_data (buffer[-i:])
+                        self.esc_buffer = buffer[:-i]
                 else:
-                        self.escaped.collect_incoming_data (buffer)
-                        self.buffer = ''
+                        self.collector.collect_incoming_data (buffer)
+                        self.esc_buffer = ''
 
         def found_terminator (self):
-                self.escaped.found_terminator
+                self.collector.found_terminator
 
 
-class MULTIPART_producer (producer.Composite):
-
-        def __init__ (self, parts, headers=None):
-                self.mime_producer_headers = headers or {}
-                boundary = '\r\n\r\n--%x' % id (self)
+def multipart_generator (parts, boundary):
+        for part in parts:
+                yield boundary
+        
+                yield part
                 
+        yield boundary + '--'
+        
+
+def multipart_producer (parts, headers=None, glob=1<<14):
+        boundary = '%x' % id (self)
+        if headers == None:
+                head = (
+                        'MIME-Version: 1.0\r\n'
+                        'Content-Type: multipart/mixed;'
+                        ' boundary="%s"\r\n\r\n' % boundary
+                        )
+        else:
+                headers['content-type'] = (
+                        'multipart/mixed; boundary="%s"' % boundary
+                        )
+                head = ''.join (mime_headers.lines (headers))
+        return producer.Composite (
+                head, multipart_generator (
+                        parts, '\r\n--%s' % boundary
+                        ), glob
+                )
+                                
 
 class MULTIPART_collector (object):
 	
 	collector_is_simple = False
+        
         multipart_collect = None
 
-        def __init__ (self, mime_collector, Collect):
+        def __init__ (self, Collect):
                 self.multipart_Collect = Collect
                 self.multipart_buffer = ''
-                self.collect_incoming_data = \
-                        self.multipart_buffer.__add__
-		self.multipart_boundary = '\r\n\r\n--' + \
+		self.multipart_boundary = '--' + \
 			mime_headers.get_parameter (
 				mime_collector.mime_collector_headers[
 					'content-type'
 					], 'boundary'
 				)
-		self.set_terminator = mime_collector.set_terminator
-		self.set_terminator (self.multipart_boundary[4:])
+                
+        def collect_incoming_data (self, data):
+                self.multipart_buffer += data
 		
 	def multipart_found_next (self):
 		if self.multipart_buffer in ('--', ''):
@@ -214,8 +244,7 @@ class MULTIPART_collector (object):
 			self.set_terminator ('\r\n\r\n')
 			self.found_terminator = self.multipart_found_headers
                         self.multipart_buffer = ''
-                        self.collect_incoming_data = \
-                                self.multipart_buffer.__add__
+                        del self.collect_incoming_data
 			return False
 
 	def multipart_found_headers (self):
@@ -224,7 +253,9 @@ class MULTIPART_collector (object):
 			)
                 collect = self.multipart_Collect (headers)
 		if not collect.collector_is_simple:
-			collect = collector.Simple (collect)
+			collect = collector.bind_complex (
+                                collector.Simple (), collect
+                                )
 		# self.multipart_parts.append (collect)
                 self.multipart_collect = collect
 		self.collect_incoming_data = collect.collect_incoming_data		
@@ -240,27 +271,93 @@ class MULTIPART_collector (object):
                 
         found_terminator = multipart_found_boundary 
         
-        def multipart_collector (self):
-                #name = mime_headers.get_parameter (
-                #        headers.setdefault (
-                #                'content-disposition',
-                #                'not available; name="%d"' % len (
-                #                        self.multipart_parts
-                #                        )
-                #                ), 'name'
-                #        )
+
+def multipart_collect_by_content_disposition (Collector=collector.File):
+        def Collect (collector, headers):
+                return Collector (mime_headers.get_parameter (
+                        headers.setdefault (
+                                'content-disposition',
+                                'not available; name="%d"' % len (
+                                        self.multipart_parts
+                                        )
+                                ), 'name'
+                        ))
+        return Collect
+
+
+multipart_collectors = {}
+
+def multipart_collect_by_content_types (collectors=multipart_collectors):
+        def Collect (collector, headers):
                 content_type, parameters = mime_headers.value_and_parameters (
                         headers.get ('content-type', 'text/plain')
                         )
-                if content_type == 'mime/multipart':
-                        collector = MULTIPART_collector (self)
-                else:
-                        collector = MIME_collector (
-                                headers, 
-                                self.set_terminator,
-                                self.mime_collector.mime_collector_continue
-                                )
+                return collectors.get (
+                        content_type, mime_collect_default
+                        ) (headers)
+        
+        return Collect
 
+
+# Peer Abstractions
+
+class Client_pipeline (async_chat.Dispatcher, async_client.Pipeline):
+
+        collector_stalled = True
+        
+        # pipeline_requests = deque([(command, handler, terminator), ...])
+                
+        def __init__ (self):
+                async_chat.Dispatcher.__init__ (self)
+                self.pipeline_set ()
+                self.set_terminator ('\r\n')
+                self.mime_collector_buffer = ''
+                        
+        def __repr__ (self):
+                return 'pop-pipeline id="%x"' % id (self)
+                
+        def close (self):
+                self.pipeline_requests = self.pipeline_responses = None
+                try:
+                        del self.pipeline_wake_up
+                except:
+                        pass
+                async_chat.Dispatcher.close (self)
+                
+        def collect_incoming_data (self, data):
+                self.mime_collector_buffer += data
+
+        def found_terminator (self):
+                response = self.mime_collector_buffer
+                self.mime_collector_buffer = ''
+                if self.pipeline_responses:
+                        if self.pipeline_responses.popleft (
+                                )[1] (response):
+                                return True
+                        
+                if self.pipeline_requests:
+                        self.pipeline_wake_up ()
+                if self.pipeline_responses:
+                        self.set_terminator (
+                                self.pipeline_responses[0][2]
+                                )
+                        return False
+                
+                return True
+
+        #def pipeline_wake_up (self):
+        #        request = self.pipeline_requests.popleft ()
+        #        self.output_fifo.append (request[0])
+        #        self.pipeline_responses.append (request)
+        #        
+        #def mime_pipelining (self):
+        #        requests = self.pipeline_requests
+        #        self.pipeline_requests = deque ()
+        #        self.output_fifo.extend ((
+        #                request[0] for request in requests
+        #                ))
+        #        self.pipeline_responses.extend (requests)
+                
 
 if __name__ == '__main__':
 	from allegra import loginfo

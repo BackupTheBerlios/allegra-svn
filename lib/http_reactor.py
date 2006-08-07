@@ -78,6 +78,9 @@ class Chunk_collector (object):
                 self.chunk_trailers = None
                 self.chunk_trailer = ''
                 self.set_terminator ('\r\n')
+                
+        def get_terminator (self):
+                return '\r\n'
 
         def chunk_collect_size (self, data):
                 self.chunk_size += data
@@ -133,12 +136,12 @@ class Chunk_collector (object):
 
 def http_collector_continue (dispatcher, collected):
         # decide wether and wich collector wrappers are needed
+        if not collected.collector_is_simple:
+                collected = collector.simple (collected)
         if dispatcher.mime_collector_headers.get (
                 'transfer-encoding', ''
                 ).lower () == 'chunked':
                 # HTTP/1.1 mostly
-                if not collected.collector_is_simple:
-                        collected = collector.Simple (collected)
                 dispatcher.mime_collector_body = Chunk_collector (
                         collected,
                         dispatcher.set_terminator,
@@ -150,10 +153,6 @@ def http_collector_continue (dispatcher, collected):
                         'content-length'
                         )
                 if content_length:
-                        if not collected.collector_is_simple:
-                                collected = collector.Simple (
-                                        collected
-                                        )
                         dispatcher.set_terminator (int (content_length))
                 else:
                         dispatcher.set_terminator (None)
