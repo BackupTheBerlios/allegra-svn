@@ -118,7 +118,7 @@ def _io_poll (map, timeout, limit):
         RW = R | W
         concurrent = map.items ()
         rest = limit - len (concurrent)
-        if rest > 0:
+        if rest < 0:
                 concurrent = concurrent[:limit]
         else:
                 rest = 0
