@@ -68,7 +68,10 @@ class Dispatcher (
         def __repr__ (self):
                 return 'http-client-pipeline id="%x"' % id (self)
 
-        __call__ = async_client.Pipeline.pipeline
+        def __call__ (self, request):
+                self.pipeline_requests.append (request)
+
+        # __call__ = async_client.Pipeline.pipeline
 
 	# Asynchat
         

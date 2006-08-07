@@ -17,7 +17,9 @@
 ""
 
 from allegra import (
-	finalization, collector, producer, reactor, mime_headers
+	finalization, 
+        async_chat, collector, producer, reactor, async_client, 
+        mime_headers
         )
 
 
