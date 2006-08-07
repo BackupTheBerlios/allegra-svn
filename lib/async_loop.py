@@ -55,7 +55,7 @@ def _io_select (map, timeout, limit):
         w = []
         concurrent = map.items ()
         rest = limit - len (concurrent)
-        if rest > 0:
+        if rest < 0:
                 concurrent = concurrent[:limit]
         else:
                 rest = 0
