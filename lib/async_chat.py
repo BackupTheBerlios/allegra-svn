@@ -177,23 +177,20 @@ class Dispatcher (async_core.Dispatcher):
                                 elif type (p) == str:
                                         fifo.popleft ()
                                         buffer += p
+                                        if len (buffer) < obs:
+                                                continue
+                                        
                                         break
-                
+                                
+                                if p.producer_stalled ():
+                                        break
+                                
                                 data = p.more ()
                                 if data:
                                         buffer += data
                                         break
                                     
                                 fifo.popleft ()
-                        #
-                        # note that we don't glob here and don't try to
-                        # refill the buffer as much as possible because
-                        # that's something better handled at the application
-                        # protocol level (for instance HTTP/1.1 chunking)
-                        #
-                        # the buffer here acts more as a limit than as an
-                        # accumulator ...
-                        #
                 if buffer:
                         try:
                                 sent = self.send (buffer[:obs])
@@ -251,11 +248,11 @@ class Dispatcher (async_core.Dispatcher):
                 "get the channel's terminator"
                 return self.terminator
 
-        def collect_incoming_data(self, data):
+        def collect_incoming_data (self, data):
                 "assert debug log of collected data"
                 assert None == self.log (data, 'collect-incoming-data')
 
-        def found_terminator(self):
+        def found_terminator (self):
                 "assert debug log of terminator found"
                 assert None == self.log (
                         self.get_terminator (), 'found-terminator'
