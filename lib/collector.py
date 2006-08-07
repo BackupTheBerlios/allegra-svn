@@ -192,16 +192,9 @@ class Padded_decoder (object):
         
 class Simple (object):
 
-        # wraps a complex collector with a simple interface
-        
         collector_is_simple = True
-        
-        def __init__ (self, collector):
-                collector.set_terminator = self.set_terminator
-                collector.get_terminator = self.get_terminator
-                self.collector = collector
-                self.terminator = None
-                self.buffer = ''
+        terminator = None
+        buffer = ''
 
         def get_terminator (self):
                 return self.terminator
@@ -217,10 +210,9 @@ class Simple (object):
         def found_terminator (self):
                 if self.buffer:
                         async_chat.collect_chat (self.collector, self.buffer)
-                del collector.set_terminator, collector.get_terminator
                 return True # allways final
-        
-        
+
+
 def bind_simple (cin, cout):
         "bind to a simple collector until found_terminator is True"
         def found_terminator ():
@@ -241,19 +233,22 @@ def bind_complex (cin, cout):
         "bind to a complex collector until found_terminator is True"
         cout.set_terminator = cin.set_terminator
         cout.get_terminator = cin.get_terminator
+        cout.collector = cin
+        cin.set_terminator (cout.get_terminator ())
+        cin.collect_incoming_data = cout.collect_incoming_data
         def found_terminator ():
                 if cout.found_terminator ():
                         del (
-                                cin.collect_incoming_data,
-                                cin.found_terminator,
                                 cout.set_terminator,
-                                cout.get_terminator
+                                cout.get_terminator,
+                                cout.collector,
+                                cin.collect_incoming_data,
+                                cin.found_terminator
                                 )
                         return cin.found_terminator ()
                 
                 return False
         
-        cin.collect_incoming_data = cout.collect_incoming_data
         cin.found_terminator = found_terminator
         return cin
 
@@ -264,3 +259,12 @@ def bind (cin, cout):
                 return bind_simple (cin, cout)
 
         return bind_complex (cin, cout)
+
+
+def simplify (cin, cout):
+        couple = Simple ()
+        bind_complex (couple, cout)
+        return bind_simple (cin, couple)
+
+def simple (collected):
+        return bind_simple (Simple (), collected)        
