@@ -243,9 +243,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 ):
                 self.dns_servers = servers
                 self.dns_failover = failover
-                timeouts.Timeouts.__init__ (
-                        self, self.dns_timedout, timeout, precision
-                        )
+                timeouts.Timeouts.__init__ (self, timeout, precision)
                 self.dns_ip = ip
                 self.dns_sent = 0
                 self.dns_cache = {}
@@ -352,7 +350,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                 ), 'debug'
                         )
                         
-        def dns_timedout (self, uid):
+        def timeouts_timeout (self, uid):
                 try:
                         request = self.dns_pending.pop (uid)
                 except KeyError:
@@ -381,7 +379,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 request.dns_resolve = None
 
         def timeouts_stop (self):
-                self.timeouts_timeout = None
+                # self.timeouts_timeout = None
                 self.handle_close ()
 
 # The convenience "outer API", to be applied ...

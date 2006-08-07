@@ -24,8 +24,8 @@ from allegra import async_loop
 
 class Timeouts (object):
 	
-	def __init__ (self, timeout, period, precision=None):
-		self.timeouts_timeout = timeout
+	def __init__ (self, period, precision=None):
+		# self.timeouts_timeout = timeout
 		self.timeouts_period = max (period, async_loop.precision)
 		self.timeouts_precision = precision or async_loop.precision
 		self.timeouts_deque = collections.deque ()
@@ -56,12 +56,12 @@ class Timeouts (object):
                         return (
                                 now + self.timeouts_precision, 
                                 self.timeouts_poll
-                                )        
+                                )
 
                 self.timeouts_stop ()
 
 	def timeouts_stop (self):
-                self.timeouts_timeout = None
+                pass # self.timeouts_timeout = None
 	
 
 # The first, simplest and probably most interesting application of Timeouts
@@ -73,7 +73,8 @@ def cached (cache, timeout, precision):
                 except KeyError:
                         pass
         
-        t = Timeouts (timedout, timeout, precision)
+        t = Timeouts (timeout, precision)
+        t.timeouts_timeout = timedout
         def push (key, value):
                 cache[key] = value
                 t.timeouts_push (key)

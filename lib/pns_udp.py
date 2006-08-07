@@ -573,7 +573,7 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 		self.pns_peer = pns_peer
 		self.pns_joined = {}
 		self.pns_accepted = {}
-		timeouts.Timeouts.__init__ (self, self.pns_timeout, 3, 0.3)
+		timeouts.Timeouts.__init__ (self, 3, 0.3)
 		if ip_peer.udp_bind (self, ip, 3534):
                         subscribed = pns_peer.pns_subscribed
                         subscriptions = pns_peer.pns_subscriptions
@@ -640,11 +640,6 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 			circle.handle_close ()
 		# self.timeouts_continue = self.timeouts_stop
 
-	def timeouts_stop (self):
-		self.timeouts_timeout = None
-		self.pns_peer.pns_udp_finalize ()
-		del self.pns_peer
-
 	def pns_subscribe (self, name, subscribers=None):
 		if ip_peer.is_ip (name):
 			return Axis (self.pns_peer, name, subscribers)
@@ -657,7 +652,7 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 			circle.pns_quit ()
 		self.timeouts_push ((None, ''))
 
-	def pns_timeout (self, reference):
+	def timeouts_timeout (self, reference):
 		if reference[0] == None:
 			if reference[1]:
 				pass # ?
@@ -678,6 +673,12 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 			assert None == self.log (
 				'%s' % reference[1], 'timeout-drop'
 				)
+
+        def timeouts_stop (self):
+                # self.timeouts_timeout = None
+                self.pns_peer.pns_udp_finalize ()
+                del self.pns_peer
+
 
 # Just PNS/UDP with logging stubs for TCP, Resolution and Inference.
 #
