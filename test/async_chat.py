@@ -28,15 +28,16 @@ class Proxy_sender (async_chat.Dispatcher):
         self.connect (address)
 
     def handle_connect (self):
-        self.log ('Connected')
+        self.log ('connected', 'info')
 
     def collect_incoming_data (self, data):
         self.buffer = self.buffer + data
 
     def found_terminator (self):
         data = self.buffer
-        self.buffer = ''
-        self.log ('==> (%d) %r' % (self.id, data))
+        if data: 
+                self.log (data)
+                self.buffer = ''
         self.receiver.async_chat_push (data + '\n')
         
     def handle_close (self):
@@ -64,12 +65,13 @@ class Proxy_receiver (async_chat.Dispatcher):
         
     def found_terminator (self):
         data = self.buffer
-        self.buffer = ''
-        self.log ('<== (%d) %r' % (self.id, data))
+        if data: 
+                self.log (data)
+                self.buffer = ''
         self.sender.async_chat_push (data + '\n')
 
     def handle_close (self):
-        self.log ('Closing')
+        self.log ('closing', 'info')
         self.sender.close ()
         self.close ()
          
