@@ -32,7 +32,7 @@ def _peers ():
                 # avoid _winreg: parse XP's "ipconfig /all" instead ...
                 # 
                 m = re.search (
-                        'DNS[.\s]+?:\s+?'
+                        'DNS[.\s\w]+?:\s+?'
                         '([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).+?'
                         '([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)?',
                         os.popen ('ipconfig /all','r').read (),
