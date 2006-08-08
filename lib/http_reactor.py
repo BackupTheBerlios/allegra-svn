@@ -125,6 +125,10 @@ class Chunk_collector (object):
                         (
                                 self.chunk_size, self.chunk_extensions
                                 ) = self.chunk_size.split (';', 1)
+                elif self.chunk_size == '':
+                        # premature end of collection, final!
+                        return True
+                
                 self.set_terminator (
                         int (self.chunk_size, 16) + 2
                         )
