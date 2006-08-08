@@ -96,15 +96,32 @@ class Chunk_collector (object):
                         self.collect_incoming_data = self.chunk_collect_size
                         return False # continue ...
                 
+                if self.chunk_size.find (';') > 0:
+                        # end of chunk size, collect the chunk with the
+                        # wrapped collector
+                        #
+                        (
+                                self.chunk_size, self.chunk_extensions
+                                ) = self.chunk_size.split (';', 1)
+                        self.set_terminator (
+                                int (self.chunk_size, 16) + 2
+                                )
+                        self.chunk_size = None
+                        self.collect_incoming_data = \
+                                self.chunk_collector.collect_incoming_data
+                        return False # continue ...
+
                 if self.chunk_size == '0':
                         # last chunk
                         if self.chunk_trailers == None:
+                                # start collecting trailers
                                 self.chunk_trailers = []
                                 self.collect_incoming_data = \
                                         self.chunk_collect_trailers
                                 return False # continue ...
                         
                         elif self.chunk_trailer:
+                                # collect one trailer
                                 self.chunk_trailers.append (self.chunk_trailer)
                                 self.chunk_trailer = ''
                                 return False # continue ...
@@ -113,29 +130,10 @@ class Chunk_collector (object):
                                 self.mime_collector_headers.update (
                                         mime_headers_map (self.chunk_trailers)
                                         )
-                        self.chunk_collector.found_terminator ()
-                        self.set_terminator ('\r\n\r\n') # ? check it out ?
-                        del self.set_terminator
-                        return True # final!
-
-                # end of chunk size, collect the chunk with the wrapped 
-                # collector
-                #
-                if self.chunk_size.find (';') > 0:
-                        (
-                                self.chunk_size, self.chunk_extensions
-                                ) = self.chunk_size.split (';', 1)
-                elif self.chunk_size == '':
-                        # premature end of collection, final!
-                        return True
-                
-                self.set_terminator (
-                        int (self.chunk_size, 16) + 2
-                        )
-                self.chunk_size = None
-                self.collect_incoming_data = \
-                        self.chunk_collector.collect_incoming_data
-                return False # continue ...
+                self.chunk_collector.found_terminator ()
+                # self.set_terminator ('\r\n\r\n') # ? check it out ?
+                del self.set_terminator
+                return True # final!                
 
 
 def http_collector_continue (dispatcher, collected):
