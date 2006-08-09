@@ -17,10 +17,11 @@
 
 "http://laurentszyster.be/blog/ip_peer/"
 
-import socket, random #, errno ?
+import socket, random
 
 
 def is_ip (name):
+        "returns True if the name is a valid IPv4 address string"
         return len (tuple ((
                 digit for digit in name.split ('.')
                 if digit.isdigit () and -1 < int (digit) < 256
@@ -28,36 +29,59 @@ def is_ip (name):
 
 
 def in_addr_arpa (s):
+        "reverse an IPv4 address string in the arpa address space"
         l = s.split ('.')
         l.reverse ()
         l.extend (('in-addr', 'arpa'))
         return '.'.join (l)
         
 
-def ip_long (s):
+def ip2long (s):
+        "convert IPv4 address string to a long integer"
         l = [long (n) for n in s.split ('.')]
         i = l.pop (0)
         while l:
                 i = (i << 8) + l.pop (0)
         return i
 
-def long_ip (i):
+def long2ip (i):
+        "convert a long integer to an IPv4 address string"
         i, rest = divmod (i, 16777216)
-        l = [str (i)]
+        s = str (i)
         i, rest = divmod (rest, 65536)
-        l.append (str (i))
+        s = '%s.%d' % (s, i)
         i, rest = divmod (rest, 256)
-        l.append (str (i))
-        l.append (str (rest))
-        return '.'.join (l)
+        return '%s.%d.%d' % (s, i, rest)
 
 
-def my_ip ():
+def _host_ip ():
+        "resolve the host IP address synchronously"
         return socket.gethostbyname (socket.gethostname ())
+
+host_ip = _host_ip ()
+
+
+local_network = ip2long ('127.0.0.0')
+private_network_A = ip2long ('10.0.0.0')
+private_network_C = ip2long ('192.168.0.0')
+
+def is_local (ipl):
+        "returns True if the IP long belongs to the IPv4 local network"
+        return ipl & local_network == local_network
+
+def is_private (ipl):
+        "returns True if the IP long belongs to a IPv4 private network"
+        return (
+                (ipl & private_network_A == private_network_A) or 
+                (ipl & private_network_C == private_network_A)
+                )
 
 
 def udp_bind (dispatcher, ip=None, port=None):
-        addr = ip or my_ip (), port or (
+        """bind an async_core.Dispatcher () to an address and return True
+        or handle_close and return False, maybe use the host IP and a random
+        port if None are specified."""
+        addr = ip or host_ip, port or (
                 (abs (hash (random.random ())) >> 16) + 8192
                 )
         try:
@@ -72,14 +96,10 @@ def udp_bind (dispatcher, ip=None, port=None):
                 return False
         
         else:
-                # ? somehow connected ...
                 assert None == dispatcher.log (
                         'bind ip="%s" port="%d"' % dispatcher.addr, 'debug'
                         )
                 return True
 
-        # not expected to raise anything else!
 
-
-# small is beautifull
-        
+# 105 lines, with spacing, licence and docstrings: small is beautifull
