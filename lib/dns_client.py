@@ -22,11 +22,8 @@ import time, re
 from allegra import async_loop, async_core, timeouts, ip_peer
 
 
-# a bit of OS specific code to get the addresses of the DNS name
-# servers for the host system
-
 def _peers ():
-        # called once
+        "get the addresses of the DNS name servers for the host system"
         import os
         if os.name == 'nt':
                 # avoid _winreg: parse XP's "ipconfig /all" instead ...
@@ -48,9 +45,9 @@ def _peers ():
                         
         return ['127.0.0.1'] # expect a local dns cache!
 
-# unpack and parse names, ttl and preference from resource DNS records
 
 def _skip_name (datagram, pos):
+        "skip a name in the resource record at pos"
         while 1:
                 ll = ord (datagram[pos])
                 if (ll&0xc0):
@@ -65,6 +62,7 @@ def _skip_name (datagram, pos):
         return pos
 
 def _unpack_name (datagram ,pos):
+        "unpack a name from the resource record"
         n = []
         while 1:
                 ll = ord (datagram[pos])
@@ -81,11 +79,13 @@ def _unpack_name (datagram ,pos):
         return '.'.join (n)
 
 def _unpack_ttl (datagram, pos):
+        "unpack a TTL from the resource record"
         return reduce (
                 lambda x,y: (x<<8)|y, map (ord, datagram[pos:pos+4])
                 )
 
 def _unpack_preference (datagram, pos):
+        "unpack a preference order from the resource record"
         return reduce (
                 lambda x,y: (x<<8)|y, map (ord, datagram[pos:pos+2])
                 )
@@ -93,7 +93,7 @@ def _unpack_preference (datagram, pos):
 
 # The "inner" API, to be extended ...
 
-class Reactor (object):
+class Request (object):
 
         dns_failover = 0
 
@@ -106,6 +106,7 @@ class Reactor (object):
                 self.dns_peer = (servers[0], 53)
 
         def dns_unpack (self, datagram):
+                "unpack the resource record from a response datagram"
                 self.dns_response = datagram
                 # count resources announced
                 ancount = (ord (datagram[6])<<8) + (ord (datagram[7]))
@@ -138,14 +139,15 @@ class Reactor (object):
                 return True
 
 
-class _A (Reactor):
+class _A (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
                 '\000\001\000\001'
                 )
 
-        def dns_collect (self, datagram, pos):                        
+        def dns_collect (self, datagram, pos):
+                "unpack an A resource record at pos"
                 if datagram[pos:pos+4] == '\000\001\000\001':
                         self.dns_ttl = _unpack_ttl (datagram, pos+4)
                         self.dns_resources.append (
@@ -158,7 +160,7 @@ class _A (Reactor):
                 return False
         
 
-class _NS (Reactor):
+class _NS (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -166,6 +168,7 @@ class _NS (Reactor):
                 )
 
         def dns_collect (self, datagram, pos):
+                "unpack an NS resource record at pos"
                 if datagram[pos:pos+4]== '\000\002\000\001':
                         self.dns_resources.append ((
                                 _unpack_ttl (datagram, pos+4),
@@ -174,6 +177,7 @@ class _NS (Reactor):
                 return False
 
         def dns_collected (self):
+                "sort the NS resource records by preference, set TTL"
                 if self.dns_resources:
                         self.dns_resources.sort ()
                         self.dns_ttl = self.dns_resources[0][0]
@@ -185,7 +189,7 @@ class _NS (Reactor):
                 return False
 
 
-class _MX (Reactor):
+class _MX (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -193,6 +197,7 @@ class _MX (Reactor):
                 )
 
         def dns_collect (self, datagram, pos):
+                "unpack an MX resource record at pos"
                 if datagram[pos:pos+4]== '\000\017\000\001':
                         self.dns_resources.append ((
                                 _unpack_preference (datagram, pos+10),
@@ -202,6 +207,7 @@ class _MX (Reactor):
                 return False
                 
         def dns_collected (self):
+                "sort the MX resource records by preference, set TTL"
                 if not self.dns_resources:
                         return False
                         
@@ -216,7 +222,7 @@ class _MX (Reactor):
                 return True
 
 
-class _PTR (Reactor):
+class _PTR (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -224,6 +230,7 @@ class _PTR (Reactor):
                 )
 
         def dns_collect (self, datagram, pos):
+                "unpack a PTR resource record at pos"
                 if datagram[pos:pos+4]== '\000\014\000\001':
                         self.dns_ttl = _unpack_ttl (datagram, pos+4)
                         self.dns_resources.append (
@@ -236,7 +243,7 @@ class _PTR (Reactor):
 
 class Resolver (async_core.Dispatcher, timeouts.Timeouts):
 
-        DNS_reactors = {'A': _A, 'NS': _NS, 'MX': _MX, 'PTR': _PTR}
+        DNS_requests = {'A': _A, 'NS': _NS, 'MX': _MX, 'PTR': _PTR}
 
         def __init__ (
                 self, servers, failover=1, timeout=2, precision=1, ip=None
@@ -252,7 +259,8 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
         def __repr__ (self):
                 return 'dns-client id="%x"' % id (self)
                         
-        def __call__ (self, question, resolve):
+        def __call__ (self, question, resolve, servers=None):
+                "resolve from the cache first, maybe send a new request"
                 # first check the cache for a valid response or a 
                 # pending request ...
                 #
@@ -274,26 +282,25 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
 
                 # no cache entry, send a new request
                 #
-                request = self.DNS_reactors[question[1]] (
-                        question, self.dns_servers
+                request = self.DNS_requests[question[1]] (
+                        question, servers or self.dns_servers
                         )
                 # request.dns_client = self
                 request.dns_resolve = [resolve]
                 self.dns_send (request, when)
                 
-        #def close (self):
-        #        async_core.Dispatcher.close (self)
-                
         def writable (self):
-                return False # UDP/IP is never writable
+                "UDP/IP is never writable"
+                return False
                                 
         def handle_read (self):
-                # match the datagram's UID with the pending DNS requests
-                #
+                "handle valid incoming responses, log irrelevant datagrams"
                 datagram, peer = self.recvfrom (512)
                 if peer == None:
                         return
                 
+                # match the datagram's UID with the pending DNS requests
+                #
                 uid = (ord (datagram[0]) << 8) + ord (datagram[1])
                 try:
                         request = self.dns_pending.pop (uid)
@@ -321,9 +328,13 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 self.dns_finalize (request)
 
         def dns_send (self, request, when):
+                "try to send a request, maybe connect the dispatcher"
                 if self.socket == None:
-                        if not self.dns_connect ():
+                        if self.dns_connect ():
+                                self.timeouts_start (when)
+                        else:
                                 self.dns_finalize (request)
+                                return
                                 #
                                 # in case of failure, just keep trying.
 
@@ -341,7 +352,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                 ), request.dns_peer
                         )
                 self.dns_sent += 1
-                self.timeouts_start (when)
                 self.timeouts_deque.append ((when, uid))
                 assert None == self.log (
                         'send ip="%s" port="%d" pending="%d" sent="%d"' % (
@@ -351,9 +361,11 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         )
                         
         def dns_connect (self):
+                "bind the dispatcher to a UDP/IP socket"
                 return ip_peer.udp_bind (self, self.dns_ip)
                         
         def timeouts_timeout (self, uid):
+                "handle a request's timeout: drop, failover or finalize"
                 try:
                         request = self.dns_pending.pop (uid)
                 except KeyError:
@@ -377,12 +389,13 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         self.dns_finalize (request)
 
         def dns_finalize (self, request):
+                "call back all resolution handlers for this request"
                 for resolve in request.dns_resolve:
                         resolve (request)
                 request.dns_resolve = None
 
         def timeouts_stop (self):
-                # self.timeouts_timeout = None
+                "close the dispatcher when all requests have timed out"
                 self.handle_close ()
 
 # The convenience "outer API", to be applied ...
@@ -401,7 +414,7 @@ lookup = resolver () # never finalized, but not allways binded
 def RESOLVED (request):
         assert None == lookup.log ('%r' % request.__dict__, 'debug')
 
-def first_mail_lookup (name, resolved=RESOLVED):
+def first_mail_lookup (name, resolved=RESOLVED, servers=None):
         def resolved_MX (request_MX):
                 try:
                         mx1 = request_MX.dns_resources[0]
@@ -409,14 +422,14 @@ def first_mail_lookup (name, resolved=RESOLVED):
                         resolved (None)
                         return
                 
-                lookup ((mx1, 'A'), resolved)
-        lookup ((name, 'MX'), resolved_MX)            
+                lookup ((mx1, 'A'), resolved, servers)
+        lookup ((name, 'MX'), resolved_MX, servers)
 
 
 def REVERSED (ip): 
         assert None == lookup.log ('%r' % ip, 'debug')
 
-def reverse_lookup (name, reversed):
+def reverse_lookup (name, reversed, servers=None):
         def resolved_A (request_A):
                 try:
                         ip = request_A.dns_resources[0]
@@ -445,28 +458,15 @@ def reverse_lookup (name, reversed):
                                         
                         lookup ((
                                 request_PTR.dns_resources[0], 'A'
-                                ), resolved_A_PTR)
+                                ), resolved_A_PTR, servers)
                                 
                 lookup ((
                         ip_peer.in_addr_arpa (ip), 'PTR'
-                        ), resolved_PTR)
+                        ), resolved_PTR, servers)
                         
-        lookup ((name, 'A'), resolved_A)
+        lookup ((name, 'A'), resolved_A, servers)
                 
 
-def recursive_lookup (name, resolved=RESOLVED):
-        host, domain = name.split ('.', 1)
-        def resolved_NS (request_NS):
-                try:
-                        ns1 = request_NS.dns_resources[0]
-                except:
-                        resolved (None)
-                        return
-                
-                recursive_lookup ((ns1), resolved)
-        lookup ((domain, 'NS'), resolved_NS)
-
-                
 if __name__ == '__main__':
         import sys
         from allegra import netstring, loginfo, finalization
@@ -477,51 +477,50 @@ if __name__ == '__main__':
                 )
         if len (sys.argv) < 2:
                 assert None == loginfo.log (
-                        'dns_client.py NAME [TYPE=A [SERVER [SERVER ...]]',
+                        'dns_client.py NAME [TYPE=A [SERVER ...]]',
                         'info'
                         )
                 sys.exit (1)
                 
-        def resource_resolved (request):
-                model = list (request.dns_question)
-                if request.dns_resources == None:
-                        model.append ('')
-                elif len (request.dns_resources) > 1:
-                        model.append (netstring.encode (
-                                request.dns_resources
-                                ))
-                elif request.dns_resources:
-                        model.append (request.dns_resources[0])
-                else:
-                        model.append ('')
-                model.append (request.dns_peer[0])
-                loginfo.log (netstring.encode (model))
-                
-        def reverse_resolved (ip):
-                if ip != None:
-                        loginfo.log (ip)
-                
-        if len (sys.argv) > 3:
-                servers = sys.argv[3:]
-        else:
-                servers = _peers ()
+        servers = None
         if len (sys.argv) > 2:
                 question = tuple (sys.argv[1:3])
+                if len (sys.argv) > 3:
+                        servers = sys.argv[3:]
         else:
                 question = (sys.argv[1], 'A')
-        if question[1] == 'reverse':
-                reverse_lookup (
-                        question[0], reverse_resolved, Resolver (servers)
-                        )
+        if question[1] == 'PTR':
+                def reversed (ip):
+                        if ip == None:
+                                loginfo.log ('unresolved')
+                        else:
+                                loginfo.log (ip)
+                        
+                reverse_lookup (question[0], reversed, servers)
         else:
-                Resolver (servers) (question, resource_resolved)
+                def resolved (request):
+                        model = list (request.dns_question)
+                        if request.dns_resources == None:
+                                model.append ('')
+                        elif len (request.dns_resources) > 1:
+                                model.append (netstring.encode (
+                                        request.dns_resources
+                                        ))
+                        elif request.dns_resources:
+                                model.append (request.dns_resources[0])
+                        else:
+                                model.append ('')
+                        model.append (request.dns_peer[0])
+                        loginfo.log (netstring.encode (model))
+                        
+                lookup (question, resolved, servers)
         async_loop.dispatch ()
         assert None == finalization.collect ()
         sys.exit (0)
 
         
 # This is a usefull asynchronous DNS/UDP client for applications below
-# six hundreds lines of Python with licence, spacing and docstrings.
+# five hundreds lines of Python with licence, spacing and docstrings.
 #
 # DNS/TCP is not a usefull application of a Domain Name System: either
 # you're on a local network where you can size your DNS server right or
@@ -536,5 +535,3 @@ if __name__ == '__main__':
 # Actually, it can also be applied to program a resolver. But not just a
 # simple DNS resolver: djbdns is allready available for virtually all POSIX 
 # systems (and I doubt you would want Windows to handle your DNS ;-)
-#
-# 
