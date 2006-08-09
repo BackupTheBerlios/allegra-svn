@@ -17,7 +17,7 @@
 
 ""
 
-import re, socket
+import socket
 
 from allegra import (
 	loginfo, finalization, 
@@ -42,7 +42,7 @@ class Reactor (finalization.Finalization):
 
         def __call__ (self, collect):
                 self.mime_collector_body = collect
-                self.http_pipeline (self)
+                self.http_pipeline.pipeline_requests.append (self)
                 self.http_pipeline = None
                 return self
                         
@@ -68,18 +68,13 @@ class Dispatcher (
         def __repr__ (self):
                 return 'http-client-pipeline id="%x"' % id (self)
 
-        def __call__ (self, request):
-                self.pipeline_requests.append (request)
-
-        # __call__ = async_client.Pipeline.pipeline
-
 	# Asynchat
         
         ac_in_buffer_size = 1<<16 # 64KB input buffer
         ac_out_buffer_size = 4096 # 4KB output buffer
 
 	def handle_connect (self):
-		if self.pipeline_requests:
+		if self.pipeline_sleeping:
 			self.pipeline_wake_up ()
 		else:
 			self.pipeline_sleeping = True
@@ -99,8 +94,15 @@ class Dispatcher (
                 
 	# Pipeline
 
-        pipeline_keep_alive = False
-			
+        pipeline_sleeping = False
+
+        def pipeline (self, request):
+                "pipeline a new request, wake up if sleeping"
+                self.pipeline_requests.append (request)
+                if self.pipeline_sleeping:
+                        self.pipeline_sleeping = False
+                        self.pipeline_wake_up ()
+		
 	def pipeline_error (self):
 		# TODO: handle pipeline error
 		if not self.pipeline_responses:
