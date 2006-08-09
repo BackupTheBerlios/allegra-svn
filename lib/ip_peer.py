@@ -67,13 +67,13 @@ private_network_C = ip2long ('192.168.0.0')
 
 def is_local (ipl):
         "returns True if the IP long belongs to the IPv4 local network"
-        return ipl & local_network == local_network
+        return ipl | local_network == ipl
 
 def is_private (ipl):
         "returns True if the IP long belongs to a IPv4 private network"
         return (
-                (ipl & private_network_A == private_network_A) or 
-                (ipl & private_network_C == private_network_A)
+                (ipl | private_network_A == ipl) or 
+                (ipl | private_network_C == ipl)
                 )
 
 
