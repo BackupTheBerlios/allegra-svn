@@ -322,7 +322,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
 
         def dns_send (self, request, when):
                 if self.socket == None:
-                        if not ip_peer.udp_bind (self, self.dns_ip):
+                        if not self.dns_connect ():
                                 self.dns_finalize (request)
                                 #
                                 # in case of failure, just keep trying.
@@ -349,6 +349,9 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                 len (self.dns_pending), self.dns_sent
                                 ), 'debug'
                         )
+                        
+        def dns_connect (self):
+                return ip_peer.udp_bind (self, self.dns_ip)
                         
         def timeouts_timeout (self, uid):
                 try:
@@ -502,3 +505,23 @@ if __name__ == '__main__':
         async_loop.dispatch ()
         assert None == finalization.collect ()
         sys.exit (0)
+
+        
+# This is a usefull asynchronous DNS/UDP client for applications below
+# six hundreds lines of Python with licence, spacing and docstrings.
+#
+# DNS/TCP is not a usefull application of a Domain Name System: either
+# you're on a local network where you can size your DNS server right or
+# your application will simply add more weight to an overloaded server.
+#
+# On a public network of peers DNS/TCP makes little sense. If you really
+# need this stuff, subclass the dns_send, dns_connect and handle_read
+# methods to send and receive datagrams along TCP/IP stream connections.
+#
+# The rest of the implementation can be reused.
+#
+# Actually, it can also be applied to program a resolver. But not just a
+# simple DNS resolver: djbdns is allready available for virtually all POSIX 
+# systems (and I doubt you would want Windows to handle your DNS ;-)
+#
+# 
