@@ -115,7 +115,7 @@ class Chunk_collector (object):
                                 self.mime_collector_headers.update (
                                         mime_headers_map (self.chunk_trailers)
                                         )
-                elif self.chunk_size.find != '':
+                elif self.chunk_size != '':
                         # end of chunk size, collect the chunk with the
                         # wrapped collector
                         #
