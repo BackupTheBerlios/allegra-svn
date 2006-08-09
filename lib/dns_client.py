@@ -39,7 +39,7 @@ def _peers ():
                         flags=re.DOTALL
                         )
                 if m:
-                        return m.groups ()
+                        return [s for s in m.groups () if s != None]
                     
         elif os.name == 'posix':
                 return re.compile ('nameserver[ ]+(.+)').findall (
@@ -453,6 +453,19 @@ def reverse_lookup (name, reversed):
                         
         lookup ((name, 'A'), resolved_A)
                 
+
+def recursive_lookup (name, resolved=RESOLVED):
+        host, domain = name.split ('.', 1)
+        def resolved_NS (request_NS):
+                try:
+                        ns1 = request_NS.dns_resources[0]
+                except:
+                        resolved (None)
+                        return
+                
+                recursive_lookup ((ns1), resolved)
+        lookup ((domain, 'NS'), resolved_NS)
+
                 
 if __name__ == '__main__':
         import sys
