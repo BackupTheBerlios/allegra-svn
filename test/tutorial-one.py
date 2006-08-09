@@ -86,8 +86,8 @@ collector.bind (
     synchronized.File_collector ('response.txt')
     )
 dispatcher.async_chat_push (
-    "GET / HTTP/1.1\r\n"
-    "Host: 66.249.91.99\r\n"
+    "GET /intl/zh-CN/ HTTP/1.1\r\n"
+    "Host: www.google.com\r\n"
     "Connection: keep-alive\r\n"
     "\r\n"
     )
