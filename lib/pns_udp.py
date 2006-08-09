@@ -521,14 +521,14 @@ class Axis (Circle):
 	# and by subscribing to it you allow any peer to join.
 
 	def __init__ (self, pns_peer, name, subscribers):
-		self.pns_netmask = ip_peer.ip_long (name)
+		self.pns_netmask = ip_peer.ip2long (name)
 		Circle.__init__ (self, pns_peer, name, subscribers)
 
 	def __repr__ (self):
 		return 'pns-udp-axis name="%s"' % self.pns_name
 		
 	def pns_join (self, left):
-		if ip_peer.ip_long (
+		if ip_peer.ip2long (
                         left
                         ) & self.pns_netmask == self.pns_netmask:
 			Circle.pns_join (self, left)
@@ -537,7 +537,7 @@ class Axis (Circle):
 		self.log ('pns-join-drop ip="%s"' % left, 'error')
 
 	def pns_joined (self, right):
-		if ip_peer.ip_long (
+		if ip_peer.ip2long (
                         right[0]
                         ) & self.pns_netmask == self.pns_netmask:
 			Circle.pns_joined (self, right)
