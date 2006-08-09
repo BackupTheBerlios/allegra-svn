@@ -42,7 +42,7 @@ class Reactor (finalization.Finalization):
 
         def __call__ (self, collect):
                 self.mime_collector_body = collect
-                self.http_pipeline.pipeline_requests.append (self)
+                self.http_pipeline (self)
                 self.http_pipeline = None
                 return self
                         
@@ -94,27 +94,15 @@ class Dispatcher (
                 
 	# Pipeline
 
-        pipeline_sleeping = False
+        pipeline_sleeping = True
 
-        def pipeline (self, request):
+        def __call__ (self, request):
                 "pipeline a new request, wake up if sleeping"
                 self.pipeline_requests.append (request)
                 if self.pipeline_sleeping:
                         self.pipeline_sleeping = False
                         self.pipeline_wake_up ()
 		
-	def pipeline_error (self):
-		# TODO: handle pipeline error
-		if not self.pipeline_responses:
-			# not resolved or not connected ...
-			while self.pipeline_requests:
-				reactor = self.pipeline_requests.popleft ()
-				reactor.http_response = \
-					'418 Unknown DNS host name'
-		else:
-			# broken connection ...
-			tcp_pipeline.Pipeline.pipeline_error (self)
-			
         def pipeline_wake_up (self):
                 if self.http_version == '1.1':
                         self.pipeline_wake_up_11 ()

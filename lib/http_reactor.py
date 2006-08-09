@@ -96,21 +96,6 @@ class Chunk_collector (object):
                         self.collect_incoming_data = self.chunk_collect_size
                         return False # continue ...
                 
-                if self.chunk_size.find (';') > 0:
-                        # end of chunk size, collect the chunk with the
-                        # wrapped collector
-                        #
-                        (
-                                self.chunk_size, self.chunk_extensions
-                                ) = self.chunk_size.split (';', 1)
-                        self.set_terminator (
-                                int (self.chunk_size, 16) + 2
-                                )
-                        self.chunk_size = None
-                        self.collect_incoming_data = \
-                                self.chunk_collector.collect_incoming_data
-                        return False # continue ...
-
                 if self.chunk_size == '0':
                         # last chunk
                         if self.chunk_trailers == None:
@@ -130,6 +115,24 @@ class Chunk_collector (object):
                                 self.mime_collector_headers.update (
                                         mime_headers_map (self.chunk_trailers)
                                         )
+                elif self.chunk_size.find != '':
+                        # end of chunk size, collect the chunk with the
+                        # wrapped collector
+                        #
+                        try:
+                                (
+                                        self.chunk_size, self.chunk_extensions
+                                        ) = self.chunk_size.split (';', 1)
+                        except:
+                                pass
+                        self.set_terminator (
+                                int (self.chunk_size, 16) + 2
+                                )
+                        self.chunk_size = None
+                        self.collect_incoming_data = \
+                                self.chunk_collector.collect_incoming_data
+                        return False # continue ...
+
                 self.chunk_collector.found_terminator ()
                 # self.set_terminator ('\r\n\r\n') # ? check it out ?
                 del self.set_terminator
