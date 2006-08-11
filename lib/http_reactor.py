@@ -117,7 +117,8 @@ class Chunk_collector (object):
                                         )
                 elif self.chunk_size != '':
                         # end of chunk size, collect the chunk with the
-                        # wrapped collector
+                        # wrapped collector but try first to split out
+                        # any extensions.
                         #
                         try:
                                 (
@@ -133,9 +134,9 @@ class Chunk_collector (object):
                                 self.chunk_collector.collect_incoming_data
                         return False # continue ...
 
+                # chunk collector closure
                 self.chunk_collector.found_terminator ()
-                # self.set_terminator ('\r\n\r\n') # ? check it out ?
-                del self.set_terminator
+                del self.set_terminator, self.collect_incoming_data
                 return True # final!                
 
 
