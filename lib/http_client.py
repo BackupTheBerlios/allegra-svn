@@ -26,7 +26,7 @@ from allegra import (
         )
 
 
-class Reactor (finalization.Finalization):
+class Request (finalization.Finalization):
                 
         http_response = mime_collector_headers = mime_collector_body = None
         
@@ -47,7 +47,7 @@ class Reactor (finalization.Finalization):
                 return self
                         
 
-class Dispatcher (
+class Pipeline (
         mime_reactor.MIME_collector,
 	async_chat.Dispatcher, 
         async_client.Pipeline
@@ -55,6 +55,9 @@ class Dispatcher (
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
         
+        ac_in_buffer_size = 1<<16 # 64KB input buffer
+        ac_out_buffer_size = 4096 # 4KB output buffer
+
         # TODO: debug the HTTP/1.0 keep-alive fail-over
         #
         #       but the fact is that I don't have to right now ...
@@ -68,16 +71,17 @@ class Dispatcher (
         def __repr__ (self):
                 return 'http-client-pipeline id="%x"' % id (self)
 
+        def __call__ (self, request):
+                "pipeline a new request, wake up once if sleeping"
+                self.pipeline_requests.append (request)
+                if not self.pipeline_responses:
+                        self.pipeline_wake_up_10 ()
+                
 	# Asynchat
         
-        ac_in_buffer_size = 1<<16 # 64KB input buffer
-        ac_out_buffer_size = 4096 # 4KB output buffer
-
 	def handle_connect (self):
-		if self.pipeline_sleeping:
+                if self.pipeline_requests and not self.pipeline_responses:
 			self.pipeline_wake_up ()
-		else:
-			self.pipeline_sleeping = True
 
         def handle_close (self):
                 assert None == self.log (
@@ -94,15 +98,6 @@ class Dispatcher (
                 
 	# Pipeline
 
-        pipeline_sleeping = True
-
-        def __call__ (self, request):
-                "pipeline a new request, wake up if sleeping"
-                self.pipeline_requests.append (request)
-                if self.pipeline_sleeping:
-                        self.pipeline_sleeping = False
-                        self.pipeline_wake_up ()
-		
         def pipeline_wake_up (self):
                 if self.http_version == '1.1':
                         self.pipeline_wake_up_11 ()
@@ -113,39 +108,39 @@ class Dispatcher (
 		# HTTP/1.0, push one at a time, maybe keep-alive or close
 		# when done ...
 		#
-		reactor = self.pipeline_requests.popleft ()
+		request = self.pipeline_requests.popleft ()
 		if (
 			self.pipeline_requests or
 			self.pipeline_keep_alive
 			):
-			reactor.mime_producer_headers[
+			request.mime_producer_headers[
 				'connection'
 				] = 'keep-alive'
 		else:
-			reactor.mime_producer_headers['connection'] = 'close'
-		self.http_client_continue (reactor)
+			request.mime_producer_headers['connection'] = 'close'
+		self.http_client_continue (request)
 
 	def pipeline_wake_up_11 (self):
 		# HTTP/1.1 pipeline, send all at once and maybe close when
 		# done if not keep-aliver.
 		#
-                reactor = self.pipeline_requests.popleft ()
+                request = self.pipeline_requests.popleft ()
 		while self.pipeline_requests:
                         # push all request's reactors
-			reactor.mime_producer_headers[
+			request.mime_producer_headers[
 				'connection'
 				] = 'keep-alive'
                         self.http_client_continue (reactor)
-                        reactor = self.pipeline_requests.popleft ()
+                        request = self.pipeline_requests.popleft ()
 		# push the last one
                 if self.pipeline_keep_alive:
-                        reactor.mime_producer_headers[
+                        request.mime_producer_headers[
                                 'connection'
                                 ] = 'keep-alive'
                 else:
                         # close when done and not kept alive
-                        reactor.mime_producer_headers['connection'] = 'close'
-		self.http_client_continue (reactor)
+                        request.mime_producer_headers['connection'] = 'close'
+		self.http_client_continue (request)
  		
 	# MIME collector
 
@@ -161,10 +156,10 @@ class Dispatcher (
                         # make sure that the collector is stalled once the
                         # dispatcher has been closed.
                 
-		reactor = self.pipeline_responses[0]
+		request = self.pipeline_responses[0]
 		try:
 			(
-				http_version, reactor.http_response
+				http_version, request.http_response
 				) = self.mime_collector_lines.pop (
 					0
 					).split (' ', 1)
@@ -176,17 +171,17 @@ class Dispatcher (
 			return True
 
                 self.http_version = http_version[-3:]
-		reactor.mime_collector_headers = \
+		request.mime_collector_headers = \
 			self.mime_collector_headers = \
 			mime_headers.map (self.mime_collector_lines)
 		if (
-			reactor.http_command == 'HEAD' or
-			reactor.http_response[:3] in ('204', '304', '305')
+			request.http_command == 'HEAD' or
+			request.http_response[:3] in ('204', '304', '305')
 			):
                         self.mime_collector_finalize ()
                 else:
 		        self.http_collector_continue (
-                                reactor.mime_collector_body
+                                request.mime_collector_body
                                 )
                 return self.closing
 		
@@ -202,8 +197,6 @@ class Dispatcher (
                 # wake up the pipeline if there are request pipelined
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
-                if not self.pipeline_responses:
-                        self.pipeline_sleeping = True
                 return self.closing
 
 	# HTTP/1.1 client reactor
@@ -215,42 +208,42 @@ class Dispatcher (
         http_collector_error = handle_close
 	http_collector_continue = http_reactor.http_collector_continue
 
-        def http_client_continue (self, reactor):
+        def http_client_continue (self, request):
                 # push one string and maybe a producer in the output fifo ...
-                request = '%s %s HTTP/%s\r\n' % (
-                        reactor.http_command, 
-                        reactor.http_urlpath, 
+                http_request = '%s %s HTTP/%s\r\n' % (
+                        request.http_command, 
+                        request.http_urlpath, 
                         self.http_version
                         )
-                if reactor.mime_producer_body == None:
+                if request.mime_producer_body == None:
                         # GET, HEAD, DELETE, ...
                         #
                         lines = mime_headers.lines (
-                                reactor.mime_producer_headers
+                                request.mime_producer_headers
                                 )
-                        lines.insert (0, request)
+                        lines.insert (0, http_request)
                         self.output_fifo.append (''.join (lines))
                 else:
                         # POST and PUT ...
                         #
                         if self.http_version == '1.1':
-                                reactor.mime_producer_body = \
+                                request.mime_producer_body = \
                                         http_reactor.Chunk_producer (
-                                                reactor.mime_producer_body
+                                                request.mime_producer_body
                                                 )
-                                reactor.mime_producer_headers[
+                                request.mime_producer_headers[
                                         'transfer-encoding'
                                         ] = 'chunked'
                         lines = mime_headers.lines (
-                                reactor.mime_producer_headers
+                                request.mime_producer_headers
                                 )
-                        lines.insert (0, request)
+                        lines.insert (0, http_request)
                         self.output_fifo.append (''.join (lines))
                         self.output_fifo.append (
-                                reactor.mime_producer_body
+                                request.mime_producer_body
                                 )
                 # append the reactor to the queue of responses expected ...
-                self.pipeline_responses.append (reactor)
+                self.pipeline_responses.append (request)
                 self.http_requests += 1
                 #
                 # ready to send.
@@ -261,7 +254,7 @@ def pipeline (host, port=80, version='1.1'):
                 type (host) == str and type (port) == int and
                 version in ('1.1', '1.0')
                 )
-        dispatcher = Dispatcher ()
+        dispatcher = Pipeline ()
         if port == 80:
                 dispatcher.http_host = host
         else:
@@ -342,7 +335,7 @@ class Pool (async_client.Pool):
 def GET (pipeline, url, headers=None):
         if headers == None:
                 headers = {}
-        return Reactor (pipeline, url, headers, 'GET', None)
+        return Request (pipeline, url, headers, 'GET', None)
                 
                 
 def POST (pipeline, url, body, headers=None):
@@ -350,5 +343,5 @@ def POST (pipeline, url, body, headers=None):
                 headers = {
                         'Content-Type': 'application/x-www-form-urlencoded'
                         }
-        return Reactor (pipeline, url, headers, 'POST', body)                
+        return Request (pipeline, url, headers, 'POST', body)                
 
