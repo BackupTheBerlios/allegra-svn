@@ -31,9 +31,9 @@ def xml_attr (data):
         data = data.replace ("&", "&amp;")
         data = data.replace ("\"", "&quot;")
         data = data.replace ("<", "&lt;")
-        data = data.replace ("\t", u"&#x9;")
-        data = data.replace ("\r", u"&#xD;")
-        data = data.replace ("\n", u"&#xA;")
+        data = data.replace ("\t", "&#x9;")
+        data = data.replace ("\r", "&#xD;")
+        data = data.replace ("\n", "&#xA;")
         return data.replace (">", "&gt;")
 
 def xml_cdata (data):
