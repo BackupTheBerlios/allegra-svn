@@ -20,7 +20,7 @@
 import socket
 
 from allegra import (
-	loginfo, finalization, 
+	loginfo, finalization,
         async_chat, producer, collector, async_client,
         tcp_client, mime_headers, mime_reactor, http_reactor
         )
@@ -58,11 +58,6 @@ class Pipeline (
         ac_in_buffer_size = 1<<16 # 64KB input buffer
         ac_out_buffer_size = 4096 # 4KB output buffer
 
-        # TODO: debug the HTTP/1.0 keep-alive fail-over
-        #
-        #       but the fact is that I don't have to right now ...
-        #       HTTP/1.1 pipelining works very-well, thank you ;-)
-
         def __init__ (self):
                 async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n\r\n')
@@ -72,12 +67,12 @@ class Pipeline (
                 return 'http-client-pipeline id="%x"' % id (self)
 
         def __call__ (self, request):
-                "pipeline a new request, wake up once if sleeping"
+                "pipeline a new request, wake up if sleeping"
                 self.pipeline_requests.append (request)
                 if not self.pipeline_responses:
-                        self.pipeline_wake_up_10 ()
+                        self.pipeline_wake_up ()
                 
-	# Asynchat
+	# async_chat
         
 	def handle_connect (self):
                 if self.pipeline_requests and not self.pipeline_responses:
@@ -96,10 +91,10 @@ class Pipeline (
                         )
 		self.close ()
                 
-	# Pipeline
+	# pipeline
 
         def pipeline_wake_up (self):
-                if self.http_version == '1.1':
+                if self.http_version == '1.1' and self.http_responses:
                         self.pipeline_wake_up_11 ()
                 else:
                         self.pipeline_wake_up_10 ()
@@ -183,21 +178,27 @@ class Pipeline (
 		        self.http_collector_continue (
                                 request.mime_collector_body
                                 )
-                return self.closing
+                return self.closing # stall the collector if closing
 		
 	def mime_collector_finalize (self):
+                # wake up the pipeline if there are request pipelined
+                # and that the connection is kept alive
+                if (
+                        self.pipeline_requests and 
+                        self.mime_collector_headers.get (
+                                'connection'
+                                ) == 'keep-alive'
+                        ):
+                        self.pipeline_wake_up ()
                 # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
                 self.mime_collector_headers = \
                         self.mime_collector_lines = \
                         self.mime_collector_body = None
-                # pop the reactor finalized 
+                # pop the reactor finalized and count the response
                 self.pipeline_responses.popleft ()
                 self.http_responses += 1
-                # wake up the pipeline if there are request pipelined
-                if self.pipeline_requests:
-                        self.pipeline_wake_up ()
-                return self.closing
+                return self.closing # stall the collector if closing
 
 	# HTTP/1.1 client reactor
         
@@ -300,9 +301,12 @@ class Cache (async_client.Cache):
                 resolution (self)
 
 	def __call__ (self, host, port=80, version='1.1'):
-                return async_client.Cache.__call__ (
-                        self, pipeline (host, port, version), (host, port)
-                        )
+                """return a cached or a new HTTP pipeline, maybe resolving
+                and connecting it first, closing it on connection error or
+                if it's socket address cannot be resolved"""
+                def Dispatcher ():
+                        return pipeline (host, port, version)
+                async_client.Cache.__call__ (Dispatcher, (host, port))
 
 
 class Pool (async_client.Pool):
@@ -321,7 +325,7 @@ class Pool (async_client.Pool):
                         self.http_host = '%s:%d' % (host, port)
                 self.http_version = version
                 async_client.Pool.__init__ (
-                        self, Dispatcher, (host, port), 
+                        self, Pipeline, (host, port), 
                         size, timeout, precision, socket.AF_INET
                         )
 
@@ -345,3 +349,6 @@ def POST (pipeline, url, body, headers=None):
                         }
         return Request (pipeline, url, headers, 'POST', body)                
 
+
+#
+#
