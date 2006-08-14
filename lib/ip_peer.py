@@ -22,7 +22,12 @@ import socket, random
 
 def _host_ip ():
         "resolve the host IP address synchronously"
-        return socket.gethostbyname (socket.gethostname ())
+        try:
+                return socket.gethostbyname (socket.gethostname ())
+
+        except:
+                return '0.0.0.0'
+        
 
 host_ip = _host_ip ()
 
