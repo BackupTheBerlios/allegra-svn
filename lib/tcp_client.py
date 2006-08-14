@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/tcp_client/"
 
 import socket
 
@@ -23,10 +23,12 @@ from allegra import async_client, ip_peer, dns_client
 
 
 def ip_resolved (addr):
+        "synchronously resolve a numeric IP name to itself"
         if ip_peer.is_ip (addr[0]):
                 return addr
 
 def dns_A_resolve (addr, resolve):
+        "resolve asynchronously a named address to a numeric one"
         def resolved (request):
                 if request.dns_resources:
                         resolve ((request.dns_resources[0], addr[1]))
@@ -63,12 +65,13 @@ def connect (
         return True
 
 
-# conveniences for named TCP/IP connections
-
 def dns_A_resolved (connections):
+        "decorate a client abstraction with DNS name resolution"
         connections.client_resolved = ip_resolved
         connections.client_resolve = dns_A_resolve
         return connections
+
+# conveniences for named TCP/IP connections
 
 def Connections (timeout, precision, resolution=dns_A_resolved):
         return resolution (async_client.Connections (

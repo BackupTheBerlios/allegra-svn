@@ -15,19 +15,21 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/tcp_server/"
 
 import socket
 
-from allegra import async_client, ip_peer, dns_client
+from allegra import ip_peer, dns_client
 
 
 def name_resolved (addr):
+        "synchronously resolve a local address to itself"
         if addr[0].startswith ('127.'):
                 return addr
         
 
 def dns_PTR_resolve (addr, resolve):
+        "resolve asynchronously an numeric IP address to a named one"
         def resolved (request):
                 if request.dns_resources:
                         resolve ((request.dns_resources[0], addr[1]))
@@ -38,9 +40,37 @@ def dns_PTR_resolve (addr, resolve):
                 ip_peer.in_addr_arpa (addr[0]), 'PTR'
                 ), resolved)
 
-
 def dns_PTR_resolved (listen):
+        "decorate a server abstraction with DNS address resolution"
         listen.server_resolved = name_resolved
         listen.server_resolve = dns_PTR_resolve
         return listen
 
+
+def dns_double_lookup (addr, reverse):
+        "asynchronously reverse an numeric IP address to a named one"
+        def resolve_PTR (request):
+                if request.dns_resources:
+                        name = request.dns_resources[0]
+                        def resolve_A (request):
+                                if (
+                                        request.dns_resources and 
+                                        request.dns_resources[0] == addr[0]
+                                        ):
+                                        reverse ((name, addr[1]))
+                                else:
+                                        reverse (None)
+
+                        dns_client.lookup ((name, 'A'), resolve_A)
+                else:
+                        reverse (None)
+        
+        dns_client.lookup ((
+                ip_peer.in_addr_arpa (addr[0]), 'PTR'
+                ), resolve_PTR)
+
+def dns_PTR_reversed (listen):
+        "decorate a server abstraction with double lookup resolution"
+        listen.server_resolved = name_resolved
+        listen.server_resolve = dns_double_lookup
+        return listen
