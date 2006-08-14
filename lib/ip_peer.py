@@ -60,21 +60,6 @@ def long2ip (i):
         i, rest = divmod (rest, 256)
         return '%s.%d.%d' % (s, i, rest)
 
-#
-#local_network = ip2long ('127.0.0.0')
-#private_network_A = ip2long ('10.0.0.0')
-#private_network_C = ip2long ('192.168.0.0')
-#
-#def is_local (ipl):
-#        "returns True if the IP long belongs to the IPv4 local network"
-#        return ipl | local_network == ipl
-#
-#def is_private (ipl):
-#        "returns True if the IP long belongs to a IPv4 private network"
-#        return (
-#                (ipl | private_network_A == ipl) or 
-#                (ipl | private_network_C == ipl)
-#                )
 
 def udp_bind (dispatcher, ip=None, port=None):
         """bind an async_core.Dispatcher () to an address and return True
@@ -101,4 +86,4 @@ def udp_bind (dispatcher, ip=None, port=None):
                 return True
 
 
-# 105 lines, with spacing, licence and docstrings: small is beautifull
+# 89 lines, with spacing, licence and docstrings: small is beautifull
