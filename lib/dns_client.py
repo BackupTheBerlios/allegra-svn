@@ -285,7 +285,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 request = self.DNS_requests[question[1]] (
                         question, servers or self.dns_servers
                         )
-                # request.dns_client = self
                 request.dns_resolve = [resolve]
                 self.dns_send (request, when)
                 
@@ -410,62 +409,6 @@ def resolver ():
 
 lookup = resolver () # never finalized, but not allways binded
 
-
-def RESOLVED (request):
-        assert None == lookup.log ('%r' % request.__dict__, 'debug')
-
-def first_mail_lookup (name, resolved=RESOLVED, servers=None):
-        def resolved_MX (request_MX):
-                try:
-                        mx1 = request_MX.dns_resources[0]
-                except:
-                        resolved (None)
-                        return
-                
-                lookup ((mx1, 'A'), resolved, servers)
-        lookup ((name, 'MX'), resolved_MX, servers)
-
-
-def REVERSED (ip): 
-        assert None == lookup.log ('%r' % ip, 'debug')
-
-def reverse_lookup (name, reversed, servers=None):
-        def resolved_A (request_A):
-                try:
-                        ip = request_A.dns_resources[0]
-                except:
-                        reversed (None)
-                        return
-                
-                def resolved_PTR (request_PTR):
-                        try:
-                                cn = request_PTR.dns_resources[0]
-                        except:
-                                reversed (None)
-                                return
-                        
-                        def resolved_A_PTR (request_A_PTR):
-                                try:
-                                        iprev = request_A_PTR.dns_resources[0]
-                                except:
-                                        reversed (None)
-                                        return
-                                
-                                if iprev == ip:
-                                        reversed (ip)
-                                else:
-                                        reversed (None)
-                                        
-                        lookup ((
-                                request_PTR.dns_resources[0], 'A'
-                                ), resolved_A_PTR, servers)
-                                
-                lookup ((
-                        ip_peer.in_addr_arpa (ip), 'PTR'
-                        ), resolved_PTR, servers)
-                        
-        lookup ((name, 'A'), resolved_A, servers)
-                
 
 if __name__ == '__main__':
         import sys
