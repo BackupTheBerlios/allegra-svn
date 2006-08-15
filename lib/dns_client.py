@@ -180,9 +180,9 @@ class Request_NS (Request):
                 if self.dns_resources:
                         self.dns_resources.sort ()
                         self.dns_ttl = self.dns_resources[0][0]
-                        self.dns_resources = tuple ([
+                        self.dns_resources = [
                                 rr[1] for rr in self.dns_resources 
-                                ])
+                                ]
                         return True
 
                 return False
@@ -215,9 +215,9 @@ class Request_MX (Request):
                         if self.dns_resources[0][0] < self.dns_resources[-1][0]:
                                 self.dns_resources.reverse ()
                 self.dns_ttl = self.dns_resources[0][2]
-                self.dns_resources = tuple ([
+                self.dns_resources = [
                         rr[1] for rr in self.dns_resources 
-                        ])
+                        ]
                 return True
 
 
@@ -389,7 +389,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
         def dns_finalize (self, request):
                 "call back all resolution handlers for this request"
                 defered = request.dns_resolve
-                request.dns_resolve = request.dns_response = None
+                del request.dns_resolve, request.dns_response
                 for resolve in defered:
                         resolve (request)
 
