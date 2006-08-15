@@ -281,7 +281,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                 return
                                 
                         when = time.time ()
-                        if request.dns_ttl < when:
+                        if request.dns_when + request.dns_ttl < when:
                                 # ... or resolve now.
                                 resolve (request)
                                 return
@@ -388,9 +388,10 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
 
         def dns_finalize (self, request):
                 "call back all resolution handlers for this request"
-                for resolve in request.dns_resolve:
+                defered = request.dns_resolve
+                request.dns_resolve = request.dns_response = None
+                for resolve in defered:
                         resolve (request)
-                request.dns_resolve = None
 
         def timeouts_stop (self):
                 "close the dispatcher when all requests have timed out"
