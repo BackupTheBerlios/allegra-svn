@@ -264,6 +264,10 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         
         def __call__ (self, question, resolve, servers=None):
                 "resolve from the cache first, maybe send a new request"
+                assert (
+                        type (question[0]) == str and
+                        question[1] in self.DNS_requests.keys ()
+                        )
                 # first check the cache for a valid response or a 
                 # pending request ...
                 try:
@@ -396,7 +400,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
 lookup = Resolver (_peers ()) # never finalized, but not allways binded
 
 # This is a usefull asynchronous DNS/UDP client for applications in just
-# under four hundreds lines of Python with licence, spacing and docstrings.
+# four hundreds lines of Python with licence, spacing and docstrings.
 #
 # DNS/TCP is not a usefull application of a Domain Name System: either
 # you're on a local network where you can size your DNS server right or
