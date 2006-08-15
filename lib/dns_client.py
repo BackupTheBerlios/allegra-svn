@@ -107,7 +107,6 @@ class Request (object):
         def dns_unpack (self, datagram):
                 "unpack the resource records from a response datagram"
                 self.dns_response = datagram
-                # count resources announced
                 ancount = (ord (datagram[6])<<8) + (ord (datagram[7]))
                 if ancount:
                         # skip question, first name starts at 12, this is
@@ -264,10 +263,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         
         def __call__ (self, question, resolve, servers=None):
                 "resolve from the cache first, maybe send a new request"
-                assert (
-                        type (question[0]) == str and
-                        question[1] in self.DNS_requests.keys ()
-                        )
                 # first check the cache for a valid response or a 
                 # pending request ...
                 try:
@@ -281,7 +276,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                 return
                                 
                         when = time.time ()
-                        if request.dns_when + request.dns_ttl < when:
+                        if request.dns_when + request.dns_ttl > when:
                                 # ... or resolve now.
                                 resolve (request)
                                 return
@@ -389,7 +384,10 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
         def dns_finalize (self, request):
                 "call back all resolution handlers for this request"
                 defered = request.dns_resolve
-                del request.dns_resolve, request.dns_response
+                del request.dns_resolve
+                if request.dns_response:
+                        self.dns_cache[request.dns_question] = request
+                        del request.dns_response
                 for resolve in defered:
                         resolve (request)
 
