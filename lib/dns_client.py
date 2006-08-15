@@ -17,14 +17,13 @@
 
 "http://laurentszyster.be/blog/dns_client/"
 
-import time, re
+import os, time, re
 
 from allegra import async_loop, async_core, timeouts, ip_peer
 
 
 def _peers ():
         "get the addresses of the DNS name servers for the host system"
-        import os
         if os.name == 'nt':
                 # avoid _winreg: parse XP's "ipconfig /all" instead ...
                 # 
@@ -51,12 +50,12 @@ def _skip_name (datagram, pos):
         while 1:
                 ll = ord (datagram[pos])
                 if (ll&0xc0):
-                        # compression
-                        return pos + 2
+                        return pos + 2 # compression
                 
                 elif ll == 0:
                         pos += 1
                         break
+                
                 else:
                         pos += ll + 1
         return pos
@@ -106,7 +105,7 @@ class Request (object):
                 self.dns_peer = (servers[0], 53)
 
         def dns_unpack (self, datagram):
-                "unpack the resource record from a response datagram"
+                "unpack the resource records from a response datagram"
                 self.dns_response = datagram
                 # count resources announced
                 ancount = (ord (datagram[6])<<8) + (ord (datagram[7]))
@@ -139,7 +138,7 @@ class Request (object):
                 return True
 
 
-class _A (Request):
+class Request_A (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -160,7 +159,7 @@ class _A (Request):
                 return False
         
 
-class _NS (Request):
+class Request_NS (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -189,7 +188,7 @@ class _NS (Request):
                 return False
 
 
-class _MX (Request):
+class Request_MX (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -222,7 +221,7 @@ class _MX (Request):
                 return True
 
 
-class _PTR (Request):
+class Request_PTR (Request):
 
         DNS_DATAGRAM = (
                 '%c%c\001\000\000\001\000\000\000\000\000\000%s\000'
@@ -243,18 +242,22 @@ class _PTR (Request):
 
 class Resolver (async_core.Dispatcher, timeouts.Timeouts):
 
-        DNS_requests = {'A': _A, 'NS': _NS, 'MX': _MX, 'PTR': _PTR}
+        DNS_requests = {
+                'A': Request_A, 
+                'NS': Request_NS, 
+                'MX': Request_MX, 
+                'PTR': Request_PTR
+                }
 
-        def __init__ (
-                self, servers, failover=1, timeout=2, precision=1, ip=None
-                ):
+        dns_ip = None
+        dns_sent = 0
+        dns_failover = 1
+
+        def __init__ (self, servers):
                 self.dns_servers = servers
-                self.dns_failover = failover
-                timeouts.Timeouts.__init__ (self, timeout, precision)
-                self.dns_ip = ip
-                self.dns_sent = 0
                 self.dns_cache = {}
                 self.dns_pending = {}
+                timeouts.Timeouts.__init__ (self, 2, 1)
                 
         def __repr__ (self):
                 return 'dns-client id="%x"' % id (self)
@@ -263,10 +266,9 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 "resolve from the cache first, maybe send a new request"
                 # first check the cache for a valid response or a 
                 # pending request ...
-                #
                 try:
-                        request = self.dns_cache.get[question]
-                except:
+                        request = self.dns_cache[question]
+                except KeyError:
                         when = time.time ()
                 else:
                         if request.dns_resolve != None:
@@ -281,7 +283,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                 return
 
                 # no cache entry, send a new request
-                #
                 request = self.DNS_requests[question[1]] (
                         question, servers or self.dns_servers
                         )
@@ -299,7 +300,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         return
                 
                 # match the datagram's UID with the pending DNS requests
-                #
                 uid = (ord (datagram[0]) << 8) + ord (datagram[1])
                 try:
                         request = self.dns_pending.pop (uid)
@@ -319,7 +319,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         
                 # consider the DNS request as answered: unpack and cache 
                 # the response, ...
-                #
                 assert None == self.log (
                         'signal ip="%s" port="%d"' % peer, 'debug'
                         )
@@ -334,11 +333,9 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         else:
                                 self.dns_finalize (request)
                                 return
-                                #
-                                # in case of failure, just keep trying.
 
                 request.dns_when = when
-                request.dns_uid = uid = self.dns_sent % (1<<16)
+                request.dns_uid = uid = self.dns_sent % 65536
                 self.dns_pending[uid] = request
                 self.sendto (
                         request.DNS_DATAGRAM % (
@@ -374,7 +371,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 if request.dns_failover < (
                         len (request.dns_servers) * self.dns_failover
                         ):
-                        # continue with the next peer and a new time
                         request.dns_peer = (
                                 request.dns_servers[
                                         request.dns_failover % len (
@@ -384,7 +380,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                                 )
                         self.dns_send (request, time.time ())
                 else:
-                        # ... or finalize ...
                         self.dns_finalize (request)
 
         def dns_finalize (self, request):
@@ -397,18 +392,25 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 "close the dispatcher when all requests have timed out"
                 self.handle_close ()
 
-# The convenience "outer API", to be applied ...
 
-def resolver ():
-        addresses = _peers ()
-        if addresses:
-                return Resolver (addresses)
+lookup = Resolver (_peers ()) # never finalized, but not allways binded
 
-        raise Exception ('No Resolver Address Available')
-
-
-lookup = resolver () # never finalized, but not allways binded
-
+# This is a usefull asynchronous DNS/UDP client for applications in just
+# under four hundreds lines of Python with licence, spacing and docstrings.
+#
+# DNS/TCP is not a usefull application of a Domain Name System: either
+# you're on a local network where you can size your DNS server right or
+# your application will simply add more weight to an overloaded server.
+#
+# On a public network of peers DNS/TCP makes little sense. If you really
+# need this stuff, subclass the dns_send, dns_connect and handle_read
+# methods to send and receive datagrams along TCP/IP stream connections.
+#
+# The rest of the implementation can be reused.
+#
+# Actually, it can also be applied to program a resolver. But not just a
+# simple DNS resolver: djbdns is allready available for virtually all POSIX 
+# systems (and I doubt you would want Windows to handle your DNS ;-)
 
 if __name__ == '__main__':
         import sys
@@ -432,49 +434,24 @@ if __name__ == '__main__':
                         servers = sys.argv[3:]
         else:
                 question = (sys.argv[1], 'A')
+        def resolved (request):
+                model = list (request.dns_question)
+                if request.dns_resources == None:
+                        model.append ('')
+                elif len (request.dns_resources) > 1:
+                        model.append (netstring.encode (
+                                request.dns_resources
+                                ))
+                elif request.dns_resources:
+                        model.append (request.dns_resources[0])
+                else:
+                        model.append ('')
+                model.append (request.dns_peer[0])
+                loginfo.log (netstring.encode (model))
+                
         if question[1] == 'PTR':
-                def reversed (ip):
-                        if ip == None:
-                                loginfo.log ('unresolved')
-                        else:
-                                loginfo.log (ip)
-                        
-                reverse_lookup (question[0], reversed, servers)
-        else:
-                def resolved (request):
-                        model = list (request.dns_question)
-                        if request.dns_resources == None:
-                                model.append ('')
-                        elif len (request.dns_resources) > 1:
-                                model.append (netstring.encode (
-                                        request.dns_resources
-                                        ))
-                        elif request.dns_resources:
-                                model.append (request.dns_resources[0])
-                        else:
-                                model.append ('')
-                        model.append (request.dns_peer[0])
-                        loginfo.log (netstring.encode (model))
-                        
-                lookup (question, resolved, servers)
+                question = (ip_peer.in_addr_arpa (question[0]), question[1])
+        lookup (question, resolved, servers)
         async_loop.dispatch ()
         assert None == finalization.collect ()
         sys.exit (0)
-
-        
-# This is a usefull asynchronous DNS/UDP client for applications below
-# five hundreds lines of Python with licence, spacing and docstrings.
-#
-# DNS/TCP is not a usefull application of a Domain Name System: either
-# you're on a local network where you can size your DNS server right or
-# your application will simply add more weight to an overloaded server.
-#
-# On a public network of peers DNS/TCP makes little sense. If you really
-# need this stuff, subclass the dns_send, dns_connect and handle_read
-# methods to send and receive datagrams along TCP/IP stream connections.
-#
-# The rest of the implementation can be reused.
-#
-# Actually, it can also be applied to program a resolver. But not just a
-# simple DNS resolver: djbdns is allready available for virtually all POSIX 
-# systems (and I doubt you would want Windows to handle your DNS ;-)
