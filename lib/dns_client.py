@@ -359,6 +359,16 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 "bind the dispatcher to a UDP/IP socket"
                 return ip_peer.udp_bind (self, self.dns_ip)
                         
+        def dns_finalize (self, request):
+                "call back all resolution handlers for this request"
+                defered = request.dns_resolve
+                del request.dns_resolve
+                if request.dns_response:
+                        self.dns_cache[request.dns_question] = request
+                        del request.dns_response
+                for resolve in defered:
+                        resolve (request)
+
         def timeouts_timeout (self, uid):
                 "handle a request's timeout: drop, failover or finalize"
                 try:
@@ -380,16 +390,6 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         self.dns_send (request, time.time ())
                 else:
                         self.dns_finalize (request)
-
-        def dns_finalize (self, request):
-                "call back all resolution handlers for this request"
-                defered = request.dns_resolve
-                del request.dns_resolve
-                if request.dns_response:
-                        self.dns_cache[request.dns_question] = request
-                        del request.dns_response
-                for resolve in defered:
-                        resolve (request)
 
         def timeouts_stop (self):
                 "close the dispatcher when all requests have timed out"
