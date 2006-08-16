@@ -95,10 +95,10 @@ def _unpack_preference (datagram, pos):
 class Request (object):
 
         dns_failover = 0
-
-        dns_when = dns_uid = dns_peer = dns_resolve = \
-                dns_ttl = dns_response = dns_resources = None
-
+        dns_ttl = 60 # one minute time-out for failed request
+        dns_when = dns_uid = dns_peer = dns_defered = dns_response = \
+                dns_resources = None
+                
         def __init__ (self, question, servers):
                 self.dns_question = question
                 self.dns_servers = servers
@@ -270,9 +270,9 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 except KeyError:
                         when = time.time ()
                 else:
-                        if request.dns_resolve != None:
+                        if request.dns_defered != None:
                                 # ... either resolve with pending ...
-                                request.dns_resolve.append (resolve)
+                                request.dns_defered.append (resolve)
                                 return
                                 
                         when = time.time ()
@@ -285,7 +285,7 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 request = self.DNS_requests[question[1]] (
                         question, servers or self.dns_servers
                         )
-                request.dns_resolve = [resolve]
+                request.dns_defered = [resolve]
                 self.dns_send (request, when)
                 
         def writable (self):
@@ -361,8 +361,8 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                         
         def dns_finalize (self, request):
                 "call back all resolution handlers for this request"
-                defered = request.dns_resolve
-                del request.dns_resolve
+                defered = request.dns_defered
+                del request.dns_defered
                 if request.dns_response:
                         self.dns_cache[request.dns_question] = request
                         del request.dns_response
