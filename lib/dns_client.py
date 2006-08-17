@@ -19,7 +19,7 @@
 
 import os, time, re
 
-from allegra import async_loop, async_core, timeouts, ip_peer
+from allegra import async_core, timeouts, ip_peer
 
 
 def _peers ():
@@ -205,14 +205,11 @@ class Request_MX (Request):
                 return False
                 
         def dns_collected (self):
-                "sort the MX resource records by preference, set TTL"
+                "sort the MX resource records by priority, set TTL"
                 if not self.dns_resources:
                         return False
                         
-                if len (self.dns_resources) > 1:
-                        self.dns_resources.sort ()
-                        if self.dns_resources[0][0] < self.dns_resources[-1][0]:
-                                self.dns_resources.reverse ()
+                self.dns_resources.sort ()
                 self.dns_ttl = self.dns_resources[0][2]
                 self.dns_resources = [
                         rr[1] for rr in self.dns_resources 
