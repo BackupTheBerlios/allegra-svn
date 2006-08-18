@@ -179,8 +179,9 @@ class Thread_loop (threading.Thread, select_trigger.Select_trigger):
                 True, trunk the thread loop queue.
                 """
 		if self.thread_loop_init ():
+                        next = self.thread_loop_queue.popleft # ? maybe safer
 			while True:
-				queued = self.thread_loop_queue.popleft ()
+				queued = next () # ... sure faster
 				if queued == None:
 					break
 
