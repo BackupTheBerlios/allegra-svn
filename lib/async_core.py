@@ -42,7 +42,7 @@
 
 "http://laurentszyster.be/blog/async_core/"
 
-import exceptions, socket, sys, time, os
+import exceptions, sys, os, time, socket, collections
 
 from errno import (
         EALREADY, EINPROGRESS, EWOULDBLOCK, ECONNRESET, 
@@ -186,22 +186,31 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                                 raise
 
         def sendto (self, data, peer):
-                "try to send data through a datagram socket or handle close"
+                "try to send data through a datagram socket"
                 try:
                         return self.socket.sendto (data, peer)
                 
-                except socket.error:
-                        self.handle_error ()
+                except socket.error, why:
+                        if why[0] == EWOULDBLOCK:
+                                return 0
+                                
+                        else:
+                                raise
+                                
                         return 0
 
         def recvfrom (self, datagram_size):
-                "try to receive bytes from a datagram socket or handle close"
+                "try to receive from a datagram socket, maybe handle close"
                 try:
                         return self.socket.recvfrom (datagram_size)
 
-                except socket.error:
-                        self.handle_error ()
-                        return '', None
+                except socket.error, why:
+                        if why[0] in [ECONNRESET, ENOTCONN, ESHUTDOWN]:
+                                self.handle_close()
+                                return '', None
+                                
+                        else:
+                                raise
 
         # The "iner" API applied in async_loop
 
@@ -266,7 +275,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                 self.close () # self.handle_close () ... or nothing?
 
         def handle_close (self):
-                self.close () # shorter and faster
+                self.close ()
 
         def handle_read (self):
                 "to subclass: assert unhandled read event debug log"
@@ -341,6 +350,81 @@ if os.name == 'posix':
                 self.connected = True
 
         Dispatcher.set_file = set_file
+
+
+# Conveniences
+
+class Dispatcher_with_send (Dispatcher):
+        
+        ac_out_buffer_size = 1 << 14 # sweet sixteen kilobytes
+
+        def __init__ (self):
+                self.ac_out_buffer = ''
+                
+        def writable (self):
+                "writable when there is output buffered or queued"
+                return not (
+                        (self.ac_out_buffer == '') and self.connected
+                        )
+        
+        def handle_write (self):
+                "try to send a chunk of buffered output or handle error"
+                buffer = self.ac_out_buffer
+                sent = self.send (buffer[:self.ac_out_buffer_size])
+                if sent:
+                        self.ac_out_buffer = buffer[sent:]
+                else:
+                        self.ac_out_buffer = buffer
+                                                        
+
+class Dispatcher_with_fifo (Dispatcher):
+
+        ac_out_buffer_size = 1 << 14 # sweet sixteen kilobytes
+
+        def __init__ (self):
+                self.ac_out_buffer = ''
+                self.output_fifo = collections.deque ()
+                
+        def writable (self):
+                "writable when there is output buffered or queued"
+                return not (
+                        (self.ac_out_buffer == '') and
+                        not self.output_fifo and self.connected
+                        )
+        
+        def handle_write (self):
+                """pull an output fifo of single strings into the buffer, 
+                send a chunk of it or close if done"""
+                obs = self.ac_out_buffer_size
+                buffer = self.ac_out_buffer
+                fifo = self.output_fifo
+                while len (buffer) < obs and fifo:
+                        s = fifo.popleft ()
+                        if s == None:
+                                if buffer == '':
+                                        self.handle_close ()
+                                        return
+                                
+                                else:
+                                        fifo.append (None)
+                                        break
+        
+                        buffer += s
+                if buffer:
+                        sent = self.send (buffer[:obs])
+                        if sent:
+                                self.ac_out_buffer = buffer[sent:]
+                        else:
+                                self.ac_out_buffer = buffer
+                else:
+                        self.ac_out_buffer = ''
+                        
+        def close_when_done (self):
+                "queue None if there is output queued, or handle close now"
+                if self.output_fifo:
+                        self.output_fifo_push (None)
+                else:
+                        self.handle_close ()
 
 
 # Note about this implementation
