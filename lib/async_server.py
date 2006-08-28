@@ -29,8 +29,8 @@ from allegra import async_loop, async_core, async_limits
 
 class Listen (async_core.Dispatcher):
         
-        ac_in_meter = ac_out_meter = 0
-        server_when = server_dispatched = 0
+        server_when = 0.0
+        ac_in_meter = ac_out_meter = server_dispatched = 0
         
         def __init__ (
                 self, Dispatcher, addr, precision, max, 
@@ -45,18 +45,14 @@ class Listen (async_core.Dispatcher):
                 self.server_named = {}
                 self.Server_dispatcher = Dispatcher
                 self.server_precision = precision
-                #
-                # async_core.Dispatcher.__init__ (self)
                 self.create_socket (family, socket.SOCK_STREAM)
                 self.set_reuse_addr ()
                 self.bind (addr)
                 self.listen (max)
-                #
                 anonymous (self)
                 accept_all (self)
                 metered (self)             
-                #
-                self.log ('listen', 'info')
+                self.log ('listen %r' % (addr,), 'info')
 
         def __repr__ (self):
                 return 'async-server id="%x"' % id (self)
@@ -218,26 +214,28 @@ class Listen (async_core.Dispatcher):
                 
         def server_stop (self, when):
                 "handle the server scheduled or inpromptu stop"
-                assert None == self.log (
-                        'stop dispatched="%d"'
-                        ' seconds="%f" in="%d" out="%d"' % (
-                                self.server_dispatched,
-                                (when - self.server_when),
-                                self.ac_in_meter,
-                                self.ac_out_meter
-                                ), 'debug')
-                self.server_when = self.server_dispatched = \
+                if self.server_when:
+                        self.log (
+                                'stop dispatched="%d"'
+                                ' seconds="%f" in="%d" out="%d"' % (
+                                        self.server_dispatched,
+                                        (when - self.server_when),
+                                        self.ac_in_meter,
+                                        self.ac_out_meter
+                                        ), 'info')
+                self.server_when = 0.0
+                self.server_dispatched = \
                         self.ac_in_meter = self.ac_out_meter = 0
 
         def server_shutdown (self):
                 "stop accepting connections, close all current when done"
-                assert None == self.log ('shutdown', 'debug')
-                if self.server_when == 0:
-                        self.handle_close ()
-                else:
+                self.log ('shutdown', 'info')
+                if self.server_when:
                         self.accepting = False
                         for dispatcher in tuple (self.server_dispatchers):
                                 dispatcher.close_when_done ()
+                else:
+                        self.handle_close ()
                 return True
                         
 
