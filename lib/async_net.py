@@ -75,6 +75,11 @@ def collect_net (next, buffer, collect, terminate):
 
 class Dispatcher (async_core.Dispatcher):
 
+        ac_in_buffer_size = ac_out_buffer_size = 1 << 14 # sweet 16 kilobytes
+
+        terminator = 0
+        collector_stalled = False
+                
         def __init__ (self):
                 self.ac_in_buffer = ''
                 self.ac_out_buffer = ''
@@ -82,11 +87,6 @@ class Dispatcher (async_core.Dispatcher):
 
         def __repr__ (self):
                 return 'async-net id="%x"' % id (self)
-                
-        ac_in_buffer_size = 4096
-        ac_out_buffer_size = 4096
-        terminator = 0
-        collector_stalled = False
                 
         def readable (self):
                 "predicate for inclusion in the poll loop for input"
@@ -105,19 +105,15 @@ class Dispatcher (async_core.Dispatcher):
         def handle_read (self):
                 "try to buffer more input and parse netstrings"
                 try:
-                        data = self.recv (self.ac_in_buffer_size)
-                except socket.error, why:
-                        self.handle_error ()
-                        return
-
-                try:
                         (
                                 self.terminator, 
                                 self.ac_in_buffer,
                                 self.collector_stalled
                                 ) = collect_net (
                                         self.terminator, 
-                                        self.ac_in_buffer + data,
+                                        self.ac_in_buffer + self.recv (
+                                                self.ac_in_buffer_size
+                                                ),
                                         self.async_net_collect, 
                                         self.async_net_terminate
                                         )
@@ -125,7 +121,7 @@ class Dispatcher (async_core.Dispatcher):
                         self.async_net_error (error)
 
         def handle_write (self):
-                "refill the output buffer, try to send it or close if done"
+                "buffer out a fifo of strings, try to send or close if done"
                 obs = self.ac_out_buffer_size
                 buffer = self.ac_out_buffer
                 fifo = self.output_fifo
@@ -144,15 +140,11 @@ class Dispatcher (async_core.Dispatcher):
                                 '%d:%s,' % (len (s), s) for s in strings
                                 ))
                 if buffer:
-                        try:
-                                sent = self.send (buffer[:obs])
-                        except socket.error, why:
-                                self.handle_error ()
+                        sent = self.send (buffer[:obs])
+                        if sent:
+                                self.ac_out_buffer = buffer[sent:]
                         else:
-                                if sent:
-                                        self.ac_out_buffer = buffer[sent:]
-                                else:
-                                        self.ac_out_buffer = buffer
+                                self.ac_out_buffer = buffer
                 else:
                         self.ac_out_buffer = ''
 
@@ -222,3 +214,5 @@ class Dispatcher (async_core.Dispatcher):
                 "log netstrings error and close the channel"
                 self.log (message, 'async-net-error')
                 self.handle_close ()
+                
+                

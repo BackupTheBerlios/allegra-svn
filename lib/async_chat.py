@@ -107,7 +107,7 @@ def collect_chat (c, buffer):
 
 class Dispatcher (async_core.Dispatcher):
 
-        ac_in_buffer_size = ac_out_buffer_size = 4096
+        ac_in_buffer_size = ac_out_buffer_size = 1 << 14
         
         terminator = None
         collector_stalled = False
@@ -192,15 +192,11 @@ class Dispatcher (async_core.Dispatcher):
                                     
                                 fifo.popleft ()
                 if buffer:
-                        try:
-                                sent = self.send (buffer[:obs])
-                        except socket.error, why:
-                                self.handle_error ()
+                        sent = self.send (buffer[:obs])
+                        if sent:
+                                self.ac_out_buffer = buffer[sent:]
                         else:
-                                if sent:
-                                        self.ac_out_buffer = buffer[sent:]
-                                else:
-                                        self.ac_out_buffer = buffer
+                                self.ac_out_buffer = buffer
                 else:
                         self.ac_out_buffer = ''
                         
