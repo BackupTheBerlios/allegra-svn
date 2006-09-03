@@ -186,16 +186,19 @@ def _finalize ():
                 
                 except:
                         finalized.finalization = None
-                        loginfo.loginfo_traceback () # log exception
+                        loginfo.traceback () # log exception
         
 	
 # Poll Time (Scheduled Events)
 
+precision = 0.1
+
 _scheduled = []
 
 def _clock ():
-	"call all events scheduled before now"
+	"call all events scheduled before now, maybe recurr in the future"
 	now = time.time ()
+        future = now + precision
 	while _scheduled:
 		# get the next defered ...
 		event = heapq.heappop (_scheduled)
@@ -210,12 +213,13 @@ def _clock ():
                         raise
                 
 		except:
-			loginfo.loginfo_traceback ()
+			loginfo.traceback ()
 		else:
 			if continued != None:
+                                # ... maybe recurr in the future
+                                if continued[0] < future:
+                                        continued = (future, continued[1])
 				heapq.heappush (_scheduled, continued) 
-				#
-				# ... maybe continue ...
 
 
 # Poll Signals (Exceptions Handler)
@@ -260,7 +264,6 @@ def catch (catcher):
 
 
 concurrency = 512
-precision = 0.1
 
 _dispatched = {}
 
@@ -277,7 +280,7 @@ def dispatch ():
                                 break
                 
                 except:
-                        loginfo.loginfo_traceback ()
+                        loginfo.traceback ()
         
         assert None == loginfo.log ('async_dispatch_stop', 'debug')
    
