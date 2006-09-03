@@ -594,7 +594,7 @@ def presto_rest (method, component, reactor):
         try:
                 result = method (component, reactor)
         except:
-                return presto_ctb (loginfo.loginfo_traceback ())
+                return presto_ctb (loginfo.traceback ())
                                 
         if result == None:
                 # None return <presto/>

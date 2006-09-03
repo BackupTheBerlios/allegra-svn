@@ -195,10 +195,10 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 	def select_trigger_traceback (self):
 		"return a compact traceback tuple and log asynchronously"
 		ctb = prompt.compact_traceback ()
-		self.select_trigger ((self.loginfo_log, (
-			loginfo.compact_traceback_netstrings (ctb), 
-			'traceback'
-			)))
+		self.select_trigger ((
+                        self.loginfo_log,
+			loginfo.traceback_encode (ctb)
+			))
 		return ctb
 
 	def finalization (self, finalized):

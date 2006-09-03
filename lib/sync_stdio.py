@@ -22,32 +22,18 @@ import sys
 from allegra import prompt, loginfo, async_loop, finalization, thread_loop
 
 
-class Sync_stdoe_file:
+logger = loginfo.logger
 
-	def __init__ (self, async_write):
-		self.write = async_write
-		
-	def writelines (self, lines):
-		for line in lines:
-			self.write (line)
-			
 
 class Sync_stdio (thread_loop.Thread_loop):
 
 	def __init__ (self):
                 self.async_loop_catch = async_loop._catched
                 async_loop._catched = self.async_prompt_catch
-		stdout, stderr = (
-			Sync_stdoe_file (self.async_stdout),
-			Sync_stdoe_file (self.async_stderr)
-			)
-		(
-			self.sync_stdout, self.sync_stderr
-			) = loginfo.Loginfo.loginfo_logger.loginfo_stdio (
-				stdout, stderr
-				)
-		self.sys_stdout, self.sys_stderr = sys.stdout, sys.stderr
-		sys.__stdout__, sys.__stderr__ = stdout, stderr
+                self.sync_stdout = logger.loginfo_stdout
+                self.sync_stderr = logger.loginfo_stderr
+                logger.loginfo_stdout = self.async_stdout
+                logger.loginfo_stderr = self.async_stderr
 		thread_loop.Thread_loop.__init__ (self)
 
 	def __repr__ (self):
@@ -62,18 +48,12 @@ class Sync_stdio (thread_loop.Thread_loop):
 	def async_stdio_stop (self):
                 async_loop._catched = self.async_loop_catch
                 self.async_loop_catch = None
-		sys.__stdout__, sys.__stderr__ = (
-			self.sys_stdout, self.sys_stderr
-			)
-		del self.sys_stdout, self.sys_stderr
+                logger.loginfo_stdout = self.sync_stdout
+                logger.loginfo_stderr = self.sync_stderr
 		try:
 			del self.log
 		except:
 			pass
-		loginfo.Loginfo.loginfo_logger.loginfo_stdio (
-			loginfo.write_and_flush (sys.stderr), 
-			loginfo.write_and_flush (sys.stdout)
-			)
 		self.thread_loop_queue (None)
                 return True
 
@@ -83,7 +63,7 @@ class Sync_stdio (thread_loop.Thread_loop):
                 assert None == self.select_trigger_log (
                         'stdio-stop', 'debug'
                         )
-                del self.sync_stdout, self.sync_stderr
+                # del self.sync_stdout, self.sync_stderr
                 return True
                 
 
@@ -210,8 +190,7 @@ if __name__ == '__main__':
         info = None # log prompt results to STDOUT by default
         if '-d' in sys.argv:
                 sys.argv.remove ('-d')
-                loginfo.Loginfo_stdio.log = \
-                        loginfo.Loginfo_stdio.loginfo_netlines
+                loginfo.Logger.log = loginfo.Logger.loginfo_netlines
         elif not __debug__:
                 Python_prompt.sync_stdin = Sync_prompt.sync_stdin_script
                 info = 'prompt'

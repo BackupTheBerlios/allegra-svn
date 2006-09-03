@@ -17,20 +17,24 @@
 
 "http://laurentszyster.be/blog/prompt/"
 
-import sys
+import sys, types
 
 
-def compact_traceback ():
+def compact_traceback (exc_info=None):
         """return a compact traceback tuple from sys.exc_info(), like:
         
-        ('exception', 'message', [
-                ('filename','function','lineno'),
+        (['error name',
+                ('filename', 'lineno', 'function'),
                 ...
-                ])
+                ], 'error message')
                 
         a compact traceback is a simple data structure made of 8-bit byte 
         strings, ready to be serialized."""
-        t, v, tb = sys.exc_info ()
+        t, v, tb = exc_info or sys.exc_info ()
+        if type (t) == types.ClassType:
+                t = t.__name__
+        elif type (t) != str:
+                t = str (t)
         tbinfo = []
         assert tb # Must have a traceback ?
         while tb:
@@ -41,7 +45,7 @@ def compact_traceback ():
                         ))
                 tb = tb.tb_next
         del tb # just to be safe ?
-        return '%s' % t, '%s' % v, tbinfo
+        return t, str (v), tbinfo
 
 
 def python_eval (co, env):
@@ -50,7 +54,7 @@ def python_eval (co, env):
         try:
                 return ('eval', eval (co, env))
 
-        except Exception, excp:
+        except:
                 return ('excp', compact_traceback ())
 
 
@@ -59,7 +63,7 @@ def python_exec (co, env):
         return either ('exec', None) or ('excp', traceback)"""
         try:
                 exec co in env
-        except Exception, excp:
+        except:
                 return ('excp', compact_traceback ())
                 
         else:
@@ -78,7 +82,7 @@ def python_prompt (line, env):
                         method, result = python_exec (co, env)
                 else:
                         method, result = python_eval (co, env)
-        except Exception, excp:
+        except:
                 return ('excp', compact_traceback ())
                 
         else:
