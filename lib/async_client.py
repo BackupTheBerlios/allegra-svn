@@ -27,20 +27,20 @@ except:
 from allegra import loginfo, async_loop, async_limits
         
         
-def connect (dispatcher, addr, timeout, family=socket.AF_INET):
+def connect (dispatcher, addr, timeout=3.0, family=socket.AF_INET):
         "create a socket, try to connect it and schedule a timeout"
         assert (
-                not dispatcher.connected and
-                type (timeout) == int and timeout > 0 and
+                not dispatcher.connected and timeout > 0 and
                 family in SOCKET_FAMILIES
                 )
         dispatcher.client_when = time.time ()
+        dispatcher.client_timeout = timeout
         try:
                 dispatcher.create_socket (family, socket.SOCK_STREAM)
                 dispatcher.connect (addr)
         except:
                 dispatcher.loginfo_traceback ()
-                dispatcher.handle_close ()
+                dispatcher.handle_error ()
                 return False
                 
         assert None == dispatcher.log ('connect', 'debug')
@@ -60,6 +60,17 @@ def connect (dispatcher, addr, timeout, family=socket.AF_INET):
         return True
 
 
+def reconnect (dispatcher):
+        if dispatcher.addr:
+                dispatcher.closing = False
+                return connect (
+                        dispatcher, 
+                        dispatcher.addr, 
+                        dispatcher.client_timeout, 
+                        dispatcher.family_and_type[0]
+                        )
+                
+
 class Connections (loginfo.Loginfo):
         
         "a connection manager for async_client.Dispatcher instances"
@@ -67,11 +78,12 @@ class Connections (loginfo.Loginfo):
         ac_in_meter = ac_out_meter = 0
         client_errors = client_when = client_dispatched = 0
         
-        def __init__ (self, timeout, precision, family=socket.AF_INET):
+        def __init__ (
+                self, timeout=3.0, precision=1.0, family=socket.AF_INET
+                ):
                 "initialize a new client manager"
                 assert (
-                        type (timeout) == int and timeout > 0 and
-                        type (precision) == int and precision > 0 and
+                        timeout > 0 and precision > 0 and
                         family in SOCKET_FAMILIES
                         )
                 self.client_managed = {}
@@ -98,6 +110,7 @@ class Connections (loginfo.Loginfo):
                 
         def client_connect (self, dispatcher, name):
                 "resolve and/or connect a dispatcher"
+                dispatcher.client_name = name
                 addr = self.client_resolved (name)
                 if addr != None:
                         return connect (
@@ -122,7 +135,11 @@ class Connections (loginfo.Loginfo):
                                 
                 self.client_resolve (name, resolve)
                 return True
-                
+        
+        def client_reconnect (self, dispatcher):
+                dispatcher.closing = False
+                self (dispatcher, dispatcher.client_name)
+        
         def client_unresolved (self, dispatcher, name):
                 "assert debug log and close an unresolved dispatcher"
                 assert None == dispatcher.log (
@@ -194,7 +211,7 @@ class Connections (loginfo.Loginfo):
                 self.client_errors = self.client_dispatched = \
                         self.ac_in_meter = self.ac_out_meter = 0
 
-        def client_shutdown (self):
+        def close_when_done (self):
                 "close all client dispatchers when done"
                 for dispatcher in self.client_dispatchers ():
                         dispatcher.close_when_done ()
@@ -205,12 +222,11 @@ class Cache (Connections):
         "a cache of managed connections"
 
         def __init__ (
-                self, timeout=3, precision=1, family=socket.AF_INET
+                self, timeout=3.0, precision=1.0, family=socket.AF_INET
                 ):
                 "initialize a new client cache"
                 assert (
-                        type (timeout) == int and timeout > 0 and
-                        type (precision) == int and precision > 0 and
+                        timeout > 0 and precision > 0 and
                         family in SOCKET_FAMILIES
                         )
                 self.client_managed = {}
@@ -249,13 +265,12 @@ class Pool (Connections):
         
         def __init__ (
                 self, Dispatcher, name, 
-                size=2, timeout=3, precision=1, family=socket.AF_INET
+                size=2, timeout=3.0, precision=1.0, family=socket.AF_INET
                 ):
                 "initialize a new client pool"
                 assert (
                         type (size) == int and size > 1 and
-                        type (timeout) == int and timeout > 0 and
-                        type (precision) == int and precision > 0 and
+                        timeout > 0 and precision > 0 and
                         family in SOCKET_FAMILIES
                         )
                 self.client_managed = []
@@ -323,10 +338,21 @@ def meter (dispatcher, when):
                 dispatcher.async_client.client_close (dispatcher)
                 
         dispatcher.close = close
+        
+def no_limit (dispatcher, when):
+        return False
+        
+        
+def unlimited (connections):
+        "meter I/O for unlimited client streams"
+        connections.client_decorate = meter
+        connections.client_limit = no_limit
+        return connections
+        
 
 def inactive (connections, timeout):
         "meter I/O and limit inactivity for client streams"
-        assert type (timeout) == int and timeout > 0
+        assert timeout > 0
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
                 dispatcher.limit_inactive = connections.client_inactive
@@ -340,7 +366,7 @@ def inactive (connections, timeout):
 def limited (connections, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for managed client streams"
         assert (
-                type (timeout) == int and timeout > 0 and
+                timeout > 0 and
                 type (inBps ()) == int and inBps () > 0 and
                 type (outBps ()) == int and outBps () > 0
                 )
@@ -378,7 +404,7 @@ def limited (connections, timeout, inBps, outBps):
 def rationed (connections, timeout, inBps, outBps):
         "ration I/O and limit inactivity for managed client streams"
         assert (
-                type (timeout) == int and timeout > 0 and
+                timeout > 0 and
                 type (inBps) == int and inBps > 0 and
                 type (outBps) == int and outBps > 0
                 )

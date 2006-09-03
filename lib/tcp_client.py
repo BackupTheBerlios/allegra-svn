@@ -22,6 +22,14 @@ import socket
 from allegra import async_client, ip_peer, dns_client
 
 
+def is_host_and_port (addr):
+        return (
+                type (addr) == tuple and 
+                len (addr) == 2 and
+                type (addr[0]) == str and
+                type (addr[1]) == int
+                )
+
 def ip_resolved (addr):
         "synchronously resolve a numeric IP name to itself"
         if ip_peer.is_ip (addr[0]):
@@ -63,6 +71,11 @@ def connect (
                                 
         resolve (name, connect_or_close)
         return True
+
+
+def reconnect_resolved (dispatcher):
+        if dispatcher.addr != None:
+                async_client.reconnect (dispatcher)
 
 
 def dns_A_resolved (connections):
