@@ -47,8 +47,8 @@ def dns_PTR_resolved (listen):
         return listen
 
 
-def dns_double_lookup (addr, reverse):
-        "asynchronously reverse an numeric IP address to a named one"
+def dns_double_lookup (addr, resolve):
+        "resolve the name of a numeric IP address if it is reversed"
         def resolve_PTR (request):
                 if request.dns_resources:
                         name = request.dns_resources[0]
@@ -57,13 +57,13 @@ def dns_double_lookup (addr, reverse):
                                         request.dns_resources and 
                                         request.dns_resources[0] == addr[0]
                                         ):
-                                        reverse ((name, addr[1]))
+                                        resolve ((name, addr[1]))
                                 else:
-                                        reverse (None)
+                                        resolve (None)
 
                         dns_client.lookup ((name, 'A'), resolve_A)
                 else:
-                        reverse (None)
+                        resolve (None)
         
         dns_client.lookup ((
                 ip_peer.in_addr_arpa (addr[0]), 'PTR'
