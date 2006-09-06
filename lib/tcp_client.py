@@ -46,7 +46,7 @@ def dns_A_resolve (addr, resolve):
 
 
 def connect (
-        dispatcher, name, timeout, 
+        dispatcher, name, timeout=3.0, 
         resolved=ip_resolved, resolve=dns_A_resolve
         ):
         "resolve and maybe connect a dispatcher, close on error"
@@ -86,18 +86,18 @@ def dns_A_resolved (connections):
 
 # conveniences for named TCP/IP connections
 
-def Connections (timeout, precision, resolution=dns_A_resolved):
+def Connections (timeout=3.0, precision=1.0, resolution=dns_A_resolved):
         return resolution (async_client.Connections (
                 timeout, precision, socket.AF_INET
                 ))
 
-def Cache (timeout, precision, resolution=dns_A_resolved):
+def Cache (timeout=3.0, precision=1.0, resolution=dns_A_resolved):
         return resolution (async_client.Cache (
                 timeout, precision, socket.AF_INET
                 ))
 
 def Pool (
-        Dispatcher, name, size, timeout, precision, 
+        Dispatcher, name, size=2, timeout=3.0, precision=1.0, 
         resolution=dns_A_resolved
         ):
         return resolution (async_client.Pool (
