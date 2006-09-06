@@ -69,6 +69,8 @@ def reconnect (dispatcher):
                         dispatcher.client_timeout, 
                         dispatcher.family_and_type[0]
                         )
+                        
+        return False
                 
 
 class Connections (loginfo.Loginfo):
@@ -139,6 +141,7 @@ class Connections (loginfo.Loginfo):
         def client_reconnect (self, dispatcher):
                 dispatcher.closing = False
                 self (dispatcher, dispatcher.client_name)
+                return dispatcher.closing
         
         def client_unresolved (self, dispatcher, name):
                 "assert debug log and close an unresolved dispatcher"
@@ -305,6 +308,9 @@ class Pool (Connections):
                 else:
                         self.client_errors += 1
                 return dispatcher
+        
+        def client_reconnect (self, dispatcher):
+                return False # useless for a cached dispatcher!
 
         def client_dispatchers (self):
                 "return a list of dispatchers pooled"
