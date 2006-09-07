@@ -353,17 +353,14 @@ def post_multipart (reactor):
 if __name__ == '__main__':
         import sys, time
         t = time.clock ()
+        if '-d' in sys.argv:
+                sys.argv.remove ('-d')
+                loginfo.Logger.log = loginfo.Logger.loginfo_netlines
         if '-s' in sys.argv:
                 sys.argv.remove ('-s')
                 from allegra import sync_stdio
-        elif not __debug__:
-                from allegra import sync_stdio
         else:
                 sync_stdio = None
-        if '-d' in sys.argv:
-                sys.argv.remove ('-d')
-                loginfo.Loginfo_stdio.log = \
-                        loginfo.Loginfo_stdio.loginfo_netlines
         loginfo.log (
                 'Allegra PRESTo/HTTP'
                 ' - Copyright 2005 Laurent A.V. Szyster | Copyleft GPL 2.0',
