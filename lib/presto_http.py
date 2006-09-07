@@ -113,10 +113,17 @@ def presto_decode (urlencoded, vector, encoding='UTF-8'):
 # applications all the troubles that inevitably arise from the use of
 # client/server designs for a stateless protocol like HTTP.
 #
-# I consider AJAX the harmfull return of the C/S zombie. Web pages with 
+# I considered AJAX the harmfull return of the C/S zombie. Web pages with 
 # JavaScript user interface automation is nice, but holding the full
 # application state in a crash-prone browser and an insecure PC is not
-# a very good idea. If cookies aren't enough
+# a very good idea. If cookies aren't enough, why bother?
+#
+# Well, I changed my mind since then. Prototype is Good and Allegra should
+# support AJAX applications ... that do not use the browser's host to store
+# the application's data and hold its user state. 
+#
+# Allegra is made to hold its user's persistent contexts, it could support
+# statefull JavaScript web peer in a browser. How is yet to do ...
 
 
 def presto_vector (
