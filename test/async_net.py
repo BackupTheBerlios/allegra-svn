@@ -28,7 +28,7 @@ class QMTP (async_net.Dispatcher):
 
 qmtp = QMTP ()
 if async_client.connect (qmt, ('127.0.0.1', 209), 3):
-    push = qmtp.output_fifo.append
+    push = qmtp.async_net_push
     push ((
         'Subject: Hello\n\nHello who?', 
         'from@me', 

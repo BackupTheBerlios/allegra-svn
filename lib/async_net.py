@@ -73,9 +73,9 @@ def collect_net (next, buffer, collect, terminate):
         return 0, '', False # buffer consumed.
 
 
-class Dispatcher (async_core.Dispatcher):
+class Dispatcher (async_core.Dispatcher_with_fifo):
 
-        ac_in_buffer_size = ac_out_buffer_size = 1 << 14 # sweet 16 kilobytes
+        ac_in_buffer_size = 1 << 14 # sweet 16 kilobytes
 
         terminator = 0
         collector_stalled = False
@@ -93,13 +93,6 @@ class Dispatcher (async_core.Dispatcher):
                 return not (
                         self.collector_stalled or
                         len (self.ac_in_buffer) > self.ac_in_buffer_size
-                        )
-
-        def writable (self):
-                "predicate for inclusion in the poll loop for output"
-                return not (
-                        (self.ac_out_buffer == '') and
-                        not self.output_fifo and self.connected
                         )
 
         def handle_read (self):
@@ -120,49 +113,10 @@ class Dispatcher (async_core.Dispatcher):
                 except NetstringError, error:
                         self.async_net_error (error)
 
-        def handle_write (self):
-                "buffer out a fifo of strings, try to send or close if done"
-                obs = self.ac_out_buffer_size
-                buffer = self.ac_out_buffer
-                fifo = self.output_fifo
-                while len (buffer) < obs and fifo:
-                        strings = fifo.popleft ()
-                        if strings == None:
-                                if buffer == '':
-                                        self.handle_close ()
-                                        return
-                                
-                                else:
-                                        fifo.append (None)
-                                        break
-        
-                        buffer += ''.join ((
-                                '%d:%s,' % (len (s), s) for s in strings
-                                ))
-                if buffer:
-                        sent = self.send (buffer[:obs])
-                        if sent:
-                                self.ac_out_buffer = buffer[sent:]
-                        else:
-                                self.ac_out_buffer = buffer
-                else:
-                        self.ac_out_buffer = ''
-
-        # A compatible interface with Async_chat.close_when_done used by
-        # Allegra's TCP clients and servers implementation.
-                        
-        def close_when_done (self):
-                """close this channel when previously queued strings have
-                been sent, or close now if the queue is empty."""
-                if self.output_fifo:
-                        self.output_fifo.append (None)
-                else:
-                        self.handle_close ()
-
         # The Async_net Interface
 
         def async_net_out (self, strings):
-                "buffer netstrings of an iterable of 8-bit byte strings"
+                "buffer as netstrings an iterable of 8-bit byte strings"
                 self.ac_out_buffer += ''.join ((
                         '%d:%s,' % (len (s), s) for s in strings
                         ))
@@ -170,7 +124,9 @@ class Dispatcher (async_core.Dispatcher):
         def async_net_push (self, strings):
                 "push an iterable of 8-bit byte strings for output"
                 assert hasattr (strings, '__iter__')
-                self.output_fifo.append (strings)
+                self.output_fifo.append (''.join ((
+                        '%d:%s,' % (len (s), s) for s in strings
+                        )))
 
         def async_net_pull (self):
                 "try to consume the input netstrings buffered"

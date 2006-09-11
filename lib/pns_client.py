@@ -22,7 +22,7 @@ from allegra import netstring, loginfo, async_net, async_client
 
 class Dispatcher (async_net.Dispatcher):
         
-        "a multiplexed PNS/TCP client resolver"
+        "a multiplexed PNS client resolver"
         
         def __init__ (self):
                 self.pns_commands = {}
@@ -237,7 +237,7 @@ def pns_peer (resolved, model):
 
 class Cache (async_client.Cache):
         
-        "a PNS/TCP client channel manager"
+        "a PNS client connection cache"
         
         def __call__ (self, addr, handler=pns_peer):
                 dispatcher = async_client.Cache.__call__ (
@@ -263,6 +263,8 @@ class Cache (async_client.Cache):
                 
 
 class Pipe (Dispatcher):
+        
+        "a PNS client pipe"
         
         def __init__ (self, addr, pipe, timeout=3):
                 self.pns_pipe = pipe
@@ -315,8 +317,7 @@ class Pipe (Dispatcher):
                         
         def pns_signal (self, resolved, model):
                 # dump a netstring to STDOUT
-                encoded = netstring.encode (model)
-                loginfo.log (encoded)
+                loginfo.log (netstring.encode (model))
                 # waits for the echo to finalize and articulate the
                 # next statement, nicely as the peer sends its echo
                 if model[4].startswith ('.'):
@@ -329,9 +330,7 @@ class Pipe (Dispatcher):
 
         def pns_noise (self, model):
                 # dump a netstring to STDERR
-                loginfo.log (
-                        netstring.encode (model), 'noise'
-                        )
+                loginfo.log (netstring.encode (model), 'noise')
                 
 
 if __name__ == '__main__':
