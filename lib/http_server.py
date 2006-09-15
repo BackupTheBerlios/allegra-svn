@@ -410,7 +410,7 @@ class Listen (async_server.Listen):
         http_hosts = {}
         
         def __init__ (
-                self, addr, precision=3, max=_LISTEN_MAX, 
+                self, addr, precision=3.0, max=_LISTEN_MAX, 
                 family=socket.AF_INET
                 ):
                 async_server.Listen.__init__ (

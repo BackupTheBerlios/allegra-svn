@@ -20,7 +20,7 @@ class Flaking (async_core.Dispatcher):
                 self.close ()
                 
 flaking = async_server.Listen (
-        Flaking, ('127.0.0.1', 1234), 6, 5
+        Flaking, ('127.0.0.1', 1234), 6.0, 5
         )
 async_loop.catch (flaking.server_shutdown)        
 async_loop.dispatch ()

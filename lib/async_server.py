@@ -37,7 +37,7 @@ class Listen (async_core.Dispatcher):
                 family=socket.AF_INET
                 ):
                 assert (
-                        type (precision) == int and precision > 0 and
+                        precision > 0.0 and
                         type (max) == int and max > 0 and
                         family in SOCKET_FAMILIES
                         )
@@ -297,7 +297,7 @@ def metered (listen, timeout=1<<32):
 
 def inactive (listen, timeout):
         "meter I/O and limit inactivity for server streams"
-        assert type (timeout) == int and timeout > 0
+        assert timeout > 0.0
         def decorate (dispatcher, when):
                 meter (dispatcher, when)
                 dispatcher.limit_inactive = listen.server_inactive
@@ -311,7 +311,7 @@ def inactive (listen, timeout):
 def limited (listen, timeout, inBps, outBps):
         "throttle I/O and limit inactivity for managed client streams"
         assert (
-                type (timeout) == int and timeout > 0 and
+                timeout > 0.0 and
                 type (inBps ()) == int and inBps () > 0 and
                 type (outBps ()) == int and outBps () > 0
                 )
@@ -349,7 +349,7 @@ def limited (listen, timeout, inBps, outBps):
 def rationed (listen, timeout, inBps, outBps):
         "ration I/O and limit inactivity for managed client streams"
         assert (
-                type (timeout) == int and timeout > 0 and
+                timeout > 0.0 and
                 type (inBps) == int and inBps > 0 and
                 type (outBps) == int and outBps > 0
                 )

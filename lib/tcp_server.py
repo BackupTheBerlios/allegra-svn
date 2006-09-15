@@ -27,7 +27,7 @@ def name_resolved (addr):
         if addr[0].startswith ('127.'):
                 return addr
         
-
+        
 def dns_PTR_resolve (addr, resolve):
         "resolve asynchronously an numeric IP address to a named one"
         def resolved (request):

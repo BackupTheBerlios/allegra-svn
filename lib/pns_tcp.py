@@ -119,7 +119,7 @@ class Listen (async_server.Listen):
         
         def __init__ (
                 self, pns_peer, ip, 
-                precision=3, max=5, family=socket.AF_INET
+                precision=3.0, max=5, family=socket.AF_INET
                 ):
                 self.pns_peer = pns_peer
                 async_server.Listen.__init__ (
