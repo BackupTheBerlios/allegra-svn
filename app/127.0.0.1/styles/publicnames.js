@@ -113,11 +113,6 @@ function netoutline (buffer, root, attribute) {};
 	
 	
 /* 
- * Recursively validate a Public Name, returns the empty string if
- * the name encoded is invalid or inside the horizon. This function
- * does more than just assert that the encoded 8-bit byte string is
- * a valid public name: it transform it to a valid public name.
- * 
  * This is truly a validator that produce valid Public Names from what 
  * was found in the buffer.
  * 
