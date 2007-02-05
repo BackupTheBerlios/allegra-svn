@@ -26,17 +26,17 @@ from allegra import (
         )
 
 
-class Request (finalization.Finalization):
+class Reactor (finalization.Finalization):
                 
         http_response = mime_collector_headers = mime_collector_body = None
         
         def __init__ (
-                self, pipeline, url, headers, command, produce=None
+                self, method, pipeline, url, headers, produce=None
                 ):
                 headers ['Host'] = pipeline.http_host
                 self.http_pipeline = pipeline
                 self.http_urlpath = url
-                self.http_command = command
+                self.http_method = method
                 self.mime_producer_headers = headers
                 self.mime_producer_body = produce
 
@@ -170,7 +170,7 @@ class Pipeline (
 			self.mime_collector_headers = \
 			mime_headers.map (self.mime_collector_lines)
 		if (
-			request.http_command == 'HEAD' or
+			request.http_method == 'HEAD' or
 			request.http_response[:3] in ('204', '304', '305')
 			):
                         self.mime_collector_finalize ()
@@ -212,7 +212,7 @@ class Pipeline (
         def http_client_continue (self, request):
                 # push one string and maybe a producer in the output fifo ...
                 http_request = '%s %s HTTP/%s\r\n' % (
-                        request.http_command, 
+                        request.http_method, 
                         request.http_urlpath, 
                         self.http_version
                         )
@@ -250,11 +250,7 @@ class Pipeline (
                 # ready to send.
                 
 
-def pipeline (host, port=80, version='1.1'):
-        assert (
-                type (host) == str and type (port) == int and
-                version in ('1.1', '1.0')
-                )
+def pipeline (host, port, version):
         dispatcher = Pipeline ()
         if port == 80:
                 dispatcher.http_host = host
@@ -262,7 +258,6 @@ def pipeline (host, port=80, version='1.1'):
                 dispatcher.http_host = '%s:%d' % (host, port)
         dispatcher.http_version = version
         return dispatcher
-
 
 def connect (host, port=80, version='1.1', timeout=3.0):
         dispatcher = pipeline (host, port, version)
@@ -272,87 +267,57 @@ def connect (host, port=80, version='1.1', timeout=3.0):
 
 # conveniences
 
-class Connections (async_client.Connections):
+def decorated (host, port, version):
+        def Dispatcher ():
+                dispatcher = Pipeline ()
+                if port == 80:
+                        dispatcher.http_host = host
+                else:
+                        dispatcher.http_host = '%s:%d' % (host, port)
+                dispatcher.http_version = version
+                return dispatcher
+        return Dispatcher
 
-        def __init__ (
-                self, timeout=3.0, precision=1.0, 
-                resolution=tcp_client.dns_A_resolved
-                ):
-                async_client.Connections.__init__ (
-                        self, timeout, precision, socket.AF_INET
-                        )
-                resolution (self)
-
-        def __call__ (self, host, port=80, version='1.1'):
-                return async_client.Connections.__call__ (
-                        self, pipeline (host, port, version), (host, port)
+def Connections (timeout=3.0, precision=1.0):
+        connections = tcp_client.Connections (timeout, precision)
+        def call (host, port=80, version='1.1'):
+                return connections (
+                        decorated (host, port, version)(), (host, port)
                         )
                         
+        return call
 
-class Cache (async_client.Cache):
-
-        def __init__ (
-                self, timeout=3.0, precision=1.0, 
-                resolution=tcp_client.dns_A_resolved
-                ):
-                async_client.Cache.__init__ (
-                        self, timeout, precision, socket.AF_INET
-                        )
-                resolution (self)
-
-	def __call__ (self, host, port=80, version='1.1'):
+def Cache (timeout=3.0, precision=1.0):
+        cache = tcp_client.Cache (timeout, precision)
+        def call (host, port=80, version='1.1'):
                 """return a cached or a new HTTP pipeline, maybe resolving
                 and connecting it first, closing it on connection error or
                 if it's socket address cannot be resolved"""
-                def Dispatcher ():
-                        return pipeline (host, port, version)
-                async_client.Cache.__call__ (self, Dispatcher, (host, port))
-
-
-class Pool (async_client.Pool):
-
-        def __init__ (
-                self, host, port=80, version='1.1',
-                size=2, timeout=3.0, precision=1.0
-                ):
-                assert (
-                        type (host) == str and type (port) == int and
-                        version in ('1.1', '1.0')
+                return cache (
+                        decorated (host, port, version), (host, port)
                         )
-                if port == 80:
-                        self.http_host = host
-                else:
-                        self.http_host = '%s:%d' % (host, port)
-                self.http_version = version
-                async_client.Pool.__init__ (
-                        self, Pipeline, (host, port), 
-                        size, timeout, precision, socket.AF_INET
-                        )
-
-        def __call__ (self):
-                dispatcher = async_client.Pool.__call__ (self)
-                dispatcher.http_host = self.http_host
-                dispatcher.http_version = self.http_version
-                return dispatcher
-        
-
-def GET (pipeline, url, headers=None):
-        if headers == None:
-                headers = {}
-        return Request (pipeline, url, headers, 'GET', None)
                 
-                
-def POST (pipeline, url, body, headers=None):
-        if headers == None:
-                headers = {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                        }
-        return Request (pipeline, url, headers, 'POST', body)                
+        return call
 
-
+def Pool (host, port=80, version='1.1', size=2, timeout=3.0, precision=1.0):
+        assert (
+                type (host) == str and type (port) == int and
+                version in ('1.1', '1.0')
+                )
+        return tcp_client.Pool (
+                decorated (host, port, version), 
+                (host, port), size, timeout, precision
+                )
 
 if __name__ == '__main__':
         #
-        # TODO: implement Apache's ab interface
+        # TODO: 
         #
+        # implement Apache's ab interface subset, starting with:
+        #
+        #   -n -c "http://host/path?query" < POST.DATA
+        #
+        # and quickly move up to the real thing, with Cookies and basic
+        # authorization. 
+        
         pass
