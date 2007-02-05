@@ -23,6 +23,7 @@ from allegra import async_client, ip_peer, dns_client
 
 
 def is_host_and_port (addr):
+        "test that addr is a tuple of one string and an integer"
         return (
                 type (addr) == tuple and 
                 len (addr) == 2 and
@@ -73,10 +74,16 @@ def connect (
         return True
 
 
-def reconnect_resolved (dispatcher):
-        if dispatcher.addr != None:
-                async_client.reconnect (dispatcher)
+def reconnect (dispatcher, addr=None, timeout=None):
+        dispatcher.closing = False
+        return connect (
+                dispatcher, 
+                addr or dispatcher.addr, 
+                timeout or dispatcher.client_timeout
+                )
 
+
+# conveniences for named TCP/IP connections
 
 def dns_A_resolved (connections):
         "decorate a client abstraction with DNS name resolution"
@@ -84,14 +91,15 @@ def dns_A_resolved (connections):
         connections.client_resolve = dns_A_resolve
         return connections
 
-# conveniences for named TCP/IP connections
 
 def Connections (timeout=3.0, precision=1.0, resolution=dns_A_resolved):
+        "factor TCP/IP connections manager with DNS name resolution"
         return resolution (async_client.Connections (
                 timeout, precision, socket.AF_INET
                 ))
 
 def Cache (timeout=3.0, precision=1.0, resolution=dns_A_resolved):
+        "factor TCP/IP connections cache with DNS name resolution"
         return resolution (async_client.Cache (
                 timeout, precision, socket.AF_INET
                 ))
@@ -100,8 +108,7 @@ def Pool (
         Dispatcher, name, size=2, timeout=3.0, precision=1.0, 
         resolution=dns_A_resolved
         ):
+        "factor TCP/IP connections pool with DNS name resolution"
         return resolution (async_client.Pool (
-                Dispatcher, timeout, precision, socket.AF_INET
+                Dispatcher, name, size, timeout, precision, socket.AF_INET
                 ))
-
-# 

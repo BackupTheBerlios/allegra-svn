@@ -21,17 +21,19 @@ from allegra import netunicode
 
 
 def valid (encoded, field, horizon):
+        "validate encoded Public Names in a field and below a given horizon"
         # try to decode the articulated public names, strip voids
-        names = netunicode.decode (encoded, False)
+        names = tuple (netunicode.decode (encoded, False))
         if not names:
-                if encoded not in field:
-                        # clean name new in this horizon
-                        field.add (encoded)
-                        return encoded
+                # inarticulated names
+                if encoded in field:
+                        # allready in the field
+                        return u''
+                
+                # new in this field
+                field.add (encoded)
+                return encoded
                         
-                # Public Name in the field
-                return u''
-
         # articulated Public Names
         valids = []
         for name in names:
@@ -54,9 +56,10 @@ def valid (encoded, field, horizon):
         return u'' # nothing valid to articulate
 
 
-# two conveniences for caching the validity of unicode strings as Public Names
+# two conveniences for testing the validity of byte strings as Public Names
 
-def valid_as (encoded, contexts, horizon):
+def valid_as_utf8 (encoded, contexts, horizon):
+        "hit the contexts cache or validate 8bit Public Names and cache"
         try:
                 return contexts[encoded]
         
@@ -68,7 +71,8 @@ def valid_as (encoded, contexts, horizon):
                         return field
 
 
-def valid_in (encoded, contexts, horizon):
+def valid_in_utf8 (encoded, contexts, horizon):
+        "hit the contexts cache or validate 8bit Public Names"
         try:
                 return contexts[encoded]
         
@@ -79,3 +83,9 @@ def valid_in (encoded, contexts, horizon):
                         return field
 
 
+# Note about this implementation
+#
+# The valid function is an obvious candidate for optimization in C. It has
+# two loops and is recursive, making it quite CPU intensive. Thanks to the
+# fast implementation of CPython it is practical *in* Python but given its
+# simplicity there is no reason not to optimize it *for* Python.

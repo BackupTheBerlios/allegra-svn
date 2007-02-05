@@ -315,16 +315,16 @@ class Client_pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 self.set_terminator ('\r\n')
                 self.mime_collector_buffer = ''
                         
-        def __repr__ (self):
-                return 'pop-pipeline id="%x"' % id (self)
-                
-        def close (self):
-                self.pipeline_requests = self.pipeline_responses = None
-                try:
-                        del self.pipeline_wake_up
-                except:
-                        pass
-                async_chat.Dispatcher.close (self)
+        #def __repr__ (self):
+        #        return 'pop-pipeline id="%x"' % id (self)
+        #        
+        #def close (self):
+        #        self.pipeline_requests = self.pipeline_responses = None
+        #        try:
+        #                del self.pipeline_wake_up
+        #        except:
+        #                pass
+        #        async_chat.Dispatcher.close (self)
                 
         def collect_incoming_data (self, data):
                 self.mime_collector_buffer += data

@@ -654,3 +654,17 @@ def presto_route_set (element, dom):
 # TODO: get the XML namespaces prefixes issue right (optimize for 8-bit
 #       byte string dump and an unprefixed PRESTo namespace, this *is*
 #       the framework context ...).
+#
+# TODO: simplify the namespace, move everything synchronized to the
+#       presto_sync.py module and get down to
+#
+#        presto.COM
+#        presto.Cache
+#        presto.producer
+#        presto.xml_unicode
+#        presto.xml_utf8
+#        presto.traceback
+#        presto.rest
+#        presto.method
+#        presto.route
+#        presto.link

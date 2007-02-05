@@ -28,9 +28,7 @@ def _host_ip ():
         except:
                 return '0.0.0.0'
         
-
 host_ip = _host_ip ()
-
 
 def is_ip (name):
         "returns True if the name is a valid IPv4 address string"
@@ -39,6 +37,14 @@ def is_ip (name):
                 if digit.isdigit () and -1 < int (digit) < 256
                 ))) == 4
 
+def addr (encoded, port):
+        try:
+                ip, port = encoded.split (':', 1)
+        except:
+                ip = encoded
+        else:
+                port = int (port)
+        return (ip, port)
 
 def in_addr_arpa (s):
         "reverse an IPv4 address string in the arpa address space"

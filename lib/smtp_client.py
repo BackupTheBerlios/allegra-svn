@@ -1,4 +1,4 @@
-# Copyright (C) 2005 Laurent A.V. Szyster
+# Copyright (C) 2006 Laurent A.V. Szyster
 #
 # This library is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -85,11 +85,10 @@ class Request (finalization.Finalization):
 
         smtp_recipient = 0
 
-        def __init__ (self, mail_from, rcpt_to, body, headers=()):
+        def __init__ (self, mail_from, rcpt_to, body, headers={}):
                 self.smtp_when = time.time ()
                 self.smtp_mail_from = mail_from
                 self.smtp_rcpt_to = rcpt_to
-                self.smtp_responses = []
                 self.mime_producer_body = body
                 self.mime_producer_headers = {
                         'Message-id': '<%f.%d@%s>' % (
@@ -103,6 +102,7 @@ class Request (finalization.Finalization):
                         'To': ', '.join (rcpt_to)
                         }
                 self.mime_producer_headers.update (headers)
+                self.smtp_responses = []
 
 
 class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
@@ -117,6 +117,12 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 self.pipeline_set ()
                 async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n')
+
+        def __repr__ (self):
+                return 'smtp-client-pipeline id="%x"' % id (self)
+
+        def handle_connect (self):
+                assert None == self.log ('connected', 'info')
                 
         def collect_incoming_data (self, data):
                 self.smtp_response += data
@@ -146,7 +152,7 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                         if self.pipeline_requests:
                                 reactor = self.pipeline_requests.popleft ()
                                 self.push (
-                                        'MAIL FROM: %s\r\n'
+                                        'MAIL FROM: <%s>\r\n'
                                         '' % reactor.smtp_mail_from
                                         )
                                 reactor.smtp_recipient = 0
@@ -162,7 +168,7 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 if reactor.smtp_recipient < len (reactor.smtp_rctp_to):
                         # RCPT TO command for next recipient
                         self.output_fifo.append (
-                                'RCPT TO: %s\r\n'
+                                'RCPT TO: <%s>\r\n'
                                 '' % reactor.smtp_rcpt_to[
                                         reactor.smtp_recipient
                                         ]
@@ -191,3 +197,46 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 
         def pipeline_wake_up (self):
                 self.output_fifo.append ('NOOP\r\n')
+        
+        
+def connect (dispatcher, domain, order=1):
+        # and here is another form ... what a bounty
+        def resolve (request):
+                dispatcher.mx_records = request.dns_resources
+                if tcp_client.connect (
+                        dispatcher, (request.dns_resources[0])
+                        ):
+                        if order == len (dispatcher.mx_records[order]):
+                                return # last finalization, do not retry
+                        
+                dispatcher.finalization = connect_next
+        
+        dns_client.lookup ((domain, 'MX'), resolve)
+  
+
+def connect_next (dispatcher, order=0):
+        # that's a very nice asynchronous continuation :-)
+        order += 1
+        if not (dispatcher.connected or dispatcher.closing):
+                if tcp_client.connect (
+                        dispatcher, (dispatcher.mx_records[order], 25)
+                        ):
+                        if order == len (dispatcher.mx_records[order]):
+                                return # last finalization, do not retry
+                        
+        return (lambda d: connect_next (d, order))
+        
+              
+      
+# Note About This Implementation
+#
+# sendmail = smpt_client.Cache ()
+# sendmail ('192.168.1.1').mailto (mail_from, rcpt_to, body)
+# sendmail ('domain.name').mailto (mail_from, rcpt_to, body)
+# sendmail.mailto (mail_from, rcpt_to, body)
+#
+# Most peers won't use a simpler connection manager or SMTP pool, what
+# matters most is the ability to send e-mails without a local relay.
+#
+# Also, as you noticed, the body is the ideal place to add a finalization,
+# possibly decorate one ... before

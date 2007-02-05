@@ -33,7 +33,7 @@ HTTP_RESPONSE = (
 HTTP_RESPONSES = {
         100: "Continue",
         101: "Switching Protocols",
-        200: "OK",
+        200: "OK", # success!
         201: "Created",
         202: "Accepted",
         203: "Non-Authoritative Information",
@@ -42,7 +42,7 @@ HTTP_RESPONSES = {
         206: "Partial Content",
         300: "Multiple Choices",
         301: "Moved Permanently",
-        302: "Moved Temporarily",
+        302: "Moved Temporarily", # redirect ...
         303: "See Other",
         304: "Not Modified",
         305: "Use Proxy",
@@ -525,3 +525,17 @@ if __name__ == '__main__':
         del listen
         async_loop.dispatch ()
         assert None == finalization.collect ()
+        
+        
+# Objective
+#
+# To provide an HTTP/1.1 server with support for all type of methods
+# and a handler to serve head and body of static files, possibly from
+# an in-memory cache.
+#
+# More handler implementations of the interfaces
+#
+#        http_continue (reactor)
+#        http_finalize (reactor)
+#
+# ...

@@ -422,7 +422,7 @@ class Dispatcher_with_fifo (Dispatcher):
         def close_when_done (self):
                 "queue None if there is output queued, or handle close now"
                 if self.output_fifo:
-                        self.output_fifo_push (None)
+                        self.output_fifo.append (None)
                 else:
                         self.handle_close ()
 

@@ -93,8 +93,8 @@ def validate (buffer, length):
                         
 
 
-def outline (encoded, format, indent):
-        "recursively format nested netunicodes as a CRLF outline"
+def outline (encoded, format=u'%s\r\n', indent=u'  '):
+        "recursively format nested netunicodes, by default as a CRLF outline"
         n = tuple (decode (encoded))
         if len (n) > 0:
                 return u''.join ((outline (
@@ -137,7 +137,7 @@ def nettree (encoded):
         return encoded
 
 
-def netlines (encoded, format=u'%s\n', indent=u'  '):
+def netlines (encoded, format=u'%s\r\n', indent=u'  '):
         "beautify a netunicodes as an outline"
         n = tuple (decode (encoded))
         if len (n) > 0:
@@ -152,9 +152,9 @@ def netoutline (encoded, indent=u''):
         "recursively format nested netunicodes as an outline"
         n = tuple (decode (encoded))
         if len (n) > 0:
-                return u'%s%d:\n%s%s,\n' % (
+                return u'%s%d:\r\n%s%s,\r\n' % (
                         indent, len (encoded), u''.join ((netoutline (
                                 e, indent + u'  '
                                 ) for e in n)), indent)
         
-        return u'%s%d:%s,\n' % (indent, len (encoded), encoded)
+        return u'%s%d:%s,\r\n' % (indent, len (encoded), encoded)

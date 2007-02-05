@@ -60,17 +60,14 @@ def connect (dispatcher, addr, timeout=3.0, family=socket.AF_INET):
         return True
 
 
-def reconnect (dispatcher):
-        if dispatcher.addr:
-                dispatcher.closing = False
-                return connect (
-                        dispatcher, 
-                        dispatcher.addr, 
-                        dispatcher.client_timeout, 
-                        dispatcher.family_and_type[0]
-                        )
-                        
-        return False
+def reconnect (dispatcher, addr=None, timeout=None, family=None):
+        dispatcher.closing = False
+        return connect (
+                dispatcher, 
+                addr or dispatcher.addr, 
+                timeout or dispatcher.client_timeout, 
+                family or dispatcher.family_and_type[0]
+                )
                 
 
 class Connections (loginfo.Loginfo):
@@ -111,7 +108,7 @@ class Connections (loginfo.Loginfo):
                 return dispatcher
                 
         def client_connect (self, dispatcher, name):
-                "resolve and/or connect a dispatcher"
+                "connect a resolved dispatcher or close it"
                 dispatcher.client_name = name
                 addr = self.client_resolved (name)
                 if addr != None:
@@ -139,6 +136,8 @@ class Connections (loginfo.Loginfo):
                 return True
         
         def client_reconnect (self, dispatcher):
+                "try to reconnect a dispatcher, return its closing state"
+                assert dispatcher.closing
                 dispatcher.closing = False
                 self (dispatcher, dispatcher.client_name)
                 return dispatcher.closing
@@ -291,7 +290,7 @@ class Pool (Connections):
                 """return the next dispatcher pooled or instanciate a new
                 one, maybe resolving and connecting it first, closing it on 
                 connection error or if it's socket address cannot be 
-                resolved"""
+                resolved."""
                 size = len (self.client_managed)
                 if size >= self.client_pool:
                         self.client_called += 1
@@ -310,7 +309,7 @@ class Pool (Connections):
                 return dispatcher
         
         def client_reconnect (self, dispatcher):
-                return False # useless for a cached dispatcher!
+                return False # useless for a pooled dispatcher!
 
         def client_dispatchers (self):
                 "return a list of dispatchers pooled"

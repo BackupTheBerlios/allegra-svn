@@ -15,7 +15,7 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA
 
-""
+"http://laurentszyster.be/blog/http_client/"
 
 import socket
 
@@ -31,16 +31,16 @@ class Request (finalization.Finalization):
         http_response = mime_collector_headers = mime_collector_body = None
         
         def __init__ (
-                self, pipeline, url, headers, command, body
+                self, pipeline, url, headers, command, produce=None
                 ):
                 headers ['Host'] = pipeline.http_host
                 self.http_pipeline = pipeline
                 self.http_urlpath = url
                 self.http_command = command
                 self.mime_producer_headers = headers
-                self.mime_producer_body = body
+                self.mime_producer_body = produce
 
-        def __call__ (self, collect):
+        def __call__ (self, collect=None):
                 self.mime_collector_body = collect
                 self.http_pipeline (self)
                 self.http_pipeline = None
@@ -264,7 +264,7 @@ def pipeline (host, port=80, version='1.1'):
         return dispatcher
 
 
-def connect (host, port=80, version='1.1', timeout=3):
+def connect (host, port=80, version='1.1', timeout=3.0):
         dispatcher = pipeline (host, port, version)
         tcp_client.connect (dispatcher, (host, port), timeout)
         return dispatcher
@@ -275,7 +275,7 @@ def connect (host, port=80, version='1.1', timeout=3):
 class Connections (async_client.Connections):
 
         def __init__ (
-                self, timeout=3, precision=1, 
+                self, timeout=3.0, precision=1.0, 
                 resolution=tcp_client.dns_A_resolved
                 ):
                 async_client.Connections.__init__ (
@@ -292,7 +292,7 @@ class Connections (async_client.Connections):
 class Cache (async_client.Cache):
 
         def __init__ (
-                self, timeout=3, precision=1, 
+                self, timeout=3.0, precision=1.0, 
                 resolution=tcp_client.dns_A_resolved
                 ):
                 async_client.Cache.__init__ (
@@ -306,14 +306,14 @@ class Cache (async_client.Cache):
                 if it's socket address cannot be resolved"""
                 def Dispatcher ():
                         return pipeline (host, port, version)
-                async_client.Cache.__call__ (Dispatcher, (host, port))
+                async_client.Cache.__call__ (self, Dispatcher, (host, port))
 
 
 class Pool (async_client.Pool):
 
         def __init__ (
                 self, host, port=80, version='1.1',
-                size=2, timeout=3, precision=1
+                size=2, timeout=3.0, precision=1.0
                 ):
                 assert (
                         type (host) == str and type (port) == int and
@@ -350,5 +350,9 @@ def POST (pipeline, url, body, headers=None):
         return Request (pipeline, url, headers, 'POST', body)                
 
 
-#
-#
+
+if __name__ == '__main__':
+        #
+        # TODO: implement Apache's ab interface
+        #
+        pass

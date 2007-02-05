@@ -142,7 +142,7 @@ class XML_dom (object):
 
         def xml_expat_START (self, name, attributes):
                 e = self.xml_types.get (name, self.xml_type) (
-                        name, attributes
+                        name, attributes #, self
                         )
                 e.xml_parent = parent = self.xml_parsed
                 e.xml_first = self.xml_first
@@ -369,6 +369,12 @@ if __name__ == '__main__':
 # with the many different applications of XML; 2) element type declaration
 # and validation interfaces, a new point of articulation for developpers 
 # that enables a new kind of XML processor design; 
+#
+# Following the "Prototype, Test, Apply ... then Optimize" development
+# cycle of CPython, the final deliverable is a thin C layer on top of
+# expat's XML parser. What an enventual xml_dom.c would reduce is the
+# number of instances in the XML tree, the number of Python callback to 
+# build it and the memory needed to process it.
 #
 #
 # SYNOPSIS

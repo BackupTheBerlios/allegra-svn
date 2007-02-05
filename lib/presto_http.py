@@ -396,3 +396,19 @@ if __name__ == '__main__':
         async_loop.dispatch ()
         assert None == finalization.collect ()
                         
+                        
+# TODO: move to idempotent URLs, add support for HTTP/1.1 proxy and cache
+#       introduce some other form of indirection:
+#
+#       the simplest a list of arguments
+#
+#       /component/this/and/that
+#
+#       presto_match = re.compile ("^/(.+?)/(.+?)/(.+?)$").match
+#       presto_args = (lambda rest: presto_match (rest).groups ())
+#
+#       __call__ (self, "this", "and", "that"):
+#
+#       arguments
+#
+#       __call__ (self, ""
