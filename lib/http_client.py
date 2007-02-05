@@ -58,6 +58,8 @@ class Pipeline (
         ac_in_buffer_size = 1<<16 # 64KB input buffer
         ac_out_buffer_size = 4096 # 4KB output buffer
 
+        pipeline_keep_alive = True
+
         def __init__ (self):
                 async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n\r\n')
@@ -94,7 +96,7 @@ class Pipeline (
 	# pipeline
 
         def pipeline_wake_up (self):
-                if self.http_version == '1.1' and self.http_responses:
+                if self.http_version == '1.1':
                         self.pipeline_wake_up_11 ()
                 else:
                         self.pipeline_wake_up_10 ()
@@ -123,18 +125,18 @@ class Pipeline (
 		while self.pipeline_requests:
                         # push all request's reactors
 			request.mime_producer_headers[
-				'connection'
+				'Connection'
 				] = 'keep-alive'
-                        self.http_client_continue (reactor)
+                        self.http_client_continue (request)
                         request = self.pipeline_requests.popleft ()
 		# push the last one
                 if self.pipeline_keep_alive:
                         request.mime_producer_headers[
-                                'connection'
+                                'Connection'
                                 ] = 'keep-alive'
                 else:
                         # close when done and not kept alive
-                        request.mime_producer_headers['connection'] = 'close'
+                        request.mime_producer_headers['Connection'] = 'close'
 		self.http_client_continue (request)
  		
 	# MIME collector
@@ -181,24 +183,27 @@ class Pipeline (
                 return self.closing # stall the collector if closing
 		
 	def mime_collector_finalize (self):
+                # pop the reactor finalized and count the response
+                self.pipeline_responses.popleft ()
+                self.http_responses += 1
+                if self.closing:
+                        return True # stall the collector if closing
+                
                 # wake up the pipeline if there are request pipelined
                 # and that the connection is kept alive
-                if (
-                        self.pipeline_requests and 
+                if (self.pipeline_requests and (
+                        self.http_version == '1.1' or 
                         self.mime_collector_headers.get (
                                 'connection'
                                 ) == 'keep-alive'
-                        ):
+                        )):
                         self.pipeline_wake_up ()
                 # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
                 self.mime_collector_headers = \
                         self.mime_collector_lines = \
                         self.mime_collector_body = None
-                # pop the reactor finalized and count the response
-                self.pipeline_responses.popleft ()
-                self.http_responses += 1
-                return self.closing # stall the collector if closing
+                return False
 
 	# HTTP/1.1 client reactor
         
