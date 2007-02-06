@@ -295,9 +295,6 @@ def Connections (timeout=3.0, precision=1.0):
 def Cache (timeout=3.0, precision=1.0):
         cache = tcp_client.Cache (timeout, precision)
         def call (host, port=80, version='1.1'):
-                """return a cached or a new HTTP pipeline, maybe resolving
-                and connecting it first, closing it on connection error or
-                if it's socket address cannot be resolved"""
                 return cache (
                         decorated (host, port, version), (host, port)
                         )
