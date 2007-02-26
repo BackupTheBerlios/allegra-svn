@@ -68,23 +68,21 @@ class Pipeline (
         def __repr__ (self):
                 return 'http-client-pipeline id="%x"' % id (self)
 
-        def __call__ (self, request):
-                "pipeline a new request, wake up if sleeping"
-                self.pipeline_requests.append (request)
-                if not self.pipeline_responses:
-                        self.pipeline_wake_up ()
+        __call__ = Pipeline.pipeline # pipeline(request) -> request
                 
 	# async_chat
         
 	def handle_connect (self):
-                if self.pipeline_requests and not self.pipeline_responses:
+                "fill the pipeline's output_fifo if there are new requests"
+                if self.pipeline_requests:
 			self.pipeline_wake_up ()
 
         def handle_close (self):
-                assert None == self.log (
-                        'pipelined '
-                        ' requests="%d" responses="%d"'
-                        ' pending="%d" failed="%d"' % (
+                "assert debug log of the pipeline queues states and counters"
+                assert None == self.log ('{'
+                        ' "requests": %d, "responses": %d,'
+                        ' "pending": %d, "failed": %d'
+                        ' }' % (
                                 self.http_requests, 
                                 self.http_responses,
                                 len (self.pipeline_requests),
@@ -125,18 +123,18 @@ class Pipeline (
 		while self.pipeline_requests:
                         # push all request's reactors
 			request.mime_producer_headers[
-				'Connection'
+				'connection'
 				] = 'keep-alive'
                         self.http_client_continue (request)
                         request = self.pipeline_requests.popleft ()
 		# push the last one
                 if self.pipeline_keep_alive:
                         request.mime_producer_headers[
-                                'Connection'
+                                'connection'
                                 ] = 'keep-alive'
                 else:
                         # close when done and not kept alive
-                        request.mime_producer_headers['Connection'] = 'close'
+                        request.mime_producer_headers['connection'] = 'close'
 		self.http_client_continue (request)
  		
 	# MIME collector
@@ -221,17 +219,13 @@ class Pipeline (
                         request.http_urlpath, 
                         self.http_version
                         )
-                if request.mime_producer_body == None:
-                        # GET, HEAD, DELETE, ...
-                        #
+                if request.mime_producer_body == None: # GET, HEAD and DELETE
                         lines = mime_headers.lines (
                                 request.mime_producer_headers
                                 )
                         lines.insert (0, http_request)
                         self.output_fifo.append (''.join (lines))
-                else:
-                        # POST and PUT ...
-                        #
+                else: # POST and PUT
                         if self.http_version == '1.1':
                                 request.mime_producer_body = \
                                         http_reactor.Chunk_producer (

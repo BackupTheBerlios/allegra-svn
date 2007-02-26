@@ -433,23 +433,23 @@ class Pipeline (object):
         
         "a pipeline mix-in for dispatcher"
 
-        #pipeline_sleeping = False
         pipeline_pipelining = False
         pipeline_keep_alive = False
+
+        def pipeline (self, request):
+                "pipeline a new request, wake up if sleeping"
+                self.pipeline_requests.append (request)
+                if not self.pipeline_responses:
+                        self.pipeline_wake_up ()
+                return request
 
         def pipeline_set (self, requests=None, responses=None):
                 "set new requests and responses deque"
                 self.pipeline_requests = requests or collections.deque ()
                 self.pipeline_responses = responses or collections.deque ()
 
-        #def pipeline (self, request):
-        #        "pipeline a new request, wake up if sleeping"
-        #        self.pipeline_requests.append (request)
-        #        if self.pipeline_sleeping:
-        #                self.pipeline_sleeping = False
-        #                self.pipeline_wake_up ()
-
         def pipeline_wake_up (self):
+                "queue one or all request producers in the output_fifo"
                 requests = self.pipeline_requests
                 if self.pipeline_pipelining and len (requests) > 1:
                         self.pipeline_requests = deque ()
@@ -461,5 +461,4 @@ class Pipeline (object):
                         request = self.pipeline_requests.popleft ()
                         self.output_fifo.append (request[0])
                         self.pipeline_responses.append (request)
-                
                         
