@@ -26,7 +26,7 @@ from allegra import async_loop
 
 def meter_recv (dispatcher, when):
         "decorate a stream transport with an input meter"
-	dispatcher.ac_in_meter = 0
+	dispatcher.ac_in_meter = 0L
 	dispatcher.ac_in_when = when
 	metered_recv = dispatcher.recv
 	def recv (buffer_size):
@@ -39,7 +39,7 @@ def meter_recv (dispatcher, when):
 
 def meter_send (dispatcher, when):
         "decorate a stream transport with an output meter"
-	dispatcher.ac_out_meter = 0
+	dispatcher.ac_out_meter = 0L
 	dispatcher.ac_out_when = when
 	metered_send = dispatcher.send
 	def send (data):
@@ -52,7 +52,7 @@ def meter_send (dispatcher, when):
 
 def meter_recvfrom (dispatcher, when):
         "decorate a datagram transport with an input meter"
-        dispatcher.ac_in_meter = 0
+        dispatcher.ac_in_meter = 0L
         dispatcher.ac_in_when = when
         metered_recvfrom = dispatcher.recvfrom
         def recvfrom (datagram_size):
@@ -65,7 +65,7 @@ def meter_recvfrom (dispatcher, when):
 
 def meter_sendto (dispatcher, when):
         "decorate a datagram transport with an output meter"
-        dispatcher.ac_out_meter = 0
+        dispatcher.ac_out_meter = 0L
         dispatcher.ac_out_when = when
 	metered_sendto = dispatcher.sendto
 	def sendto (self):

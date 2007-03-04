@@ -312,7 +312,22 @@ class Client (async_chat.Dispatcher, async_client.Pipeline):
                 
         __call__ = async_client.Pipeline.pipeline
                                         
+        def handle_connect (self):
+                "fill the pipeline's output_fifo if there are new requests"
+                if self.pipeline_requests:
+                        self.pipeline_wake_up ()
+
         def close (self):
+                assert None == self.log ('{'
+                        ' "requests": %d, "responses": %d,'
+                        ' "pending": %d, "failed": %d'
+                        ' }' % (
+                                self.pipelined_requests, 
+                                self.pipelined_responses,
+                                len (self.pipeline_requests),
+                                len (self.pipeline_responses)
+                                ), 'debug'
+                        )
                 self.pipeline_close ()
                 async_chat.Dispatcher.close (self)
                 
@@ -325,6 +340,7 @@ class Client (async_chat.Dispatcher, async_client.Pipeline):
                 response = self.mime_collector_buffer
                 self.mime_collector_buffer = ''
                 if self.pipeline_responses:
+                        self.pipelined_responses += 1
                         if self.pipeline_responses.popleft (
                                 )[1] (response):
                                 return True

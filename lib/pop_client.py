@@ -46,25 +46,25 @@ class Pipeline (mime_reactor.Pipeline):
         
         def pop_authorize (
                 self, username, password, authorized,
-                unauthorized=(lambda d:d.close())
+                unauthorized=(lambda d: d.handle_close ())
                 ):
                 def _USER (response):
-                        if response.startswith ('+OK'):
-                                def _PASS (response):
-                                        if response.startswith ('+OK'):
-                                                authorized (self)
-                                                return False
-                                        
+                        if not response.startswith ('+OK'):
+                                unauthorized (self)
+                                return True
+                
+                        def _PASS (response):
+                                if not response.startswith ('+OK'):
                                         unauthorized (self)
                                         return True
-                                        
-                                self.pipeline_requests.append ((
-                                        'PASS %s\r\n' % password, _PASS, '\r\n'
-                                        ))
+                                
+                                authorized (self)
                                 return False
                         
-                        unauthorized (self)
-                        return True
+                        self.pipeline_requests.append ((
+                                'PASS %s\r\n' % password, _PASS, '\r\n'
+                                ))
+                        return False
         
                 self.pipeline_requests.append ((
                         'USER %s\r\n' % username, _USER, '\r\n'
@@ -72,7 +72,7 @@ class Pipeline (mime_reactor.Pipeline):
         
         def pop_retr (self, order, collect):
                 def _RETR (response):
-                        if response.startswith ('-ERR'):
+                        if not response.startswith ('+OK'):
                                 return False
                         
                         if not collect.collector_is_simple:
@@ -89,7 +89,7 @@ class Pipeline (mime_reactor.Pipeline):
         
         def pop_retr_many (self, messages, Collect):
                 def _RETR (response):
-                        if response.startswith ('-ERR'):
+                        if not response.startswith ('+OK'):
                                 return False
                         
                         collect = Collect ()
@@ -108,7 +108,7 @@ class Pipeline (mime_reactor.Pipeline):
         def pop_list_and_retr (dispatcher, Collect):
                 "pipeline a LIST command, RETR all listed on success"
                 def _LIST (response):
-                        if response.startswith ('-ERR'):
+                        if not response.startswith ('+OK'):
                                 return True
                         
                         self.pop_retr_many ((
@@ -125,7 +125,7 @@ class Pipeline (mime_reactor.Pipeline):
         def pop_uidl_and_retr (dispatcher, Collect):
                 "pipeline a UIDL command, RETR all listed on success"
                 def _UIDL (response):
-                        if response.startswith ('-ERR'):
+                        if not response.startswith ('+OK'):
                                 return True
                         
                         self.pop_retr_many ((

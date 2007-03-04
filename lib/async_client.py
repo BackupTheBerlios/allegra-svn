@@ -74,8 +74,9 @@ class Connections (loginfo.Loginfo):
         
         "a connection manager for async_client.Dispatcher instances"
 
-        ac_in_meter = ac_out_meter = 0
-        client_errors = client_when = client_dispatched = 0
+        ac_in_meter = ac_out_meter = 0L
+        client_errors = client_dispatched = 0L
+        client_when = 0.0
         
         def __init__ (
                 self, timeout=3.0, precision=1.0, family=socket.AF_INET
@@ -435,7 +436,8 @@ class Pipeline (object):
 
         pipeline_pipelining = False
         pipeline_keep_alive = False
-
+        pipelined_requests = pipelined_responses = 0L
+        
         def pipeline (self, request):
                 "pipeline a new request, wake up if sleeping"
                 self.pipeline_requests.append (request)
@@ -451,13 +453,16 @@ class Pipeline (object):
         def pipeline_wake_up (self):
                 "queue one or all request producers in the output_fifo"
                 requests = self.pipeline_requests
-                if self.pipeline_pipelining and len (requests) > 1:
+                L = len (requests)
+                if self.pipeline_pipelining and L > 1:
+                        self.pipelined_requests += L
                         self.pipeline_requests = deque ()
                         self.output_fifo.extend ((
                                 request[0] for request in requests
                                 ))
                         self.pipeline_responses.extend (requests)
                 else:
+                        self.pipelined_requests += 1
                         request = requests.popleft ()
                         self.output_fifo.append (request[0])
                         self.pipeline_responses.append (request)
