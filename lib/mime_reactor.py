@@ -17,8 +17,7 @@
 ""
 
 from allegra import (
-	finalization, 
-        async_chat, collector, producer, reactor, async_client, 
+	finalization, async_chat, collector, producer, reactor, async_client, 
         mime_headers
         )
 
@@ -303,29 +302,22 @@ def multipart_collect_by_content_types (collectors=multipart_collectors):
 
 # Peer Abstractions
 
-class Client_pipeline (async_chat.Dispatcher, async_client.Pipeline):
+class Client (async_chat.Dispatcher, async_client.Pipeline):
 
-        collector_stalled = True
-        
-        # pipeline_requests = deque([(command, handler, terminator), ...])
-                
         def __init__ (self):
                 async_chat.Dispatcher.__init__ (self)
                 self.pipeline_set ()
                 self.set_terminator ('\r\n')
                 self.mime_collector_buffer = ''
-                        
-        #def __repr__ (self):
-        #        return 'pop-pipeline id="%x"' % id (self)
-        #        
-        #def close (self):
-        #        self.pipeline_requests = self.pipeline_responses = None
-        #        try:
-        #                del self.pipeline_wake_up
-        #        except:
-        #                pass
-        #        async_chat.Dispatcher.close (self)
                 
+        __call__ = async_client.Pipeline.pipeline
+                                        
+        def close (self):
+                self.pipeline_close ()
+                async_chat.Dispatcher.close (self)
+                
+        collector_stalled = True
+        
         def collect_incoming_data (self, data):
                 self.mime_collector_buffer += data
 
@@ -340,25 +332,10 @@ class Client_pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
                 if self.pipeline_responses:
-                        self.set_terminator (
-                                self.pipeline_responses[0][2]
-                                )
+                        self.set_terminator (self.pipeline_responses[0][2])
                         return False
                 
                 return True
-
-        #def pipeline_wake_up (self):
-        #        request = self.pipeline_requests.popleft ()
-        #        self.output_fifo.append (request[0])
-        #        self.pipeline_responses.append (request)
-        #        
-        #def mime_pipelining (self):
-        #        requests = self.pipeline_requests
-        #        self.pipeline_requests = deque ()
-        #        self.output_fifo.extend ((
-        #                request[0] for request in requests
-        #                ))
-        #        self.pipeline_responses.extend (requests)
                 
 
 if __name__ == '__main__':

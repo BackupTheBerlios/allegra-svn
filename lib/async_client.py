@@ -458,7 +458,9 @@ class Pipeline (object):
                                 ))
                         self.pipeline_responses.extend (requests)
                 else:
-                        request = self.pipeline_requests.popleft ()
+                        request = requests.popleft ()
                         self.output_fifo.append (request[0])
                         self.pipeline_responses.append (request)
                         
+        def pipeline_close (self):
+                self.pipeline_requests = self.pipeline_responses = None

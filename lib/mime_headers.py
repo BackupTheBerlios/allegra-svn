@@ -102,6 +102,7 @@ def value_and_parameters (line):
         return parts[0], parameters
 
 def get_parameter (line, name):
+        # ? re.compile (";\s*" + name + "\s*=\s*(.+?)\s*;|$")
         "get the value of a parameter 'name' in a given header line"
         parts = [p.strip () for p in line.split (';')]
         for parameter in parts[1:]:
