@@ -128,29 +128,29 @@ class Escaping_producer (object):
 
         # Common usage: escaping the CRLF.CRLF sequence in SMTP, NNTP, etc ...
 
-        def __init__ (self, producer, esc_from='\r\n..', esc_to='\r\n.'):
-                self.esc_from = esc_from
-                self.esc_to = esc_to
-                self.esc_buffer = ''
+        def __init__ (
+                self, producer, escape_from='\r\n.\r\n', escape_to='\r\n..\r\n'
+                ):
+                self.escape = (lambda s: s.replace (escape_from, escape_to))
+                self.escape_from = escape_from
+                self.escape_buffer = ''
                 self.producer = producer
                 self.producer_stalled = self.producer.producer_stalled
 
         def more (self):
-                buffer = self.esc_buffer + self.producer.more ()
+                buffer = self.escape_buffer + self.producer.more ()
                 if buffer:
-                        buffer = string.replace (
-                                buffer, self.esc_from, self.esc_to
-                                )
+                        buffer = self.escape (buffer)
                         i = async_chat.find_prefix_at_end (
-                                buffer, self.esc_from
+                                buffer, self.escape_from
                                 )
                         if i:
                                 # we found a prefix
-                                self.esc_buffer = buffer[-i:]
+                                self.escape_buffer = buffer[-i:]
                                 return buffer[:-i]
                         
                         # no prefix, return it all
-                        self.esc_buffer = ''
+                        self.escape_buffer = ''
                         return buffer
                         
                 return buffer
@@ -162,28 +162,27 @@ class Escaping_collector (object):
         
         collector_is_simple = True
 
-        def __init__ (self, collect, esc_from='\r\n.', esc_to='\r\n..'):
-                self.esc_from = esc_from
-                self.esc_to = esc_to
-                self.esc_buffer = ''
+        def __init__ (
+                self, collect, escape_from='\r\n..\r\n', escape_to='\r\n.\r\n'
+                ):
+                self.escape = (lambda s: s.replace (escape_from, escape_to))
+                self.escape_from = escape_from
+                self.escape_buffer = ''
                 self.collector = collect
 
         def collect_incoming_data (self, data):
-                buffer = string.replace (
-                        self.esc_buffer + data, self.esc_from, self.esc_to
-                        )
-                i = async_chat.find_prefix_at_end (
-                        buffer, self.esc_from
-                        )
+                buffer = self.escape (self.escape_buffer + data)
+                i = async_chat.find_prefix_at_end (buffer, self.escape_from)
                 if i > 0:
                         self.collector.collect_incoming_data (buffer[-i:])
-                        self.esc_buffer = buffer[:-i]
+                        self.escape_buffer = buffer[:-i]
                 else:
                         self.collector.collect_incoming_data (buffer)
-                        self.esc_buffer = ''
+                        self.escape_buffer = ''
 
         def found_terminator (self):
-                self.collector.found_terminator
+                self.collector.found_terminator ()
+                return False
 
 
 def multipart_generator (parts, boundary):
@@ -302,7 +301,7 @@ def multipart_collect_by_content_types (collectors=multipart_collectors):
 
 # Peer Abstractions
 
-class Client (async_chat.Dispatcher, async_client.Pipeline):
+class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
 
         def __init__ (self):
                 async_chat.Dispatcher.__init__ (self)
@@ -316,8 +315,8 @@ class Client (async_chat.Dispatcher, async_client.Pipeline):
                 "fill the pipeline's output_fifo if there are new requests"
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
-
-        def close (self):
+                        
+        def handle_close (self):
                 assert None == self.log ('{'
                         ' "requests": %d, "responses": %d,'
                         ' "pending": %d, "failed": %d'
@@ -328,23 +327,25 @@ class Client (async_chat.Dispatcher, async_client.Pipeline):
                                 len (self.pipeline_responses)
                                 ), 'debug'
                         )
+                self.close ()
+
+        def close (self):
                 self.pipeline_close ()
                 async_chat.Dispatcher.close (self)
                 
-        collector_stalled = True
-        
         def collect_incoming_data (self, data):
                 self.mime_collector_buffer += data
 
         def found_terminator (self):
                 response = self.mime_collector_buffer
                 self.mime_collector_buffer = ''
+                self.pipelined_responses += 1
                 if self.pipeline_responses:
-                        self.pipelined_responses += 1
                         if self.pipeline_responses.popleft (
                                 )[1] (response):
                                 return True
-                        
+                else:
+                        assert None == self.log (response, 'unexpected')
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
                 if self.pipeline_responses:
