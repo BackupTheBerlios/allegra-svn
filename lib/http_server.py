@@ -33,7 +33,7 @@ HTTP_RESPONSE = (
 HTTP_RESPONSES = {
         100: "Continue",
         101: "Switching Protocols",
-        200: "OK", # success!
+        200: "OK", # GET and/or POST ...
         201: "Created",
         202: "Accepted",
         203: "Non-Authoritative Information",
@@ -42,10 +42,10 @@ HTTP_RESPONSES = {
         206: "Partial Content",
         300: "Multiple Choices",
         301: "Moved Permanently",
-        302: "Moved Temporarily", # redirect ...
+        302: "Moved Temporarily", # ... continue ...
         303: "See Other",
         304: "Not Modified",
-        305: "Use Proxy",
+        305: "Use Proxy", # ... that's all folks, use your cache.
         400: "Bad Request",
         401: "Unauthorized",
         402: "Payment Required",
@@ -62,7 +62,7 @@ HTTP_RESPONSES = {
         413: "Request Entity Too Large",
         414: "Request-URI Too Large",
         415: "Unsupported Media Type",
-        500: "Internal Server Error",
+        500: "Internal Server Error", 
         501: "Not Implemented",
         502: "Bad Gateway",
         503: "Service Unavailable",
@@ -299,14 +299,7 @@ class Dispatcher (
                         ) != 'keep-alive':
                         # close when done if not kept alive
                         self.output_fifo.append (None)
-                #
                 # do not iniate send, wait for a write event instead ...
-                #self.handle_write ()
-                #
-                # ... finally, log the response's first line.
-                #assert None == reactor.log (
-                #        reactor.mime_producer_lines[0][:-2], 'response'
-                #        )
                 return self.closing
 
         # Support for stalled producers is a requirement for programming

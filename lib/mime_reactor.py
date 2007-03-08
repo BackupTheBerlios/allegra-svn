@@ -1,18 +1,18 @@
-# Copyright (C) 2005 Laurent A.V. Szyster
-# 
+# Copyright (C) 2005-2007 Laurent A.V. Szyster
+#
 # This library is free software; you can redistribute it and/or modify
-# it under the terms of version 2.1 of the GNU Lesser General Public
-# License as published by the Free Software Foundation.
-# 
+# it under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+#    http://www.gnu.org/copyleft/gpl.html
+#
 # This library is distributed in the hope that it will be useful, but
 # WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# Lesser General Public License for more details.
-# 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
 # You should have received a copy of the GNU General Public License
 # along with this library; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
-# USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 ""
 
@@ -140,18 +140,17 @@ class Escaping_producer (object):
         def more (self):
                 buffer = self.escape_buffer + self.producer.more ()
                 if buffer:
-                        buffer = self.escape (buffer)
                         i = async_chat.find_prefix_at_end (
                                 buffer, self.escape_from
                                 )
-                        if i:
+                        if i > 0:
                                 # we found a prefix
                                 self.escape_buffer = buffer[-i:]
-                                return buffer[:-i]
+                                return self.escape (buffer[:-i])
                         
                         # no prefix, return it all
                         self.escape_buffer = ''
-                        return buffer
+                        return self.escape (buffer)
                         
                 return buffer
         
@@ -332,6 +331,7 @@ class Pipeline (
                                 len (self.pipeline_responses)
                                 ), 'debug'
                         )
+                self.pipeline_close ()
                 self.close ()
 
         def close (self):
@@ -363,3 +363,11 @@ class Pipeline (
                 else:
                         self.set_terminator (None)
                 return self.closing
+        
+        def pipeline_after_last (self, continuation):
+                last = self.pipeline_requests.pop ()
+                def after (response):
+                        continuation ()
+                        return last[1] (response)
+                
+                self.pipeline_requests.append ((last[0], after, last[2]))                               

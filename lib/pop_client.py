@@ -1,4 +1,4 @@
-# Copyright (C) 2005 Laurent A.V. Szyster
+# Copyright (C) 2007 Laurent A.V. Szyster
 #
 # This library is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -12,8 +12,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this library; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-# USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 "http://laurentszyster.be/blog/pop_client/"
 
@@ -57,8 +56,7 @@ class Pipeline (mime_reactor.Pipeline):
                                 self.pipeline_pipeling = (
                                         'PIPELINING' in self.pop_capabilities
                                         )
-                        capable ()
-                        return False # tolerate no CAPA support
+                        capable () # tolerate no CAPA support
                         
                 self.pipeline_requests.append ((
                         'CAPA\r\n', _CAPA, '\r\n.\r\n'
@@ -74,12 +72,10 @@ class Pipeline (mime_reactor.Pipeline):
                                                 authorized ()
                                         else:
                                                 unauthorized ()
-                                        return False
                                 
                                 self.pipeline_requests.append ((
                                         'PASS %s\r\n' % password, _PASS, '\r\n'
                                         ))
-                        return False
         
                 self.pipeline_requests.append ((
                         'USER %s\r\n' % username, _USER, '\r\n'
@@ -97,8 +93,6 @@ class Pipeline (mime_reactor.Pipeline):
                                                 )
                                 self.set_terminator ('\r\n.\r\n')
                                 return True
-                        
-                        return False
         
                 return _RETR
         
@@ -123,7 +117,6 @@ class Pipeline (mime_reactor.Pipeline):
                                         line.split (' ', 1)[0] 
                                         for line in response[1:]
                                         ), Collect)
-                        return False
         
                 dispatcher.pipeline_requests.append ((
                         'LIST\r\n', _LIST, '\r\n.\r\n'
@@ -139,7 +132,6 @@ class Pipeline (mime_reactor.Pipeline):
                                                 for line in response[1:]
                                                 ) if not (uid in uids)
                                         ), Collect)
-                        return False
         
                 self.pipeline_requests.append ((
                         'UIDL\r\n', _UIDL, '\r\n.\r\n'
@@ -149,17 +141,7 @@ class Pipeline (mime_reactor.Pipeline):
                 self.pipeline_requests.append ((
                         'QUIT\r\n', (lambda r: False), None
                         ))
-                
-        def pop_quit_after_last (self):
-                last = self.pipeline_requests.pop ()
-                def _QUIT (response):
-                        self.pipeline_requests.append ((
-                                'QUIT\r\n', (lambda r: False), None
-                                ))
-                        return last[1] (response)
-                
-                self.pipeline_requests.append ((last[0], _QUIT, last[2]))
-                
+                                
 
 def connect (host, port=110, timeout=3.0):
         dispatcher = Pipeline ()
