@@ -154,8 +154,8 @@ class Escaping_producer (object):
                         return buffer
                         
                 return buffer
-
-
+        
+        
 class Escaping_collector (object):
 
         "A collector that escapes a stream of characters"
@@ -171,18 +171,21 @@ class Escaping_collector (object):
                 self.collector = collect
 
         def collect_incoming_data (self, data):
-                buffer = self.escape (self.escape_buffer + data)
+                buffer = self.escape_buffer + data
                 i = async_chat.find_prefix_at_end (buffer, self.escape_from)
                 if i > 0:
-                        self.collector.collect_incoming_data (buffer[-i:])
-                        self.escape_buffer = buffer[:-i]
+                        self.collector.collect_incoming_data (
+                                self.escape (buffer[:-i])
+                                )
+                        self.escape_buffer = buffer[-i:]
                 else:
-                        self.collector.collect_incoming_data (buffer)
+                        self.collector.collect_incoming_data (
+                                self.escape (buffer)
+                                )
                         self.escape_buffer = ''
 
         def found_terminator (self):
-                self.collector.found_terminator ()
-                return False
+                return self.collector.found_terminator ()
 
 
 def multipart_generator (parts, boundary):
@@ -301,7 +304,9 @@ def multipart_collect_by_content_types (collectors=multipart_collectors):
 
 # Peer Abstractions
 
-class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
+class Pipeline (
+        MIME_collector, async_chat.Dispatcher, async_client.Pipeline
+        ):
 
         def __init__ (self):
                 async_chat.Dispatcher.__init__ (self)
@@ -333,97 +338,28 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 self.pipeline_close ()
                 async_chat.Dispatcher.close (self)
                 
-        def collect_incoming_data (self, data):
-                self.mime_collector_buffer += data
-
-        def found_terminator (self):
-                response = self.mime_collector_buffer
-                self.mime_collector_buffer = ''
+        def mime_collector_continue (self):
                 self.pipelined_responses += 1
                 if self.pipeline_responses:
-                        if self.pipeline_responses.popleft (
-                                )[1] (response):
-                                return True
+                        assert None == self.log (''.join ((
+                                self.pipeline_responses[0][0],
+                                '\r\n'.join (self.mime_collector_lines)
+                                )), 'debug')
+                        if not self.pipeline_responses.popleft (
+                                )[1] (self.mime_collector_lines):
+                                self.mime_collector_finalize ()
                 else:
-                        assert None == self.log (response, 'unexpected')
+                        assert None == self.log (
+                                self.mime_collector_lines[0], 'unexpected'
+                                )
+                return self.closing
+                
+        def mime_collector_finalize (self):
+                self.mime_collector_lines = self.mime_collector_body = None
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
                 if self.pipeline_responses:
                         self.set_terminator (self.pipeline_responses[0][2])
-                        return False
-                
-                return True
-                
-
-if __name__ == '__main__':
-	from allegra import loginfo
-	loginfo.log (
-		'Allegra MIME Validator'
-		' - Copyright 2005 Laurent A.V. Szyster'
-                ' | Copyleft GPL 2.0', 
-                'info'
-                )
-                
-	def mime_collector_finalize (collector):
-		while True:
-			data = collector.mime_collector_body.more ()
-			if data:
-				sys.stdout.write (data)
-			else:
-				break
-				
-	mime_reactor = MIME_reactor ()
-	mime_reactor.mime_collector_finalize = mime_collector_finalize
-	simple_collector = Simple (mime_reactor)
-	while True:
-		data = sys.stdin.read (4096)
-		if data:
-			simple_collector.collect_incoming_data (data)
-		else:
-			break
-	
-	# Simply pipes a MIME or MIME/MULTIPART message from STDIN to STDOUT
-	# collecting its parts and reproducing the input. Finalization(s) are
-	# dumped to STDERR.
-			
-# A MIME reactor that uses a reactor.Buffer to proxy the collected
-# headers and body to an asynchat channel simply by pushing the
-# reactor in its output_fifo queue. It may be used to proxy any
-# kind of MIME protocols, including HTTP, SMTP, POP3, etc.
-#
-# The lifecycle of a one way MIME proxy is usally this one:
-#
-#	0. instanciated, completed and set as its mime_collector_body
-#          by the MIME collector channel, with a Buffer as body
-#	1. pushed to the MIME producer channel with its mime_producer_body
-#	   set to its mime_collector_body
-#	2. dereferenced by the collector channel when collected
-#	3. dereferenced by the producer channel when produced
-#	4. finalized
-#
-# In the case of a two-way HTTP proxy, the finalization of a request
-# reactor consists in instanciating a response reactor and pushing
-# it back to the original collector channel.
-#
-# A MIME server can also be considered a one-way proxy using the same
-# channel to collect requests from and produce responses to ;-)
-#
-#	0. instanciated, completed and and set as its mime_collector_body
-#          by the MIME collector channel if there is a body to collect
-#	1. pushed to the server channel
-#	2. dereferenced by the server channel when produced
-#	3. finalized
-#
-# The full implication of that original design of a MIME server, is
-# that you can pipeline HTTP/1.1 requests like POST and PUT and still
-# produce the response headers before the request's body as been
-# collected.
-#
-# Of course a MIME client can be viewed in the same perspective:
-#
-#	0. instanciated and completed by a MIME client channel
-#	1. pushed to the client channel
-#	2. dereferenced by the client channel when collected
-#	3. finalized
-#
-
+                else:
+                        self.set_terminator (None)
+                return self.closing
