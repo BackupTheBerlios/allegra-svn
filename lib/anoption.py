@@ -14,9 +14,11 @@
 # along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
+"http://laurentszyster.be/blog/anoption/"
+
 import sys, re, inspect
 
-options = re.compile ("^--?([0-9A-Za-z]+?)(?:=(.+))?$")
+options = re.compile ("^--?([0-9A-Za-z_]+?)(?:=(.+)?)?$")
 
 def use (fun):
         named, collection, extension, defaults = inspect.getargspec (fun)
@@ -48,8 +50,15 @@ def use (fun):
                 return "[...]"
 
         return mandatory
-        
 
+
+def cast (value, default):
+        t = type (default)
+        if t == bool:
+                return (value != 'no' and bool (value))
+
+        return t (value)
+                
 def cli (fun, argv, err=(lambda msg: sys.stderr.write (msg+'\r\n') or False)):
         named, collection, extension, defaults = inspect.getargspec (fun)
         N = len (named)
@@ -64,15 +73,30 @@ def cli (fun, argv, err=(lambda msg: sys.stderr.write (msg+'\r\n') or False)):
                 m = options.match (value)
                 if m:
                         name, option = m.groups ()
-                        if extension or name in mandatory:
-                                if option == None:
-                                        kwargs[name] = True
-                                else:
-                                        kwargs[name] = option
+                        if name in named:
+                                order = named.index (name)
+                                try:
+                                        kwargs[name] = cast (
+                                                option, defaults[-(N-order)]
+                                                )
+                                except:
+                                        return err ("illegal option " + name)
+                                
+                        elif extension:
+                                kwargs[name] = option
                 elif ordered < N:
-                        names.add (named[ordered])
+                        name = named[ordered]
+                        names.add (name)
                         if ordered > M:
-                                value = type (defaults[ordered-M]) (value)
+                                try:
+                                        value = cast (
+                                                value, defaults[ordered-M]
+                                                )
+                                except:
+                                        return err (
+                                                "illegal argument " + name
+                                                )
+                                                
                         args.append (value) 
                         ordered += 1
                 elif collection:
@@ -84,13 +108,7 @@ def cli (fun, argv, err=(lambda msg: sys.stderr.write (msg+'\r\n') or False)):
                 return err ("too few arguments")
                 
         for i in range (1, N - ordered + 1):
-                default = defaults[-i]
-                name = named[-i]
-                value = kwargs.get(name, default)
-                try:
-                        kwargs[name] = type (default) (value)
-                except:
-                        return err ("illegal argument: " + name)
+                kwargs.setdefault(named[-i], defaults[-i])
                 
         names.update (kwargs.keys ())
         if not mandatory.issubset (names):
