@@ -81,7 +81,7 @@ class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         
         def http_response (self, response, headers=(), body=None):
                 # Complete the HTTP response producer
-                self.producer_headers.update (options)
+                self.producer_headers.update (headers)
                 if body == None and (
                         self.http_request[0] in ('GET', 'POST')
                         ):
@@ -106,7 +106,9 @@ class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
                                         'Transfer-Encoding'
                                         ] = 'chunked'
                                 self.producer_body = \
-                                        http_reactor.Chunk_producer (body)
+                                        http_reactor.Chunk_producer (
+                                                self.producer_body
+                                                )
                 else:
                         # Do not keep-alive without chunk-encoding
                         self.producer_headers['Connection'] = 'close'
@@ -157,7 +159,7 @@ class Dispatcher (
 
         def __repr__ (self):
                 return 'http-server-channel id="%x"' % id (self)                
-                
+        
 	def collector_continue (self):
 		while (
                         self.collector_lines and not 
@@ -247,3 +249,17 @@ class Dispatcher (
                         return True
                 
                 return self.closing # ... or stall if closing
+
+        def handle_close (self):
+                "close the dispatcher and maybe terminate the collector"
+                self.close ()
+                if self.collector_body:
+                        body = self.collector_body
+                        depth = self.collector_depth
+                        while depth and not body.found_terminator (): 
+                                depth -= 1
+                        if depth < 1:
+                                self.log (
+                                        '%d' % self.collector_depth,
+                                        'collector-leak'
+                                        )
