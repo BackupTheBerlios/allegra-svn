@@ -200,9 +200,9 @@ class Dispatcher (async_core.Dispatcher):
                 else:
                         self.ac_out_buffer = ''
                         
-        def close (self):
+        def handle_close (self):
                 "close the dispatcher and maybe terminate the collector"
-                async_core.Dispatcher.close (self)
+                self.close ()
                 if not self.collector_stalled:
                         depth = self.collector_depth
                         while depth and not self.found_terminator (): 
