@@ -72,13 +72,6 @@ def irtd2_identified (reactor, about, salts):
 def irtd2_authorize (reactor, about, salts):
         pass
 
-def irtd2_audit (reactor, about, info=None):
-        loginfo.log ('%s %d %s' % (
-                ' '.join (reactor.http_request),
-                reactor.http_response,
-                (u"/".join (about)).encode ('UTF-8')
-                ), info)
-
 def json_200_ok (reactor, value):
         "Reply with 200 Ok and a JSON body, prevent peer to cache it."
         reactor.http_produce (
@@ -384,11 +377,15 @@ class Listen (async_server.Listen):
                                 controller = http_404_close
 
                 try:
-                        collector_stalled = controller (reactor, about)
+                        stalled = controller (reactor, about)
                 except:
                         self.loginfo_traceback ()
                         reactor.http_produce (500)
-                        irtd2_audit (reactor, about)
-                        return True
-
-                irtd2_audit (reactor, about)
+                        stalled = True
+                loginfo.log ('%s %d %s' % (
+                        ' '.join (reactor.http_request),
+                        reactor.http_response,
+                        (u"/".join (about)).encode ('UTF-8')
+                        ))
+                return stalled
+                
