@@ -40,7 +40,7 @@ PRESTo_types = (types.InstanceType, object)
 class NONE: pass
 
 def presto_xdir (self, instance):
-        e = xml_dom.XML_element (u'http://presto/ dir', None)
+        e = xml_dom.Element (u'http://presto/ dir', None)
         if instance == NONE:
                 e.xml_children = [
                         presto.presto_xml (None, set ()),
@@ -118,7 +118,7 @@ def presto_prompt_async (self, reactor):
         elif hasattr (result, 'xml_name') or (
                 result != reactor and hasattr (result, 'more')
                 ):
-                e = xml_dom.XML_element (u'http://presto/ %s' % method, None)
+                e = xml_dom.Element (u'http://presto/ %s' % method, None)
                 e.xml_children = [result]
                 return e
                 

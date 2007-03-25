@@ -1,4 +1,4 @@
-# Copyright (C) 2005 Laurent A.V. Szyster
+# Copyright (C) 2005-2007 Laurent A.V. Szyster
 #
 # This library is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -12,659 +12,308 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this library; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-# USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 "Practical REST objects"
 
-import types, glob, os, stat, imp, weakref, time
-
-from xml.parsers import expat
-
-if os.name == 'nt':
-        allegra_time = time.clock
-else:
-        allegra_time = time.time
+import time, random, os, stat, socket, glob
+from urllib import unquote as urldecode
+try:
+        from hashlib import sha1
+except:
+        from sha import new as sha1
+try:
+        import cjson
+        json_encode = cjson.encode 
+        json_decode = (lambda x: cjson.decode (x, 1))
+except:
+        pass
+        
+random.seed ()
 
 from allegra import (
-        loginfo, finalization, thread_loop, 
-        producer, reactor, xml_dom, xml_unicode
+        loginfo, finalization, async_server, producer, collector,
+        ip_peer, tcp_server, mime_reactor, http_server, xml_dom, xml_reactor
         )
-
-
-# TODO: move away ...
-
-class PRESTo_reactor (producer.Stalled_generator):
         
-        def __init__ (
-                self, react, response='<presto xmlns="http://presto/" />'
-                ):
-                self.presto_react = react
-                self.presto_response = response
-
-        def __call__ (self, *args):
-                self.presto_react (*args)
-                self.generator = iter ((self.presto_response,))
-                self.presto_react = None
-
-
-class PRESTo_async (
-        loginfo.Loginfo, finalization.Finalization, xml_dom.XML_element
-        ):
-                
-        "The base PRESTo component class."
         
-        def __repr__ (self):
-                return '%s id="%x"' % (self.xml_name.encode (
-                        'UTF-8', 'xmlcharrefreplace'
-                        ), id (self))
-
-        def finalization (self, instance):
-                assert None == self.log ('finalized', 'debug')
-
-        xml_name = u'http://presto/ async'
-
-        def presto (self, reactor):
-                assert None == self.log ('%r' % reactor, 'presto')
-
-        presto_methods = {}
-        presto_interfaces = set ()
+def http_404_not_found (reactor, about):
+        reactor.http_response (404, (('Connection', 'close'),))
         
+def url_query (urlencoded, query_strings):
+        "map URL encoded form data to UNICODE keys and values"
+        for param in urlencoded.split ('&'):
+                if param.find ('=') > -1:
+                        name, value = param.split ('=', 1)
+                        query_strings[unicode (
+                                urldecode (name), 'UTF-8', 'replace'
+                                )] = unicode (
+                                        urldecode (value), 'UTF-8', 'replace'
+                                        )
+                elif param:
+                        query_strings[unicode (
+                                urldecode (param), 'UTF-8', 'replace'
+                                )] = True
+        return query_strings
 
-# Synchronized Component
-#
-# The idea is to pass a distinct copy of the asynchronous state and
-# allow the synchronized method to access it safely.
-#
-# Synchronized method must not update the XML tree or any
-# asynchronously managed data structures, but they are expected to
-# access at least the most relevant state: its request's state, the
-# PRESTo vector. Such method will access the instance bound to,
-# but with utmost care and certainly not its xml_* or presto_*
-# interfaces.
-#
-# A synchronized method is guaranteed to be "thread-safe" if it does
-# not access anything else than the synchronized reactor passed as
-# argument.
-#
-# Most "real-world" implementation should validate all requests
-# asynchronously and then eventually invoke synchronized methods.
+def irtd2_identified (reactor, about, salts): 
+        pass 
+        # test that the IRTD2 cookie exists, has not timed out and 
+        # bears a valid signature.
 
-class PRESTo_reactor_sync (reactor.Buffer):
-        
-        def __init__ (self, select_trigger):
-                self.select_trigger = select_trigger
-                reactor.Buffer.__init__ (self)
-                
-        def __call__ (self, data):
-                assert type (data) == types.StringType
-                self.select_trigger ((self.buffer, (data,)))
+def irtd2_authorize (reactor, about, salts):
+        pass
 
-class PRESTo_sync (PRESTo_async):
+def json_200_ok (reactor, value):
+        "Reply with 200 Ok and a JSON body, prevent peer to cache it."
+        reactor.http_response (
+                200, 
+                (('Content-Type', 'application/json'),),
+                producer.Simple (json_encode (value))
+                )
 
-        "A component to synchronize threaded methods."
+def xml_200_ok (reactor, dom, content_type='text/xml'): 
+        "Reply with 200 Ok and an XML body, allow peer to cache it."
+        accept_charsets = mime_headers.preferences (
+                reactor.collector_headers, 'accept-charset', 'ASCII'
+                )
+        if 'utf-8' in accept_charsets:
+                encoding = 'UTF-8' # prefer UTF-8 over any other encoding!
+        else:
+                encoding = accept_charsets[-1].upper ()
+        reactor.http_response (
+                200, 
+                (('Content-Type', ';'.join ((
+                        content_type, ('charset=%s' % encoding)
+                        ))),),
+                xml_reactor.XML_producer (dom, encoding)
+                )
 
-        xml_name = u'http://presto/ sync'
-        
-        synchronizer = None
-        synchronizer_size = 16
-        
-        def __init__ (self, name, attributes):
-                xml_dom.XML_element.__init__ (self, name, attributes)
-                thread_loop.synchronized (self)
-                
-        def xml_valid (self, dom):
-                self.xml_dom = dom 
-                #
-                # a synchronized element *must* provide a circular reference
-                # through the cache. this prevents a big: 
-                #
-                # thread trashing
-                #
-                # too early death of the weakref in the cache and a horde 
-                # of thread-queues and select_triggers to be instanciated, 
-                # opened and closed, with all the problems associated.
-                #
-                # and a "busy-body" cache behaviour is not usefull for
-                # something long-lived like a database connection, a CPU
-                # intensive process, etc ... things that are meant to be
-                # cached as long as possible.
-        
-        # Note also that there are two logging interfaces for a synchronized
-        # PRESTo instance, asynchronous and synchronous:
-        #
-        #       self.log ('async')
-        #
-        # and
-        #
-        #       self.synchronizer.log ('sync')
-        #
-        
-def presto_synchronize (method):
-        def sync (element, reactor):
-                xml_reactor = PRESTo_reactor_sync (element.select_trigger)
-                xml_reactor.presto_vector = reactor.presto_vector.copy ()
-                element.synchronized ((method, (element, xml_reactor)))
-                return xml_reactor
-                
-        return sync
-        #
-        # a method factory that "wraps" the asynchronous PRESTo reactor 
-        # handled with a synchronized buffer reactor before passing it
-        # to the "decorated" method.
+def rest_302_redirect (reactor, url): 
+        reactor.http_response (302, (('Location', url,)))
+        # redirect with a 302 response, log same referer as an error.
 
 
-# An Asynchronous Component Object Model
-
-class PRESTo_dom (
-        xml_dom.XML_dom, loginfo.Loginfo, finalization.Finalization
+class Control (
+        xml_dom.Document, loginfo.Loginfo, finalization.Finalization
         ):
         
-        presto_defered = None
+        json = {}
         
-        def __init__ (self, name, types={}, type=PRESTo_async):
-                self.xml_prefixes = {u'http://presto/': u'presto'}
-                self.xml_pi = {}
-                self.xml_type = type
-                self.xml_types = types
-                self.presto_name = name
-                        
-        def __repr__ (self):
-                return 'presto-dom name="%s"' % self.presto_name
-                        
-        # The PRESTo commit and rollback interfaces
+        http_post_limit = 16384 # sweet sixteen 8-bit kilobytes ;-)
         
-        def presto_rollback (self, defered):
-                self.xml_parser_reset ()
-                try:
-                        self.xml_expat.Parse (
-                                open (self.presto_name, 'r').read (), 0
-                                )
-                except expat.ExpatError, error:
-                        self.xml_expat_ERROR (error)
-                self.xml_expat = xml_parsed = None
-                if self.xml_root == None:
-                        self.xml_root = PRESTo_async (
-                                u'http://presto/ async', None
-                                )
-                if self.xml_root.xml_attributes == None:
-                        self.xml_root.xml_attributes = {}
-                defered[0] (*defered[1])
-                return True
-        
-        def presto_commit (self, defered):
-                open (self.presto_name, 'w').write (
-                        xml_unicode.xml_document (self)
+        def __init__ (self, peer, about):
+                self.irtd2_salts = peer.irtd2_salts
+                self.xml_root = xml_dom.Element (
+                        u"allegra.presto Control", {
+                                u"context": about[0],
+                                u"subject": about[1],
+                                }
                         )
-                return True
 
+        def __call__ (self, reactor, about):
+                if irdt2_identified (reactor, about, self.salts):
+                        r = reactor.http_request
+                        h = reactor.collector_headers
+                        if r[0] == 'GET':
+                                if r[2] == None:
+                                        return self.http_resource (
+                                                reactor, about, h
+                                                )
 
-# Loading and unloading Python modules, XML namespace to types mapping.
-                
-def none (): pass
-                
-PASS = (none, ())
-                
-class PRESTo_root (loginfo.Loginfo):
-        
-        presto_type = PRESTo_async
-        
-        def __init__ (self, path):
-                "load all Python in modules/ and all components in root/"
-                self.presto_path = path + '/root'
-                self.presto_path_python = path + '/modules'
-                self.presto_types = {}
-                self.presto_cached = {}
-                self.presto_modules = {}
-                for filename in self.presto_modules_dir ():
-                        self.presto_module_load (filename)
-                for filename in glob.glob (self.presto_path + '/*'):
-                        if stat.S_ISREG (os.stat (filename)[0]):
-                                self.presto_cache (
-                                        '/' + os.path.basename (filename), 
-                                        PASS
+                                return self.json_application (
+                                        reactor, about, url_query (r[2], {})
                                         )
                         
-        def __repr__ (self):
-                return 'presto-root path="%s"' % self.presto_path
+                        elif r[0] == 'POST':
+                                return self.http_post (reactor, about, h)
+                        
+                        return self.http_continue (reactor, r, about, h)
 
-        # What's *specially* nice with the asynchronous design is that Python
-        # modules reload is both efficient (reloading an identical module is
-        # as fast as checking source identity, apparently ;-) and safe. Indeed
-        # loading a new module *will* block the peer until it is compiled,
-        # but doing it in a thread is just planning failure. Think about why
-        # you would reload a module in a web application peer: debug during
-        # development or maintenance of a production run. When developing 
-        # performance does not matter. And it certainly does matter a lot less
-        # than stability when maintaining a runtime environnement!
-        #
-        # Asynchronous is as fast as a safe network peer can get ;-)
+                return self.irtd2_identify (reactor, about)
         
-        def presto_modules_dir (self):
-                "list all modules's name found in modules/"
-                return [os.path.basename (n) for n in glob.glob (
-                        self.presto_path_python + '/*.py'
-                        )]
+        def http_post (self, reactor, about, headers):
+                ct = headers.get ('content-type')
+                if reactor.collector_body == None:
+                        if ct in (
+                                'application/json',
+                                'www-application/urlencoded-form-data'
+                                ):
+                                reactor.collector_body = collector.Limited (
+                                        self.http_post_limit
+                                        )
+                        else:
+                                reactor.http_response (501) # Not implemented
+                        return
+                
+                if ct == 'application/json':
+                        json = json_decode (reactor.collector_body.data)
+                elif ct == 'www-application/urlencoded-form-data':
+                        json = url_query (reactor.collector_body.data, {})
+                else:
+                        reactor.http_response (501) # Not implemented
+                        return
+                
+                self.json_application (reactor, about, json)
 
-        def presto_module_load (self, filename):
-                "load a named Python module"
+        def http_continue (self, reactor, request, about, headers):
+                reactor.http_response (501) # Not implemented
+        
+        def irtd2_identify (self, reactor, about):
+                "redirect unauthorized agents to the /irtd2 URL."
+                rest_302_redirect (reactor, "/irtd2")
+        
+        def http_resource (self, reactor, about, headers):
+                "return an XML producer of itself."
+                self.xml_root.xml_children = (
+                        '<script><![CDATA[json=', 
+                        json_encode (self.json),
+                        ']]></script>'
+                        )
+                xml_200_ok (reactor, self)
+        
+        def json_application (self, reactor, about, json):
+                "return the JSON state as one string"
+                json_200_ok (reactor, json)
+                
+        
+class ResourceCache (Control):
+        
+        resource_path = '.'
+        resource_cache = {}
+        
+        def http_resource (self, reactor, about, headers):
+                teed = self.resource_cache.get (about)
+                if teed != None:
+                        reactor.http_response (
+                                200, teed.mime_headers, producer.Tee (teed)
+                                )
+                        return False
+
+                if len (about) < 3:
+                        pass # list a directory and cache the result
+                
+                filename = '/'.join ((self.resource_path, about[2]))
+                try:
+                        result = os.stat (filename)
+                except:
+                        result = None
+                if result == None or not stat.S_ISREG (result[0]):
+                        reactor.http_response (404)
+                        return False
+                        
+                teed = producer.File (open (filename, 'rb'))
+                self.resource_cache[about] = teed
+                ct, ce = mimetypes.guess_type (filename)
+                teed.mime_headers = {
+                        'Last-Modified': (
+                                time.asctime (time.gmtime (result[7])) + 
+                                (' %d' % time.timezone)
+                                ),
+                        'Content-Type': ct or 'text/html',
+                        }
+                if ce:
+                        teed.mime_headers['Content-Encoding'] = ce
+                reactor.http_response (
+                        200, teed.mime_headers, producer.Tee (teed)
+                        )
+                return False
+        
+        def http_continue (self, reactor, command, about, headers):
+                if reactor.http_request[0] != 'HEAD':
+                        reactor.http_response (405) # Method Not Allowed 
+                else:
+                        reactor.http_response (501) # Not implemented
+                        #
+                        # TODO: add support for HEAD
+        
+
+class Listen (async_server.Listen):
+        
+        irtd2_salts = [''.join ((
+                chr(o) for o in random.sample (
+                        xrange (ord ('0'), ord ('z')), 20
+                        )
+                )) for x in range (2)]
+
+        def __init__ (self, path, addr, precision):
+                async_server.Listen.__init__ (
+                        self, http_server.Dispatcher, addr, 
+                        min (precision, 1.0), 
+                        tcp_server.LISTEN_MAX, 
+                        socket.AF_INET
+                        )
+                self.presto_path = path
+                self.presto_modules = {}
+                self.presto_cached = {}
+        
+        def presto_dir (self):
+                "list all source modules's name found in modules/"
+                return (os.path.basename (n) for n in glob.glob (
+                        '%s/*.py' % self.presto_path
+                        ))
+
+        def presto_load (self, filename):
+                "load a named Python source module"
                 if self.presto_modules.has_key (filename):
-                        self.presto_module_unload (filename)
+                        self.presto_unload (filename)
                 name, ext = os.path.splitext (filename)
                 try:
-                        presto_module = imp.load_source (
-                                name , '/'.join ((
-                                        self.presto_path_python, filename
-                                        ))
-                                )
-                        if (
-                                self.presto_modules.has_key (filename) and 
-                                hasattr (presto_module, 'presto_onload')
-                                ):
-                                presto_module.presto_onload (self)
+                        module = imp.load_source (name , '/'.join ((
+                                self.presto_path, filename
+                                )))
                 except:
                         return self.loginfo_traceback ()
-        
-                # update this PRESTo root XML namespace to classes mapping
-                # with any module's name that has an 'xml_name' attribute.
-                #
                 assert None == self.log (
-                        'load-module filename="%s" id="%x"' % (
-                                filename, id (presto_module)
+                        'load filename="%s" id="%x"' % (
+                                filename, id (module)
                                 ), 'debug'
                         )
-                self.presto_modules[filename] = presto_module
-                if not hasattr (presto_module, 'presto_components'):
-                        presto_module.presto_components = ()
-                self.presto_types.update (dict ([
-                        (item.xml_name, item)
-                        for item in presto_module.presto_components
-                        ]))
 
-        def presto_module_unload (self, filename):
+                self.presto_cached.update ((
+                        (about, Control (self.irtd2_salts))
+                        for about, Control in module.controllers.keys ()
+                        if not self.presto_cached.has_key (about)
+                        ))
+                self.presto_modules[filename] = module
+
+        def presto_unload (self, filename):
                 "unload a named Python module"
-                presto_module = self.presto_modules.get (filename)
-                if presto_module == None:
+                module = self.presto_modules.get (filename)
+                if module == None:
                         return
                         
                 assert None == self.log (
-                        'unload-module filename="%s" id="%x"' % (
-                                filename, id (presto_module)
+                        'unload filename="%s" id="%x"' % (
+                                filename, id (module)
                                 ), 'debug'
                         )
-                for item in presto_module.presto_components:
-                        del self.presto_types[item.xml_name]
+                for about in module.controllers.keys ():
+                        del self.presto_cached[about]
                 del self.presto_modules[filename]
         
-        # In order to limit the possible damage of broken/malicious
-        # URLs, a strict depth limit of 2 is set by default, just enough
-        # to support a "/model/control/view" syntax ...
-        #
-        PRESTo_FOLDER_DEPTH = 2
-        
-        def presto_route (self, reactor):
-                "route a request to its reactor.presto_dom component"
-                #
-                # Check for a reference in the root's cache for that path or 
-                # for a folder that contains it and if there is one, try to 
-                # dereference the DOM instance.
-                #
-                # return True if the method succeeded to attribute such 
-                # instance to the reactor.
-                #
+        def http_continue (self, reactor):
+                uri = (reactor.http_uri[2]).split ('/', 2)
+                uri[0] = reactor.collector_headers.get (
+                        'host', u""
+                        )
+                about = reactor.uri_about = tuple ((
+                        unicode (urldecode (token), 'UTF-8')
+                        for token in uri
+                        ))
                 try:
-                        dom = self.presto_cached[reactor.presto_path] ()
-                except KeyError:
-                        pass
-                else:
-                        if dom != None:
-                                reactor.presto_dom = dom
-                                return True
-                
-                if self.PRESTo_FOLDER_DEPTH > 0:
-                        depth = 0
-                        path = reactor.presto_path.rsplit ('/', 1)[0]
-                        while True:
-                                try:
-                                        dom = self.presto_cached[path] ()
-                                except KeyError:
-                                        pass
-                                else:
-                                        if dom != None:
-                                                reactor.presto_dom = dom
-                                                return True
-                                        
-                                depth += 1
-                                if path and depth < self.PRESTo_FOLDER_DEPTH:
-                                        path = path.rsplit ('/', 1)[0]
-                                else:
-                                        break
-                                
-                return False
-        
-        def presto_cache (self, path, rolledback=PASS, reactor=None):
-                # instanciate a DOM, cache its weak reference, roll it back
-                # and defer the PRESTo continuation ...
-                #
-                dom = PRESTo_dom (
-                        self.presto_path + path, 
-                        self.presto_types, 
-                        self.presto_type
-                        )
-                self.presto_cached[path] = weakref.ref (dom)
-                if reactor != None:
-                        reactor.presto_dom = dom
-                dom.presto_path = path
-                dom.presto_root = self
-                dom.presto_rollback (rolledback)
-                assert None == self.log (
-                        'cached count="%d"' % len (self.presto_cached), 
-                        'debug'
-                        )
-                return dom
-
-        def presto_continue (self, reactor):
-                assert None == self.log ('%r' % reactor, 'presto')
-                
-
-def presto_producer (
-        dom, attributes, result, encoding, globbing=1<<14 # 16KB glob
-        ):
-        # return one single Composite with a simplistic PRESTo
-        # envelope made of two elements: the accessed DOM root and the 
-        # byte string, unicode string, xml element or producer returned by
-        # a call to presto_rest.
-        #
-        prefixes = dom.xml_prefixes
-        e = xml_dom.XML_element (u'http://presto/ PRESTo', attributes)
-        e.xml_children = (result, dom.xml_root)
-        head = '<?xml version="1.0" encoding="%s"?>' % encoding
-        if dom.xml_pi:
-                head += xml_unicode.xml_pi (dom.xml_pi, encoding)
-        return producer.Composite (
-                head, xml_unicode.xml_prefixed (
-                        e, prefixes, xml_unicode.xml_ns (prefixes), encoding
-                        ), globbing
-                )
-
-
-class PRESTo_benchmark (object):
-        
-        def __init__ (self, t):
-                self.response_time = allegra_time () - t
-                self.request_time = t 
-        
-        def more (self):
-                if self.request_time == None:
-                        return ''
-                        
-                t = allegra_time () - self.request_time
-                self.request_time = None
-                return (
-                        '<!-- it took PRESTo %f seconds'
-                        ' to handle this request and %f seconds'
-                        ' to deliver this response -->' % (
-                                self.response_time, 
-                                t - self.response_time
-                                )
-                        )
-                        
-        def producer_stalled (self):
-                return False
-
-
-def presto_benchmark (
-        dom, attributes, result, encoding, benchmark, globbing=512
-        ):
-        # return one single Composite with a simplistic PRESTo
-        # envelope made of two elements: the accessed DOM root and the 
-        # byte string, unicode string, xml element or producer returned by
-        # a call to presto_rest.
-        #
-        prefixes = dom.xml_prefixes
-        e = xml_dom.XML_element (
-                u'http://presto/ PRESTo', attributes
-                )
-        e.xml_children = (result, dom.xml_root, benchmark)
-        head = '<?xml version="1.0" encoding="%s"?>' % encoding
-        if dom.xml_pi:
-                head += xml_unicode.xml_pi (dom.xml_pi, encoding)
-        return producer.Composite (
-                head, xml_unicode.xml_prefixed (
-                        e, prefixes, xml_unicode.xml_ns (prefixes), encoding
-                        ), globbing
-                )
-
-
-# the core PRESTo interfaces/implementation itself, just REST
-
-# Types with safe __str__ 
-
-PRESTo_Unicode = types.UnicodeType
-
-PRESTo_String = (
-        # Ordered most common first
-        types.StringType, 
-        types.IntType,
-        types.LongType,
-        types.FloatType,
-        types.BooleanType,
-        types.NoneType,
-        )
-
-# Types with safe __iter__ 
-
-PRESTo_Iterable = (types.TupleType, types.ListType, set, frozenset)
-
-#
-# TODO: ... find out more about the types below
-#
-
-PRESTo_others = (
-        types.InstanceType,
-        types.ObjectType,
-        types.ClassType,
-        types.TypeType,
-        types.CodeType, 
-        types.UnboundMethodType,
-        types.BuiltinMethodType,
-        types.NotImplementedType,
-        types.BuiltinFunctionType,
-        types.DictProxyType,
-        types.MethodType,
-        types.GeneratorType,
-        types.EllipsisType,
-        types.ModuleType,
-        types.FrameType,
-        types.FileType,
-        types.BufferType,
-        types.TracebackType,
-        types.SliceType,
-        types.ComplexType,
-        types.LambdaType,
-        types.FunctionType,
-        types.XRangeType,
-        )
-
-
-def presto_xml (
-        instance, walked,
-        attributes=' xmlns="http://presto/"', encoding='ASCII',
-        ):
-        # Serialize any Python state to an XML string, using by default
-        # an charset encoding that is supported everywhere: 7bit ASCII.
-        #
-        # A PRESTo state is a tree of "simple" instances, like a list
-        # of strings or a map of unicode and sets, etc ...
-        #
-        # It is what a Python function is supposed to return, a method
-        # to update but that in the end will be pushed out, not serialized
-        # back to persistence. This implementation is recursive: if you
-        # need to dump a long list of instance to XML, it may be actually
-        # simpler to join some ad-hoc formatted XML strings.
-        #
-        t = type (instance)
-        attributes += ' type="%s"' % xml_unicode.xml_attr (
-                unicode (t.__name__), encoding
-                )
-        if issubclass (t, PRESTo_String):
-                # 1. Byte string
-                #return '<str%s repr="%s">%s</str>' % (
-                #        attributes, 
-                #        xml_unicode.xml_attr (
-                #                unicode ('%r' % instance), encoding
-                #                ),
-                #        xml_unicode.xml_cdata (unicode (instance), encoding)
-                #        )
-                #
-                return '<str%s><![CDATA[%s]]></str>' % (attributes, instance)
-
-        elif issubclass (t, types.UnicodeType):
-                # 2. UNICODE string
-                return '<str%s>%s</str>' % (
-                        attributes, xml_unicode.xml_cdata (instance, encoding)
-                        )
-
-        instance_id = id (instance)
-        if isinstance (instance, PRESTo_Iterable) and not instance_id in walked:
-                # 3. simple iterables: tuple, list, etc ...
-                walked.add (instance_id)
-                return '<iter%s>%s</iter>' % (
-                        attributes, 
-                        ''.join ((
-                                presto_xml (i, walked, '', encoding)
-                                for i in instance
-                                if not id (i) in walked
-                                ))
-                        )
-        
-        elif isinstance (instance, dict) and not instance_id in walked:
-                # 4. dictionnary
-                walked.add (instance_id)
-                items = ((
-                        presto_xml (k, walked, '', encoding),
-                        presto_xml (v, walked, '', encoding)
-                        ) for k, v in instance.items ())
-                return '<map%s>%s</map>' % (
-                        attributes,
-                        ''.join ((
-                                '<item>%s%s</item>' % i
-                                for i in items if i[0] or i[1]
-                                ))
-                        )
-                                        
-        if instance_id in walked:
-                return '<str%s>...</str>' % attributes
-                
-        # 4. try to serialize as an 8-bit "representation"
-        try:
-                attributes += ' repr="%s"' % xml_unicode.xml_attr (
-                        u'%r' % instance, encoding
-                        )
-        except:
-                # 5. try to serialize as an 8-bit string, using the default 
-                #    encoding ...
-                #
-                try:
-                        return '<str%s>%s</str>' % (
-                                attributes, xml_unicode.xml_cdata (
-                                        unicode ('%s' % instance), encoding
-                                        )
-                                )
-                                
+                        # context, subject and maybe predicate 
+                        # || http://host/folder || http://host/folder/file
+                        controller = self.presto_cached[about] 
                 except:
-                        pass
+                        if len (about) > 2:
+                                about = (about[0], about[1])
+                        else:
+                                about = (about[0],)
+                        try:
+                                # context and subject || http://host/folder
+                                controller = self.presto_cached[about] 
+                        except:
+                                controller = http_404_not_found
 
-        # 6. all other interfaces/types
-        return '<instance%s/>' % attributes
-
-        # Note
-        #
-        # This function is slightly faster than a simple generator derived
-        # from it. Optmization in Python then in C may yield significant
-        # improvement ...
-
-
-def presto_ctb (ctb):
-        return '<excp xmlns="http://presto/">%s</excp>' % presto_xml (
-                ctb, set (), ''
-                )
-
-def presto_rest (method, component, reactor):
-        try:
-                result = method (component, reactor)
-        except:
-                return presto_ctb (loginfo.traceback ())
-                                
-        if result == None:
-                # None return <presto/>
-                return '<presto xmlns="http://presto/" />'
-                
-        if (
-                type (result) in (str, unicode) or 
-                hasattr (result, 'xml_name') or
-                hasattr (result, 'more')
-                ):
-                # UNICODE, byte string, producer or XML element, ...
-                return result
-                
-        # others types and interfaces.
-        return presto_xml (result, set ())
-
-
-# Practical method dispatcher and REST routing to a named XML element in the 
-# component's tree. This is just enough to emulate safely state acquisition,
-# provide easy-to-forward-cache RESTfull application interfaces, and does
-# not restrict more purposefull handlers.
-
-def presto_method (component, reactor):
-        "dispatch the REST request to one of the PRESTo methods"
-        method = component.presto_methods.get (unicode (
-                reactor.presto_path[:len (
-                        component.xml_dom.presto_path
-                        )], 'UTF-8'
-                ))
-        if method != None:
-                return method (component, reactor)
-
-
-def presto_route (component, reactor):
-        "maybe route the REST request further, or dispatch a PRESTo method"
-        route = reactor.presto_path[:len (component.xml_dom.presto_path)]
-        element = component.presto_routes.get (route)
-        if element != None:
-                return element.presto (reactor)
-                
-        method = component.presto_methods.get (unicode (route, 'UTF-8'))
-        if method != None:
-                return method (component, reactor)
-        
-
-def presto_route_set (element, dom):
-        "instanciate or update the component's REST routing table"
-        if element.xml_parent != None:
-                dom.xml_root.presto_routes[element.xml_attributes.get (
-                        u'presto-route', xml_unicode.xml_tag (element.xml_name)
-                        ).encode ('UTF-8', 'ignore')] = element
-        #
-        # note that elements and components do not worry about cleaning up
-        # this routing table: such elements and components are not meant to
-        # be updated in part but in whole.
-
-# TODO: get the XML namespaces prefixes issue right (optimize for 8-bit
-#       byte string dump and an unprefixed PRESTo namespace, this *is*
-#       the framework context ...).
-#
-# TODO: simplify the namespace, move everything synchronized to the
-#       presto_sync.py module and get down to
-#
-#        presto.COM
-#        presto.Cache
-#        presto.producer
-#        presto.xml_unicode
-#        presto.xml_utf8
-#        presto.traceback
-#        presto.rest
-#        presto.method
-#        presto.route
-#        presto.link
+                return controller (reactor, about)

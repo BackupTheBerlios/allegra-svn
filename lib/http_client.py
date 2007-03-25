@@ -28,7 +28,7 @@ from allegra import (
 
 class Reactor (finalization.Finalization):
                 
-        http_response = mime_collector_headers = mime_collector_body = None
+        http_response = collector_headers = collector_body = None
         
         def __init__ (
                 self, method, pipeline, url, headers, produce=None
@@ -37,11 +37,11 @@ class Reactor (finalization.Finalization):
                 self.http_pipeline = pipeline
                 self.http_urlpath = url
                 self.http_method = method
-                self.mime_producer_headers = headers
-                self.mime_producer_body = produce
+                self.producer_headers = headers
+                self.producer_body = produce
 
         def __call__ (self, collect=None):
-                self.mime_collector_body = collect
+                self.collector_body = collect
                 self.http_pipeline (self)
                 self.http_pipeline = None
                 return self
@@ -108,11 +108,9 @@ class Pipeline (
 			self.pipeline_requests or
 			self.pipeline_keep_alive
 			):
-			request.mime_producer_headers[
-				'connection'
-				] = 'keep-alive'
+			request.producer_headers['connection'] = 'keep-alive'
 		else:
-			request.mime_producer_headers['connection'] = 'close'
+			request.producer_headers['connection']= 'close'
 		self.http_client_continue (request)
 
 	def pipeline_wake_up_11 (self):
@@ -122,30 +120,26 @@ class Pipeline (
                 request = self.pipeline_requests.popleft ()
 		while self.pipeline_requests:
                         # push all request's reactors
-			request.mime_producer_headers[
-				'connection'
-				] = 'keep-alive'
+			request.producer_headers['connection'] = 'keep-alive'
                         self.http_client_continue (request)
                         request = self.pipeline_requests.popleft ()
 		# push the last one
                 if self.pipeline_keep_alive:
-                        request.mime_producer_headers[
-                                'connection'
-                                ] = 'keep-alive'
+                        request.producer_headers['connection'] = 'keep-alive'
                 else:
                         # close when done and not kept alive
-                        request.mime_producer_headers['connection'] = 'close'
+                        request.producer_headers['connection']= 'close'
 		self.http_client_continue (request)
  		
 	# MIME collector
 
-	def mime_collector_continue (self):
+	def collector_continue (self):
                 while (
-                        self.mime_collector_lines and not 
-                        self.mime_collector_lines[0]
+                        self.collector_lines and not 
+                        self.collector_lines[0]
                         ):
-                        self.mime_collector_lines.pop (0)
-                if not self.mime_collector_lines:
+                        self.collector_lines.pop (0)
+                if not self.collector_lines:
                         return self.closing
                         #
                         # make sure that the collector is stalled once the
@@ -155,7 +149,7 @@ class Pipeline (
 		try:
 			(
 				http_version, request.http_response
-				) = self.mime_collector_lines.pop (
+				) = self.collector_lines.pop (
 					0
 					).split (' ', 1)
 		except:
@@ -166,21 +160,21 @@ class Pipeline (
 			return True
 
                 self.http_version = http_version[-3:]
-		request.mime_collector_headers = \
-			self.mime_collector_headers = \
-			mime_headers.map (self.mime_collector_lines)
+		request.collector_headers = \
+			self.collector_headers = \
+			mime_headers.map (self.collector_lines)
 		if (
 			request.http_method == 'HEAD' or
 			request.http_response[:3] in ('204', '304', '305')
 			):
-                        self.mime_collector_finalize ()
+                        self.collector_finalize ()
                 else:
 		        self.http_collector_continue (
-                                request.mime_collector_body
+                                request.collector_body
                                 )
                 return self.closing # stall the collector if closing
 		
-	def mime_collector_finalize (self):
+	def collector_finalize (self):
                 # pop the reactor finalized and count the response
                 self.pipeline_responses.popleft ()
                 self.http_responses += 1
@@ -191,16 +185,15 @@ class Pipeline (
                 # and that the connection is kept alive
                 if (self.pipeline_requests and (
                         self.http_version == '1.1' or 
-                        self.mime_collector_headers.get (
+                        self.collector_headers.get (
                                 'connection'
                                 ) == 'keep-alive'
                         )):
                         self.pipeline_wake_up ()
                 # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
-                self.mime_collector_headers = \
-                        self.mime_collector_lines = \
-                        self.mime_collector_body = None
+                self.collector_headers = \
+                        self.collector_lines = self.collector_body = None
                 return False
 
 	# HTTP/1.1 client reactor
@@ -219,29 +212,23 @@ class Pipeline (
                         request.http_urlpath, 
                         self.http_version
                         )
-                if request.mime_producer_body == None: # GET, HEAD and DELETE
-                        lines = mime_headers.lines (
-                                request.mime_producer_headers
-                                )
+                if request.producer_body == None: # GET, HEAD and DELETE
+                        lines = mime_headers.lines (request.producer_headers)
                         lines.insert (0, http_request)
                         self.output_fifo.append (''.join (lines))
                 else: # POST and PUT
                         if self.http_version == '1.1':
-                                request.mime_producer_body = \
+                                request.producer_body = \
                                         http_reactor.Chunk_producer (
-                                                request.mime_producer_body
+                                                request.producer_body
                                                 )
-                                request.mime_producer_headers[
+                                request.producer_headers[
                                         'transfer-encoding'
                                         ] = 'chunked'
-                        lines = mime_headers.lines (
-                                request.mime_producer_headers
-                                )
+                        lines = mime_headers.lines (request.producer_headers)
                         lines.insert (0, http_request)
                         self.output_fifo.append (''.join (lines))
-                        self.output_fifo.append (
-                                request.mime_producer_body
-                                )
+                        self.output_fifo.append (request.producer_body)
                 # append the reactor to the queue of responses expected ...
                 self.pipeline_responses.append (request)
                 self.http_requests += 1

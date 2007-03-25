@@ -89,8 +89,8 @@ class Request (finalization.Finalization):
                 self.smtp_when = time.time ()
                 self.smtp_mail_from = mail_from
                 self.smtp_rcpt_to = rcpt_to
-                self.mime_producer_body = body
-                self.mime_producer_headers = {
+                self.producer_body = body
+                self.producer_headers = {
                         'Message-id': '<%f.%d@%s>' % (
                                 self.smtp_when, id (self), HOSTNAME
                                 ),
@@ -101,7 +101,7 @@ class Request (finalization.Finalization):
                         'From': mail_from,
                         'To': ', '.join (rcpt_to)
                         }
-                self.mime_producer_headers.update (headers)
+                self.producer_headers.update (headers)
                 self.smtp_responses = []
 
 
@@ -180,10 +180,10 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                                 push = self.output_fifo.append 
                                 # start mail input, end with <CRLF>.<CRLF>
                                 push (''.join (mime_headers.lines (
-                                        reactor.mime_producer_headers
+                                        reactor.producer_headers
                                         )))
                                 push (mime_reactor.Escaping_producer (
-                                        reactor.mime_producer_body
+                                        reactor.producer_body
                                         ))
                                 push ('\r\n.\r\n')
                                 self.handle_write ()

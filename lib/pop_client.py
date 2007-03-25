@@ -37,7 +37,7 @@ class Pipeline (mime_reactor.Pipeline):
                         return True
                 
                 self.pipeline_responses.append ((
-                        'POP3 Greetings', _POP3, '\r\n'
+                        'POP3', _POP3, '\r\n'
                         )) # a dummy response ...
 
         def __repr__ (self):
@@ -63,7 +63,7 @@ class Pipeline (mime_reactor.Pipeline):
                         ))
         
         def pop_authorize (
-                self, username, password, authorized, unauthorized
+                self, username, password, authorized, unauthorized=None
                 ):
                 def _USER (response):
                         if response[0].startswith ('+OK'):
@@ -71,11 +71,16 @@ class Pipeline (mime_reactor.Pipeline):
                                         if r[0].startswith ('+OK'):
                                                 authorized ()
                                         else:
-                                                unauthorized ()
+                                                (
+                                                        unauthorized or 
+                                                        self.pop_quit
+                                                        ) ()
                                 
                                 self.pipeline_requests.append ((
                                         'PASS %s\r\n' % password, _PASS, '\r\n'
                                         ))
+                        else:
+                                (unauthorized or self.pop) ()
         
                 self.pipeline_requests.append ((
                         'USER %s\r\n' % username, _USER, '\r\n'
@@ -87,7 +92,7 @@ class Pipeline (mime_reactor.Pipeline):
                                 collect = Collect ()
                                 if not collect.collector_is_simple:
                                         collect = collector.Simple (collect)
-                                self.mime_collector_body = \
+                                self.collector_body = \
                                         mime_reactor.Escaping_collector (
                                                 collect
                                                 )
@@ -141,15 +146,24 @@ class Pipeline (mime_reactor.Pipeline):
                 self.pipeline_requests.append ((
                         'QUIT\r\n', (lambda r: False), None
                         ))
+                            
                                 
+any_capabilities = (lambda r: False)                     
 
-def connect (host, port=110, timeout=3.0):
-        dispatcher = Pipeline ()
-        if tcp_client.connect (dispatcher, (host, port), timeout):
-                return dispatcher
+class Mailbox (object):
         
-        return
-
+        def __init__ (
+                authorized, username, password, host, port=110, timeout=3.0
+                ):
+                dispatcher = Pipeline ()
+                if tcp_client.connect (dispatcher, (host, port), timeout):
+                        dispatcher.pop_capable (any_capabilities)
+                        dispatcher.pop_authorize (
+                            username, password, authorized
+                            )
+                        self.pipeline = dispatcher
+        
+                
 
 # Note about this implementation
 #

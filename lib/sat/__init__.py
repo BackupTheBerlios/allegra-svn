@@ -43,7 +43,7 @@ def articulators_re (articulators):
 # Names, but only time and test will tell which RE stack will prevail
 # or carve a contextual niche and which one will be abandonned.
 
-RE_Public_Names = re.compile ('[0-9]+[:]([^\\s]+?),+')
+RE_Public_Names = re.compile ('[0-9]+[:]([^\\s]+),+')
 
 ARTICULATE_ASCII_Head = (
         # Public Names (and any netstring encoded look-alike ...)

@@ -200,7 +200,7 @@ def xml_utf8_root (element, dom):
                 ))
 
 
-class Articulate (xml_dom.XML_element):
+class Articulate (xml_dom.Element):
                 
         pns_name = ''
         pns_sat_language = None
@@ -230,7 +230,7 @@ class Articulate (xml_dom.XML_element):
                         xml_utf8_chunk (self, dom)
                 
 
-class Inarticulate (xml_dom.XML_element):
+class Inarticulate (xml_dom.Element):
         
         pns_name = ''
         pns_sat_articulated = ()
@@ -280,7 +280,7 @@ def articulate (
 
 # PNS/XML proper, store and retrieve XML documents from a PNS metabase
 
-def pns_to_xml_utf8 (model, xml_types={}, xml_type=xml_dom.XML_element):
+def pns_to_xml_utf8 (model, xml_types={}, xml_type=xml_dom.Element):
         # try to decode the PNS/XML element 
         try:
                 attr, first, children, follow = netstring.validate (
@@ -319,7 +319,7 @@ def pns_to_xml_utf8 (model, xml_types={}, xml_type=xml_dom.XML_element):
         return e, children
 
 
-def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.XML_element):
+def pns_to_xml_unicode (model, xml_types={}, xml_type=xml_dom.Element):
         name = unicode (model[1], 'utf-8')
         # try to decode the PNS/XML element 
         try:
@@ -539,7 +539,7 @@ class PNS_XML_continuations (PNS_XML_continuation):
 
 class PNS_XML (finalization.Finalization):
         
-        xml_type = xml_dom.XML_element
+        xml_type = xml_dom.Element
         xml_types = {}
         xml_unicoding = True
         xml_root = None

@@ -184,12 +184,12 @@ def rest_response (reactor, result, response):
                 encoding = 'UTF-8' # prefer UTF-8 over any other encoding!
         else:
                 encoding = charsets[-1].upper ()
-        reactor.mime_producer_body = presto.presto_producer (
+        reactor.producer_body= presto.presto_producer (
                 reactor.presto_dom, reactor.presto_vector, result, encoding
                 )
-        reactor.mime_producer_headers [
-                'Content-Type'
-                ] = 'text/xml; charset=%s' % encoding
+        reactor.producer_headers['Content-Type'] = (
+                'text/xml; charset=%s' % encoding
+                )
         reactor.http_response = response
 
 
@@ -201,13 +201,13 @@ def rest_benchmark (reactor, result, response):
                 encoding = 'UTF-8'
         else:
                 encoding = charsets[-1].upper ()
-        reactor.mime_producer_body = presto.presto_benchmark (
+        reactor.producer_body = presto.presto_benchmark (
                 reactor.presto_dom, reactor.presto_vector, result, encoding,
                 presto.PRESTo_benchmark (reactor.http_request_time)
                 )
-        reactor.mime_producer_headers [
-                'Content-Type'
-                ] = 'text/xml; charset=%s' % encoding
+        reactor.producer_headers['Content-Type'] = (
+                'text/xml; charset=%s' % encoding
+                )
         reactor.http_response = response
                 
                 
@@ -256,7 +256,7 @@ def post_rest (component, reactor, POST_LIMIT=1<<16):
                         reactor.mime_collector_body = \
                                 collector.Limited (POST_LIMIT)
                         reactor.http_response = 200
-                        reactor.http_continuation = component.presto
+                        reactor.http_finalize = component.presto (reactor)
                 else:
                         reactor.http_response = 405 # Method Not Allowed
                 return
@@ -307,7 +307,7 @@ def form_rest (component, reactor, POST_LIMIT=1<<16):
                 reactor.mime_collector_body = \
                         collector.Limited (POST_LIMIT)
                 reactor.http_response = 200
-                reactor.http_continuation = component.presto
+                reactor.http_finalize = component.presto
                 return
         
         elif reactor.http_request[0] == 'GET':

@@ -113,10 +113,14 @@ def connect (addr, infos):
                 )
         dispatcher = connections (Dispatcher (), addr)
         if not dispatcher.closing:
-                _bind_info (dispatcher, infos)
+                info (dispatcher, infos)
         return dispatcher
 
-disconnect = connections.close_when_done
+def disconnect ():
+        for dispatcher in connections.client_managed.values ():
+                _unbind (dispatcher)
+        connections.close_when_done ()
+        
 
 # Synopsis
 #

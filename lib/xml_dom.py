@@ -22,7 +22,7 @@ import weakref
 from xml.parsers import expat
         
 
-class XML_element (object):
+class Element (object):
         
         "The simplest ELEMENT type possible"
 
@@ -81,7 +81,7 @@ def xml_sparse (self, dom):
 
 class XML_sparse (object):
         
-        "A sparse element that folds itself from the tree, preserves CDATA"
+        "A sparse element that removes markup and itself but preserves CDATA"
 
         def __init__ (self, name, attributes):
                 pass
@@ -92,11 +92,11 @@ class XML_sparse (object):
         xml_valid = xml_sparse        
         
 
-class XML_dom (object):
+class Document (object):
         
         "The DOM interface to the standard expat event-driven parser"
 
-        xml_type = XML_element
+        xml_type = Element
         xml_types = {}
         xml_unicoding = 1
         xml_expat = xml_parsed = xml_error = None
@@ -184,7 +184,7 @@ class XML_dom (object):
                 while self.xml_parsed != None:
                         self.xml_expat_END (self.xml_parsed.xml_name)
         
-        # The XML_dom instance hosts a "sparse" expat parser and holds the 
+        # The Document instance hosts a "sparse" expat parser and holds the 
         # document's prefixes and processing instructions separately from 
         # the element tree itself.
         #
@@ -196,7 +196,7 @@ class XML_dom (object):
         # when serializing the element tree.
 
 
-def parse_string (data, DOM=XML_dom, unicoding=1):
+def parse_string (data, DOM=Document, unicoding=1):
         if unicoding:
                 dom = DOM ({u'http://www.w3.org/XML/1998/namespace': u'xml'})
         else:
@@ -211,7 +211,7 @@ def parse_string (data, DOM=XML_dom, unicoding=1):
         return dom
 
 
-def parse_more (more, DOM=XML_dom, unicoding=1):
+def parse_more (more, DOM=Document, unicoding=1):
         if unicoding:
                 dom = DOM ({u'http://www.w3.org/XML/1998/namespace': u'xml'})
         else:
@@ -257,7 +257,7 @@ def xml_named (e, tag_or_fqn):
         #        )
                 
         
-# four usefull methods to update an XML_element tree and make
+# four usefull methods to update an Element tree and make
 # sure to leave all its interfaces well implemented and the tree
 # well-linked.
 
@@ -352,7 +352,7 @@ if __name__ == '__main__':
                 if sys.argv[1] == 'UTF-8':
                         unicoding = 0
         s = sys.stdin.read ()
-        dom, seconds =  benchmark (clock, s, XML_dom, unicoding)
+        dom, seconds =  benchmark (clock, s, Document, unicoding)
         if dom.xml_error != None:
                 sys.stderr.write (dom.xml_error + '\n')
         sys.stderr.write ('parsed in %f sec\n' % seconds)
@@ -380,7 +380,7 @@ if __name__ == '__main__':
 # SYNOPSIS
 #
 # >>> from allegra import xml_dom
-# >>> xml_dom.XML_dom.xml_types = {u'schmarkup': xml_dom.XML_sparse}
+# >>> xml_dom.Document.xml_types = {u'schmarkup': xml_dom.XML_sparse}
 # >>> dom = xml_dom.parse_string (
 # ...    '<tag name="value">first '
 # ...    '<schmarkup>...</schmarkup> '

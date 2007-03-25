@@ -71,7 +71,7 @@ def xml_producer_unicode (
                 )
 
 
-class XML_collector (xml_dom.XML_dom, finalization.Finalization):
+class XML_collector (xml_dom.Document, finalization.Finalization):
         
         collector_is_simple = True
         
@@ -137,13 +137,13 @@ class XML_benchmark (XML_collector):
                 return True
 
 
-class Dispatcher (async_chat.Dispatcher, xml_dom.XML_dom):
+class Dispatcher (async_chat.Dispatcher, xml_dom.Document):
                 
         def __init__ (
                 self, xml_types,
-                xml_type=xml_dom.XML_element, unicoding=0
+                xml_type=xml_dom.Element, unicoding=0
                 ):
-                xml_dom.XML_dom.__init__ (self)
+                xml_dom.Document.__init__ (self)
                 self.xml_types = xml_types
                 self.xml_type = xml_type
                 self.xml_parser_reset (unicoding)

@@ -29,7 +29,7 @@ from allegra import (
 
 
 class PRESTo_dom (
-        xml_dom.XML_dom, loginfo.Loginfo, finalization.Finalization
+        xml_dom.Document, loginfo.Loginfo, finalization.Finalization
         ):
         
         "BSDDB implementation of PRESTo's COM interfaces"

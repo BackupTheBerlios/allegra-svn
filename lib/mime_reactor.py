@@ -24,22 +24,23 @@ from allegra import (
 
 class MIME_producer (object):
 	
-	mime_producer_lines = \
-		mime_producer_headers = mime_producer_body = None
+	producer_lines = None
+	producer_headers = None
+        producer_body = None
 	
 	def more (self):
-		data = ''.join (self.mime_producer_lines)
-                if self.mime_producer_body == None:
-                        self.mime_producer_lines == ()
+		data = ''.join (self.producer_lines)
+                if self.producer_body == None:
+                        self.producer_lines == ()
                         return data
                 
-                self.more = self.mime_producer_body.more
+                self.more = self.producer_body.more
                 self.producer_stalled = \
-                        self.mime_producer_body.producer_stalled
+                        self.producer_body.producer_stalled
 		return data
 		
 	def producer_stalled (self):
-                return self.mime_producer_lines == None
+                return self.producer_lines == None
 
 if __debug__:
         mime_collect_default = (lambda headers: collector.DEVNULL)
@@ -51,75 +52,32 @@ class MIME_collector (object):
         """A collector implementation for all MIME collectors protocols,
         like MULTIPART but also POP, HTTP, etc ..."""
         
-        collector_is_simple = False
-        
-        mime_collector_buffer = ''
-        mime_collector_lines = \
-                mime_collector_headers = mime_collector_body = None
+        collector_is_simple = False        
+        collector_buffer = ''
+        collector_lines = collector_headers = collector_body = None
                 
         def collect_incoming_data (self, data):
                 # collect the MIME body or its headers
-                if self.mime_collector_body == None:
-                        self.mime_collector_buffer += data
+                if self.collector_body == None:
+                        self.collector_buffer += data
                 else:
-                        self.mime_collector_body.collect_incoming_data (data)
+                        self.collector_body.collect_incoming_data (data)
 
         def found_terminator (self):
-                if self.mime_collector_body == None:
+                if self.collector_body == None:
                         # MIME headers collected, clear the buffer, split the
                         # headers and continue ...
-                        self.mime_collector_lines = mime_headers.split (
-                                self.mime_collector_buffer
+                        self.collector_lines = mime_headers.split (
+                                self.collector_buffer
                                 )
-                        self.mime_collector_buffer = ''
-                        return self.mime_collector_continue ()
+                        self.collector_buffer = ''
+                        return self.collector_continue ()
                         
-                elif self.mime_collector_body.found_terminator ():
+                elif self.collector_body.found_terminator ():
                         # if the MIME body final terminator is reached,
                         # finalize it and reset the state of the collector
-                        # self.mime_collector_buffer = '' # ?
-                        return self.mime_collector_finalize ()
-
-        def mime_collector_continue (self):
-                self.set_terminator (None)
-                self.mime_collector_body = mime_collect_default (
-                        self.mime_collector_headers
-                        )
-                return False
-
-        def mime_collector_finalize (self, reactor):
-                # reset MIME collector's state
-                self.mime_collector_headers = \
-                        self.mime_collector_lines = \
-                        self.mime_collector_body = None
-                return True # stalled!
-
-
-class MIME_reactor (
-        MIME_collector, MIME_producer, finalization.Finalization
-        ):
-
-        def __init__ (self, headers=None, set_terminator=None):
-                # first maybe attribute another set_terminator method,
-                if set_terminator != None:
-                        self.set_terminator = set_terminator
-                if headers == None:
-                        # if no headers have been provided, get them and so
-                        # set the terminator to '\r\n\r\n'
-                        #
-                        self.set_terminator ('\r\n\r\n')
-                else:
-                        # or consider the headers as allready collected and
-                        # immediately set the body collector to the result of
-                        # the continuation ...
-                        #
-                        self.mime_collector_continue (headers)
-
-        def mime_collector_continue (self, headers):
-                self.mime_producer_headers = headers
-                self.mime_collector_body = self.mime_producer_body = \
-                        buffer.Reactor ()
-                return False
+                        # self.collector_buffer = '' # ?
+                        return self.collector_finalize ()
 
 
 class Escaping_producer (object):
@@ -135,7 +93,6 @@ class Escaping_producer (object):
                 self.escape_from = escape_from
                 self.escape_buffer = ''
                 self.producer = producer
-                self.producer_stalled = self.producer.producer_stalled
 
         def more (self):
                 buffer = self.escape_buffer + self.producer.more ()
@@ -153,6 +110,9 @@ class Escaping_producer (object):
                         return self.escape (buffer)
                         
                 return buffer
+
+        def producer_stalled (self):
+                return self.producer.producer_stalled ()
         
         
 class Escaping_collector (object):
@@ -220,23 +180,23 @@ class MULTIPART_collector (object):
 	
 	collector_is_simple = False
         
-        multipart_collect = None
+        collect = None
 
         def __init__ (self, Collect):
-                self.multipart_Collect = Collect
-                self.multipart_buffer = ''
-		self.multipart_boundary = '--' + \
+                self.Collect = Collect
+                self.buffer = ''
+		self.boundary = '--' + \
 			mime_headers.get_parameter (
-				mime_collector.mime_collector_headers[
+				mime_collector.collector_headers[
 					'content-type'
 					], 'boundary'
 				)
                 
         def collect_incoming_data (self, data):
-                self.multipart_buffer += data
+                self.buffer += data
 		
-	def multipart_found_next (self):
-		if self.multipart_buffer in ('--', ''):
+	def found_next (self):
+		if self.buffer in ('--', ''):
 			self.set_terminator = self.mime_collector = \
                                 self.collect_incoming_data = \
                                 self.found_terminator = None
@@ -244,44 +204,40 @@ class MULTIPART_collector (object):
 		
 		else:
 			self.set_terminator ('\r\n\r\n')
-			self.found_terminator = self.multipart_found_headers
-                        self.multipart_buffer = ''
+			self.found_terminator = self.found_headers
+                        self.buffer = ''
                         del self.collect_incoming_data
 			return False
 
-	def multipart_found_headers (self):
-		headers = mime_headers.map (
-			mime_headers.split (self.multipart_buffer)
-			)
-                collect = self.multipart_Collect (headers)
+	def found_headers (self):
+		headers = mime_headers.map (mime_headers.split (self.buffer))
+                collect = self.Collect (headers)
 		if not collect.collector_is_simple:
 			collect = collector.bind_complex (
                                 collector.Simple (), collect
                                 )
-		# self.multipart_parts.append (collect)
-                self.multipart_collect = collect
+		# self.parts.append (collect)
+                self.collect = collect
 		self.collect_incoming_data = collect.collect_incoming_data		
-		self.found_terminator = self.multipart_found_boundary
-		self.set_terminator (self.multipart_boundary)
+		self.found_terminator = self.found_boundary
+		self.set_terminator (self.boundary)
 		return False
 
-	def multipart_found_boundary (self):
-                self.multipart_collect.found_terminator ()
+	def found_boundary (self):
+                self.collect.found_terminator ()
 		self.set_terminator (2)
-		self.found_terminator = self.multipart_found_next
+		self.found_terminator = self.found_next
 		return False
                 
-        found_terminator = multipart_found_boundary 
+        found_terminator = found_boundary 
         
 
-def multipart_collect_by_content_disposition (Collector=collector.File):
+def collect_by_content_disposition (Collector=collector.File):
         def Collect (collector, headers):
-                return Collector (mime_headers.get_parameter (
+                return Collector (headers.get_parameter (
                         headers.setdefault (
                                 'content-disposition',
-                                'not available; name="%d"' % len (
-                                        self.multipart_parts
-                                        )
+                                'not available;name="%d"' % len (self.parts)
                                 ), 'name'
                         ))
         return Collect
@@ -289,14 +245,14 @@ def multipart_collect_by_content_disposition (Collector=collector.File):
 
 multipart_collectors = {}
 
-def multipart_collect_by_content_types (collectors=multipart_collectors):
+def collect_by_content_types (
+        collectors=multipart_collectors, default=collector.DEVNULL
+        ):
         def Collect (collector, headers):
-                content_type, parameters = mime_headers.value_and_parameters (
+                ct, parameters = headers.value_and_parameters (
                         headers.get ('content-type', 'text/plain')
                         )
-                return collectors.get (
-                        content_type, mime_collect_default
-                        ) (headers)
+                return collectors.get (ct, default) (headers)
         
         return Collect
 
@@ -311,7 +267,6 @@ class Pipeline (
                 async_chat.Dispatcher.__init__ (self)
                 self.pipeline_set ()
                 self.set_terminator ('\r\n')
-                self.mime_collector_buffer = ''
                 
         __call__ = async_client.Pipeline.pipeline
                                         
@@ -338,24 +293,24 @@ class Pipeline (
                 self.pipeline_close ()
                 async_chat.Dispatcher.close (self)
                 
-        def mime_collector_continue (self):
+        def collector_continue (self):
                 self.pipelined_responses += 1
                 if self.pipeline_responses:
                         assert None == self.log (''.join ((
                                 self.pipeline_responses[0][0],
-                                '\r\n'.join (self.mime_collector_lines)
+                                '\r\n'.join (self.collector_lines)
                                 )), 'debug')
                         if not self.pipeline_responses.popleft (
-                                )[1] (self.mime_collector_lines):
-                                self.mime_collector_finalize ()
+                                )[1] (self.collector_lines):
+                                self.collector_finalize ()
                 else:
                         assert None == self.log (
-                                self.mime_collector_lines[0], 'unexpected'
+                                self.collector_lines[0], 'unexpected'
                                 )
                 return self.closing
                 
-        def mime_collector_finalize (self):
-                self.mime_collector_lines = self.mime_collector_body = None
+        def collector_finalize (self):
+                self.collector_lines = self.collector_body = None
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
                 if self.pipeline_responses:
