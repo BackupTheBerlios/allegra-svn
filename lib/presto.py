@@ -16,7 +16,7 @@
 
 "Practical REST objects"
 
-import time, random, os, stat, socket, glob
+import imp, time, random, os, stat, socket, glob, mimetypes
 from urllib import unquote as urldecode
 try:
         from hashlib import sha1
@@ -25,24 +25,32 @@ except:
 try:
         import cjson
         json_encode = cjson.encode 
-        json_decode = (lambda x: cjson.decode (x, 1))
+        def json_decode (x):
+                return cjson.decode (x, 1)
+                
 except:
-        pass
+        # TODO: compile cjson for Win32 as a clib, use C-types to bind.
+        if not __debug__:
+                raise Exception (
+                        'cjson not installed, see: '
+                        'http://cheeseshop.python.org/pypi/python-cjson'
+                        )
         
 random.seed ()
 
 from allegra import (
-        loginfo, finalization, async_server, producer, collector,
+        loginfo, finalization, async_server, producer, collector, timeouts,
         ip_peer, tcp_server, mime_reactor, http_server, xml_dom, xml_reactor
         )
         
         
-def http_404_not_found (reactor, about):
-        reactor.http_response (404, (('Connection', 'close'),))
+def http_404_close (reactor, about):
+        reactor.http_produce (404, (('Connection', 'close'),))
         
-def url_query (urlencoded, query_strings):
+def urlform_decode (formencoded):
         "map URL encoded form data to UNICODE keys and values"
-        for param in urlencoded.split ('&'):
+        query_strings = {}
+        for param in formencoded.split ('&'):
                 if param.find ('=') > -1:
                         name, value = param.split ('=', 1)
                         query_strings[unicode (
@@ -57,16 +65,23 @@ def url_query (urlencoded, query_strings):
         return query_strings
 
 def irtd2_identified (reactor, about, salts): 
-        pass 
         # test that the IRTD2 cookie exists, has not timed out and 
         # bears a valid signature.
+        return True
 
 def irtd2_authorize (reactor, about, salts):
         pass
 
+def irtd2_audit (reactor, about, info=None):
+        loginfo.log ('%s %d %s' % (
+                ' '.join (reactor.http_request),
+                reactor.http_response,
+                (u"/".join (about)).encode ('UTF-8')
+                ), info)
+
 def json_200_ok (reactor, value):
         "Reply with 200 Ok and a JSON body, prevent peer to cache it."
-        reactor.http_response (
+        reactor.http_produce (
                 200, 
                 (('Content-Type', 'application/json'),),
                 producer.Simple (json_encode (value))
@@ -81,7 +96,7 @@ def xml_200_ok (reactor, dom, content_type='text/xml'):
                 encoding = 'UTF-8' # prefer UTF-8 over any other encoding!
         else:
                 encoding = accept_charsets[-1].upper ()
-        reactor.http_response (
+        reactor.http_produce (
                 200, 
                 (('Content-Type', ';'.join ((
                         content_type, ('charset=%s' % encoding)
@@ -90,7 +105,7 @@ def xml_200_ok (reactor, dom, content_type='text/xml'):
                 )
 
 def rest_302_redirect (reactor, url): 
-        reactor.http_response (302, (('Location', url,)))
+        reactor.http_produce (302, (('Location', url,)))
         # redirect with a 302 response, log same referer as an error.
 
 
@@ -112,28 +127,30 @@ class Control (
                         )
 
         def __call__ (self, reactor, about):
-                if irdt2_identified (reactor, about, self.salts):
-                        r = reactor.http_request
-                        h = reactor.collector_headers
-                        if r[0] == 'GET':
-                                if r[2] == None:
-                                        return self.http_resource (
-                                                reactor, about, h
-                                                )
-
-                                return self.json_application (
-                                        reactor, about, url_query (r[2], {})
-                                        )
+                if irtd2_identified (reactor, about, self.irtd2_salts):
+                        method = reactor.http_request[0]
+                        if method == 'GET': 
+                                return self.http_get (reactor, about)
+                        elif method == 'POST':
+                                return self.http_post (reactor, about)
                         
-                        elif r[0] == 'POST':
-                                return self.http_post (reactor, about, h)
-                        
-                        return self.http_continue (reactor, r, about, h)
+                        return self.http_continue (reactor, r, about)
 
                 return self.irtd2_identify (reactor, about)
         
-        def http_post (self, reactor, about, headers):
-                ct = headers.get ('content-type')
+        def http_get (self, reactor, about):
+                query = reactor.http_uri[3]
+                if not query:
+                        return self.http_resource (
+                                reactor, about
+                                )
+
+                return self.json_application (
+                        reactor, about, urlform_decode (query)
+                        )
+
+        def http_post (self, reactor, about):
+                ct = reactor.collector_headers.get ('content-type')
                 if reactor.collector_body == None:
                         if ct in (
                                 'application/json',
@@ -143,67 +160,88 @@ class Control (
                                         self.http_post_limit
                                         )
                         else:
-                                reactor.http_response (501) # Not implemented
-                        return
-                
-                if ct == 'application/json':
-                        json = json_decode (reactor.collector_body.data)
+                                reactor.http_produce (501) # Not implemented
+                elif ct == 'application/json':
+                        return self.json_application (
+                                reactor, about,
+                                json_decode (reactor.collector_body.data)
+                                )
+                                
                 elif ct == 'www-application/urlencoded-form-data':
-                        json = url_query (reactor.collector_body.data, {})
+                        return self.json_application (
+                                reactor, about,
+                                urlform_decode (reactor.collector_body.data)
+                                )
+                                
                 else:
-                        reactor.http_response (501) # Not implemented
-                        return
-                
-                self.json_application (reactor, about, json)
+                        reactor.http_produce (501) # Not implemented
 
-        def http_continue (self, reactor, request, about, headers):
-                reactor.http_response (501) # Not implemented
+        def http_continue (self, reactor, request, about):
+                reactor.http_produce (501) # Not implemented
         
-        def irtd2_identify (self, reactor, about):
-                "redirect unauthorized agents to the /irtd2 URL."
-                rest_302_redirect (reactor, "/irtd2")
-        
-        def http_resource (self, reactor, about, headers):
-                "return an XML producer of itself."
+        def http_resource (self, reactor, about):
+                u"return an XML producer of itself."
                 self.xml_root.xml_children = (
-                        '<script><![CDATA[json=', 
-                        json_encode (self.json),
-                        ']]></script>'
+                        '<json>', 
+                        '{"test": "not the real thing but allmost"}', #json_encode (self.json),
+                        '</json>'
                         )
                 xml_200_ok (reactor, self)
         
         def json_application (self, reactor, about, json):
-                "return the JSON state as one string"
+                u"return the JSON state as one string"
                 json_200_ok (reactor, json)
                 
+        def irtd2_identify (self, reactor, about):
+                u"redirect unauthorized agents to the /irtd2 URL."
+                rest_302_redirect (reactor, u"/irtd2")
+        
         
 class ResourceCache (Control):
         
-        resource_path = '.'
         resource_cache = {}
+        if __debug__:
+                resource_precision = 1.0
+                resource_timeout = 0.1
+        else:
+                resource_precision = 60.0
+                resource_timeout = 360.0
         
-        def http_resource (self, reactor, about, headers):
-                teed = self.resource_cache.get (about)
+        def __init__ (self, peer, about):
+                Control.__init__ (self, peer, about)
+                self.resource_path = '/'.join ((
+                        peer.presto_path, (u"/".join (
+                                about[1:]
+                                )).encode ('UTF-8')
+                        ))
+                self.resource_load = timeouts.cached (
+                        self.resource_cache, 
+                        self.resource_precision,
+                        self.resource_timeout
+                        )
+                        
+        def http_resource (self, reactor, about):
+                filename = '/'.join ((
+                        self.resource_path, 
+                        reactor.uri_about[-1].encode ('UTF-8')
+                        ))
+                teed = self.resource_cache.get (filename)
                 if teed != None:
-                        reactor.http_response (
+                        reactor.http_produce (
                                 200, teed.mime_headers, producer.Tee (teed)
                                 )
                         return False
 
-                if len (about) < 3:
-                        pass # list a directory and cache the result
-                
-                filename = '/'.join ((self.resource_path, about[2]))
                 try:
                         result = os.stat (filename)
                 except:
                         result = None
                 if result == None or not stat.S_ISREG (result[0]):
-                        reactor.http_response (404)
+                        reactor.http_produce (404)
                         return False
                         
                 teed = producer.File (open (filename, 'rb'))
-                self.resource_cache[about] = teed
+                self.resource_load (filename, teed)
                 ct, ce = mimetypes.guess_type (filename)
                 teed.mime_headers = {
                         'Last-Modified': (
@@ -214,20 +252,49 @@ class ResourceCache (Control):
                         }
                 if ce:
                         teed.mime_headers['Content-Encoding'] = ce
-                reactor.http_response (
+                reactor.http_produce (
                         200, teed.mime_headers, producer.Tee (teed)
                         )
                 return False
         
         def http_continue (self, reactor, command, about, headers):
                 if reactor.http_request[0] != 'HEAD':
-                        reactor.http_response (405) # Method Not Allowed 
-                else:
-                        reactor.http_response (501) # Not implemented
-                        #
-                        # TODO: add support for HEAD
-        
+                        reactor.http_produce (405) # Method Not Allowed 
+                        return False
+                
+                filename = '/'.join ((
+                        self.resource_path, 
+                        reactor.uri_about[-1].encode ('UTF-8')
+                        ))
+                teed = self.resource_cache.get (filename)
+                if teed != None:
+                        reactor.http_produce (200, teed.mime_headers)
+                        return
 
+                try:
+                        result = os.stat (filename)
+                except:
+                        result = None
+                if result == None or not stat.S_ISREG (result[0]):
+                        reactor.http_produce (404)
+                        return False
+                        
+                teed = producer.File (open (filename, 'rb'))
+                self.resource_load (filename, teed)
+                ct, ce = mimetypes.guess_type (filename)
+                teed.mime_headers = {
+                        'Last-Modified': (
+                                time.asctime (time.gmtime (result[7])) + 
+                                (' %d' % time.timezone)
+                                ),
+                        'Content-Type': ct or 'text/html',
+                        }
+                if ce:
+                        teed.mime_headers['Content-Encoding'] = ce
+                reactor.http_produce (200, teed.mime_headers)
+                return
+        
+        
 class Listen (async_server.Listen):
         
         irtd2_salts = [''.join ((
@@ -271,14 +338,14 @@ class Listen (async_server.Listen):
                         )
 
                 self.presto_cached.update ((
-                        (about, Control (self.irtd2_salts))
-                        for about, Control in module.controllers.keys ()
+                        (about, Control (self, about))
+                        for about, Control in module.controllers.items ()
                         if not self.presto_cached.has_key (about)
                         ))
                 self.presto_modules[filename] = module
 
         def presto_unload (self, filename):
-                "unload a named Python module"
+                u"unload a named Python module"
                 module = self.presto_modules.get (filename)
                 if module == None:
                         return
@@ -295,7 +362,7 @@ class Listen (async_server.Listen):
         def http_continue (self, reactor):
                 uri = (reactor.http_uri[2]).split ('/', 2)
                 uri[0] = reactor.collector_headers.get (
-                        'host', u""
+                        'host', reactor.http_uri[1] or ''
                         )
                 about = reactor.uri_about = tuple ((
                         unicode (urldecode (token), 'UTF-8')
@@ -314,6 +381,14 @@ class Listen (async_server.Listen):
                                 # context and subject || http://host/folder
                                 controller = self.presto_cached[about] 
                         except:
-                                controller = http_404_not_found
+                                controller = http_404_close
 
-                return controller (reactor, about)
+                try:
+                        collector_stalled = controller (reactor, about)
+                except:
+                        self.loginfo_traceback ()
+                        reactor.http_produce (500)
+                        irtd2_audit (reactor, about)
+                        return True
+
+                irtd2_audit (reactor, about)

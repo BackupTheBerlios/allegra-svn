@@ -79,7 +79,8 @@ class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         def __repr__ (self):
                 return 'presto id="%x"' % id (self)
         
-        def http_response (self, response, headers=(), body=None):
+        def http_produce (self, response, headers=(), body=None):
+                self.http_response = response
                 # Complete the HTTP response producer
                 self.producer_headers.update (headers)
                 if body == None and (
@@ -187,7 +188,7 @@ class Dispatcher (
                 try:
                         # split the request in: command, uri and version
 			(
-				method, uri, version
+				method, url, version
 				) = self.collector_lines[0].split ()
 		except:
                         reactor.http_response (400, ((
@@ -195,7 +196,7 @@ class Dispatcher (
                                 ),))
                         return True # stall the collector!
 
-                reactor.http_request = (method.upper (), uri, version)
+                reactor.http_request = (method.upper (), url, version)
                 # save and parse the collected headers
                 self.collector_lines.pop (0)
                 reactor.collector_lines = self.collector_lines
@@ -204,13 +205,11 @@ class Dispatcher (
                         )
                 self.collector_lines = None
                 # Split the URI parts if any ...
-                m = HTTP_URI_RE.match (uri)
+                m = HTTP_URI_RE.match (url)
                 if m:
                         reactor.http_uri = m.groups ()
                 else:
-                        reactor.http_uri = (
-                                '', reactor.http_request[1], '', ''
-                                )
+                        reactor.http_uri = ('', '', url, '', '')
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
                 if self.async_server.http_continue (reactor):
@@ -244,8 +243,7 @@ class Dispatcher (
                 self.collector_body = None
                 self.set_terminator ('\r\n\r\n')
                 # current request's body collected, maybe continue ...
-                reactor = self.output_fifo[-1]
-                if self.async_server.http_continue (reactor):
+                if self.async_server.http_continue (self.output_fifo[-1]):
                         return True
                 
                 return self.closing # ... or stall if closing
