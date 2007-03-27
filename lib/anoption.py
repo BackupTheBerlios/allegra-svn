@@ -20,32 +20,34 @@ import sys, re, inspect
 
 options = re.compile ("^--?([0-9A-Za-z_]+?)(?:=(.+)?)?$")
 
-def use (fun):
+def doc (fun):
         named, collection, extension, defaults = inspect.getargspec (fun)
         O = len (defaults or ())
         M = len (named) - O
-        mandatory = ', '.join (named[:M])
+        mandatory = ", ".join (named[:M])
         if O > 0:
-                optionals = ', '.join ((
-                        "%s=%r" % (named[M+i], defaults[i]) 
+                optionals = ", ".join ((
+                        "-%s=%r" % (named[M+i], defaults[i]) 
                         for i in range (O)
                         ))
+                if extension:
+                        optionals += ", ..."
                 if collection:
                         if M > 0:
-                                return "%s [%s ...] [%s]" % (
-                                        mandatory, named[-O-1], optionals
+                                return "%s {%s} [...]" % (
+                                        mandatory, optionals
                                         )
                 
-                        return "[%s] [...]" % optionals
+                        return "{%s} [...]" % optionals
 
                 if M > 0:
-                        return "%s [%s]" % (mandatory, optionals)
+                        return "%s {%s}" % (mandatory, optionals)
         
-                return "[%s]" % optionals
+                return "{%s}" % optionals
         
         if collection:
                 if M > 0:
-                        return "%s [%s ...] " % (mandatory, named[-O-1])
+                        return "%s [...] " % mandatory
                 
                 return "[...]"
 
@@ -59,7 +61,9 @@ def cast (value, default):
 
         return t (value)
                 
-def cli (fun, argv, err=(lambda msg: sys.stderr.write (msg+'\r\n') or False)):
+def cli (fun, argv=sys.argv[1:], err=(
+        lambda msg: sys.stderr.write (msg+'\r\n') or False
+        )):
         named, collection, extension, defaults = inspect.getargspec (fun)
         N = len (named)
         O = len (defaults or ())
@@ -100,7 +104,7 @@ def cli (fun, argv, err=(lambda msg: sys.stderr.write (msg+'\r\n') or False)):
                         args.append (value) 
                         ordered += 1
                 elif collection:
-                        args.append (s)
+                        args.append (value)
                 else:
                         return err ("too many arguments")
                         

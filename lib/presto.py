@@ -29,12 +29,12 @@ try:
                 return cjson.decode (x, 1)
                 
 except:
-        # TODO: compile cjson for Win32 as a clib, use C-types to bind.
-        if not __debug__:
+        if False: # not __debug__:
                 raise Exception (
                         'cjson not installed, see: '
                         'http://cheeseshop.python.org/pypi/python-cjson'
                         )
+        # TODO: compile cjson for Win32, use C-types to bind.
         
 random.seed ()
 
@@ -97,8 +97,8 @@ def xml_200_ok (reactor, dom, content_type='text/xml'):
                 xml_reactor.XML_producer (dom, encoding)
                 )
 
-def rest_302_redirect (reactor, url): 
-        reactor.http_produce (302, (('Location', url,)))
+def rest_302_redirect (reactor, uri): 
+        reactor.http_produce (302, (('Location', uri,)))
         # redirect with a 302 response, log same referer as an error.
 
 
@@ -122,7 +122,7 @@ class Control (
         def __call__ (self, reactor, about):
                 if irtd2_identified (reactor, about, self.irtd2_salts):
                         method = reactor.http_request[0]
-                        if method == 'GET': 
+                        if method == 'GET':
                                 return self.http_get (reactor, about)
                         elif method == 'POST':
                                 return self.http_post (reactor, about)
@@ -153,7 +153,7 @@ class Control (
                                         self.http_post_limit
                                         )
                         else:
-                                reactor.http_produce (501) # Not implemented
+                                return reactor.http_produce (501)
                 elif ct == 'application/json':
                         return self.json_application (
                                 reactor, about,
@@ -167,10 +167,10 @@ class Control (
                                 )
                                 
                 else:
-                        reactor.http_produce (501) # Not implemented
+                        return reactor.http_produce (501) # Not implemented
 
         def http_continue (self, reactor, request, about):
-                reactor.http_produce (501) # Not implemented
+                return reactor.http_produce (501) # Not implemented
         
         def http_resource (self, reactor, about):
                 u"return an XML producer of itself."
@@ -179,15 +179,15 @@ class Control (
                         '{"test": "not the real thing but allmost"}', #json_encode (self.json),
                         '</json>'
                         )
-                xml_200_ok (reactor, self)
+                return xml_200_ok (reactor, self)
         
         def json_application (self, reactor, about, json):
                 u"return the JSON state as one string"
-                json_200_ok (reactor, json)
+                return json_200_ok (reactor, json)
                 
         def irtd2_identify (self, reactor, about):
                 u"redirect unauthorized agents to the /irtd2 URL."
-                rest_302_redirect (reactor, u"/irtd2")
+                return rest_302_redirect (reactor, u"/irtd2")
         
         
 class ResourceCache (Control):
@@ -220,40 +220,25 @@ class ResourceCache (Control):
                         ))
                 teed = self.resource_cache.get (filename)
                 if teed != None:
-                        reactor.http_produce (
+                        return reactor.http_produce (
                                 200, teed.mime_headers, producer.Tee (teed)
                                 )
-                        return False
 
                 try:
-                        result = os.stat (filename)
+                        metadata = os.stat (filename)
                 except:
-                        result = None
-                if result == None or not stat.S_ISREG (result[0]):
-                        reactor.http_produce (404)
-                        return False
+                        metadata = None
+                if metadata == None or not stat.S_ISREG (metadata[0]):
+                        return reactor.http_produce (404)
                         
-                teed = producer.File (open (filename, 'rb'))
-                self.resource_load (filename, teed)
-                ct, ce = mimetypes.guess_type (filename)
-                teed.mime_headers = {
-                        'Last-Modified': (
-                                time.asctime (time.gmtime (result[7])) + 
-                                (' %d' % time.timezone)
-                                ),
-                        'Content-Type': ct or 'text/html',
-                        }
-                if ce:
-                        teed.mime_headers['Content-Encoding'] = ce
-                reactor.http_produce (
+                teed = self.resource_teed (filename, metadata)
+                return reactor.http_produce (
                         200, teed.mime_headers, producer.Tee (teed)
                         )
-                return False
         
         def http_continue (self, reactor, command, about, headers):
                 if reactor.http_request[0] != 'HEAD':
-                        reactor.http_produce (405) # Method Not Allowed 
-                        return False
+                        return reactor.http_produce (405) # Method Not Allowed 
                 
                 filename = '/'.join ((
                         self.resource_path, 
@@ -261,31 +246,33 @@ class ResourceCache (Control):
                         ))
                 teed = self.resource_cache.get (filename)
                 if teed != None:
-                        reactor.http_produce (200, teed.mime_headers)
-                        return
+                        return reactor.http_produce (200, teed.mime_headers)
 
                 try:
-                        result = os.stat (filename)
+                        metadata = os.stat (filename)
                 except:
-                        result = None
-                if result == None or not stat.S_ISREG (result[0]):
-                        reactor.http_produce (404)
-                        return False
+                        metadata = None
+                if metadata == None or not stat.S_ISREG (metadata[0]):
+                        return reactor.http_produce (404)
                         
+                return reactor.http_produce (200, self.resource_teed (
+                        filename, metadata
+                        ).mime_headers)
+
+        def resource_teed (self, filename, metadata):
                 teed = producer.File (open (filename, 'rb'))
                 self.resource_load (filename, teed)
                 ct, ce = mimetypes.guess_type (filename)
                 teed.mime_headers = {
                         'Last-Modified': (
-                                time.asctime (time.gmtime (result[7])) + 
+                                time.asctime (time.gmtime (metadata[7])) + 
                                 (' %d' % time.timezone)
                                 ),
                         'Content-Type': ct or 'text/html',
                         }
                 if ce:
                         teed.mime_headers['Content-Encoding'] = ce
-                reactor.http_produce (200, teed.mime_headers)
-                return
+                return teed
         
         
 class Listen (async_server.Listen):

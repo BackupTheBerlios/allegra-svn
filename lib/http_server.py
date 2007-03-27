@@ -135,6 +135,11 @@ class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
                                         )
                                 )
                         )
+                if self.producer_headers.get (
+                        'Connection', 'close'
+                        ) == 'close':
+                        self.dispatcher.output_fifo.append (None)
+                        return True
         
         # Support for stalled producers is a requirement for programming
         # asynchronous peer. It is also a practical solution for simple 
@@ -159,7 +164,7 @@ class Dispatcher (
                 self.set_terminator ('\r\n\r\n')
 
         def __repr__ (self):
-                return 'http-server-channel id="%x"' % id (self)                
+                return '%s id="%x"' % (self.__class__.__name__, id (self))
         
 	def collector_continue (self):
 		while (
@@ -191,10 +196,9 @@ class Dispatcher (
 				method, url, version
 				) = self.collector_lines[0].split ()
 		except:
-                        reactor.http_response (400, ((
+                        return reactor.http_response (400, ((
                                 'Connection', 'close'
                                 ),))
-                        return True # stall the collector!
 
                 reactor.http_request = (method.upper (), url, version)
                 # save and parse the collected headers
@@ -227,10 +231,9 @@ class Dispatcher (
                         if not (reactor.http_request[0] in (
                                 'GET', 'HEAD', 'DELETE'
                                 )):
-                                reactor.http_response (500, ((
+                                return reactor.http_produce (500, ((
                                         'Connection', 'close'
                                         ),))
-                                return True
                         
                 else:
                         self.http_collector_continue (reactor.collector_body)
