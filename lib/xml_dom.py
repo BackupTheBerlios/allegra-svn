@@ -116,7 +116,7 @@ class Document (object):
                 
         def xml_parser_reset (self):
                 if self.xml_unicoding:
-                        self.xml_first = u''
+                        self.xml_first = u""
                 else:
                         self.xml_first = ''
                 self.xml_root = self.xml_error = self.xml_parsed = None
@@ -198,7 +198,7 @@ class Document (object):
 
 def parse_string (data, DOM=Document, unicoding=1):
         if unicoding:
-                dom = DOM ({u'http://www.w3.org/XML/1998/namespace': u'xml'})
+                dom = DOM ({u"http://www.w3.org/XML/1998/namespace": u"xml"})
         else:
                 dom = DOM ({'http://www.w3.org/XML/1998/namespace': 'xml'})
         dom.xml_unicoding = unicoding
@@ -213,7 +213,7 @@ def parse_string (data, DOM=Document, unicoding=1):
 
 def parse_more (more, DOM=Document, unicoding=1):
         if unicoding:
-                dom = DOM ({u'http://www.w3.org/XML/1998/namespace': u'xml'})
+                dom = DOM ({u"http://www.w3.org/XML/1998/namespace": u"xml"})
         else:
                 dom = DOM ({'http://www.w3.org/XML/1998/namespace': 'xml'})
         dom.xml_unicoding = unicoding
@@ -380,18 +380,18 @@ if __name__ == '__main__':
 # SYNOPSIS
 #
 # >>> from allegra import xml_dom
-# >>> xml_dom.Document.xml_types = {u'schmarkup': xml_dom.XML_sparse}
+# >>> xml_dom.Document.xml_types = {u"schmarkup": xml_dom.XML_sparse}
 # >>> dom = xml_dom.parse_string (
 # ...    '<tag name="value">first '
 # ...    '<schmarkup>...</schmarkup> '
 # ...    'follow</tag>'
 # ...    )
 # >>> root.xml_name
-# u'tag'
+# u"tag"
 # >>> root.xml_first
-# u'first ... follow'
+# u"first ... follow"
 # >>> root.xml_attributes
-# {u'name': u'value'}
+# {u"name": u"value"}
 # >>> root.xml_follow == xml_parent == None
 # True
 # >>> root.xml_children

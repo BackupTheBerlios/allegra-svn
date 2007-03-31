@@ -18,7 +18,7 @@
 
 import sys, re, inspect
 
-options = re.compile ("^--?([0-9A-Za-z_]+?)(?:=(.+)?)?$")
+options = re.compile ('^--?([0-9A-Za-z_]+?)(?:=(.+)?)?$')
 
 def doc (fun):
         named, collection, extension, defaults = inspect.getargspec (fun)
@@ -26,30 +26,30 @@ def doc (fun):
         M = len (named) - O
         mandatory = ", ".join (named[:M])
         if O > 0:
-                optionals = ", ".join ((
-                        "-%s=%r" % (named[M+i], defaults[i]) 
+                optionals = ', '.join ((
+                        '-%s=%r' % (named[M+i], defaults[i]) 
                         for i in range (O)
                         ))
                 if extension:
-                        optionals += ", ..."
+                        optionals += ', ...'
                 if collection:
                         if M > 0:
-                                return "%s {%s} [...]" % (
+                                return '%s {%s} [...]' % (
                                         mandatory, optionals
                                         )
                 
-                        return "{%s} [...]" % optionals
+                        return '{%s} [...]' % optionals
 
                 if M > 0:
-                        return "%s {%s}" % (mandatory, optionals)
+                        return '%s {%s}' % (mandatory, optionals)
         
-                return "{%s}" % optionals
+                return '{%s}' % optionals
         
         if collection:
                 if M > 0:
-                        return "%s [...] " % mandatory
+                        return '%s [...] ' % mandatory
                 
-                return "[...]"
+                return '[...]'
 
         return mandatory
 
@@ -84,7 +84,7 @@ def cli (fun, argv=sys.argv[1:], err=(
                                                 option, defaults[-(N-order)]
                                                 )
                                 except:
-                                        return err ("illegal option " + name)
+                                        return err ('illegal option ' + name)
                                 
                         elif extension:
                                 kwargs[name] = option
@@ -98,7 +98,7 @@ def cli (fun, argv=sys.argv[1:], err=(
                                                 )
                                 except:
                                         return err (
-                                                "illegal argument " + name
+                                                'illegal argument ' + name
                                                 )
                                                 
                         args.append (value) 
@@ -106,17 +106,17 @@ def cli (fun, argv=sys.argv[1:], err=(
                 elif collection:
                         args.append (value)
                 else:
-                        return err ("too many arguments")
+                        return err ('too many arguments')
                         
         if len (args) < M:
-                return err ("too few arguments")
+                return err ('too few arguments')
                 
         for i in range (1, N - ordered + 1):
                 kwargs.setdefault(named[-i], defaults[-i])
                 
         names.update (kwargs.keys ())
         if not mandatory.issubset (names):
-                return err ("missing argument(s): " + ', '.join (
+                return err ('missing argument(s): ' + ', '.join (
                         mandatory.difference (names)
                         ))
         

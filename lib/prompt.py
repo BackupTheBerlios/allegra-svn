@@ -62,7 +62,7 @@ def python_exec (co, env):
         """try to exec the compiled co in the environement env
         return either ('exec', None) or ('excp', traceback)"""
         try:
-                exec co in env
+                exec co in env # exec (co, env) ... in Python 3.0 
         except:
                 return ('excp', compact_traceback ())
                 

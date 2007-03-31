@@ -28,7 +28,7 @@ def valid (encoded, field, horizon):
                 # inarticulated names
                 if encoded in field:
                         # allready in the field
-                        return u''
+                        return u""
                 
                 # new in this field
                 field.add (encoded)
@@ -53,7 +53,7 @@ def valid (encoded, field, horizon):
                 # return a "singleton"
                 return valids[0]
                 
-        return u'' # nothing valid to articulate
+        return u"" # nothing valid to articulate
 
 
 # two conveniences for testing the validity of byte strings as Public Names

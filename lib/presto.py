@@ -38,9 +38,17 @@ except:
         
 random.seed ()
 
+def password ():
+        return ''.join ((chr(o) for o in random.sample (
+                xrange (ord ('0'), ord ('z')), 20
+                )))
+                
+
 from allegra import (
-        loginfo, finalization, async_server, producer, collector, timeouts,
-        ip_peer, tcp_server, mime_reactor, http_server, xml_dom, xml_reactor
+        loginfo, finalization, 
+        producer, collector, async_server, timeouts,
+        ip_peer, tcp_server, mime_headers, mime_reactor, 
+        http_server, xml_dom, xml_reactor
         )
         
         
@@ -64,13 +72,43 @@ def urlform_decode (formencoded):
                                 )] = True
         return query_strings
 
-def irtd2_identified (reactor, about, salts): 
+def irtd2_identified (reactor, about, salts, timeout=3600): 
         # test that the IRTD2 cookie exists, has not timed out and 
         # bears a valid signature.
-        return True
+        try:
+                cookie = reactor.http_cookies ('IRTD2').next ()
+        except StopIteration:
+                return False
+        
+        value, parameters = mime_headers.value_and_parameters (cookie)
+        irtd2 = value.split (' ')
+        if len (irtd2) != 5:
+                return False
+        
+        now = int (time ())
+        if not (-1 < now - int (irtd2[2]) < timeout):
+                return False
+         
+        digest = irtd2[4]
+        for salt in self.irtd2_salts:
+                irtd2[4] = salt
+                if sha1 (' '.join (irtd2)).hexdigest () == digest:
+                        irtd2[2] = str (now) # bytes!
+                        irtd2[3] = digest
+                        irtd2_authorize (reactor, about, irtd2)
+                        return True
+                
+        return False
 
-def irtd2_authorize (reactor, about, salts):
-        pass
+def irtd2_authorize (reactor, about, irtd2):
+        assert type (irtd2) == list and len (irtd2) == 5
+        irtd2[4] = (sha1 (' '.join (irtd2)).hexdigest ())
+        reactor.producer_headers['Set-Cookie'] = (
+                'IRTD2=%s; expires=%s; path=/%s/; domain=.%s.' % (
+                        ' '.join (irtd2), 'never!', about[1], about[0]
+                        )
+                )
+        reactor.irtd2 = irtd2
 
 def json_200_ok (reactor, value):
         "Reply with 200 Ok and a JSON body, prevent peer to cache it."
@@ -120,7 +158,10 @@ class Control (
                         )
 
         def __call__ (self, reactor, about):
-                if irtd2_identified (reactor, about, self.irtd2_salts):
+                if (
+                        hasattr (reactor, 'irtd2') or 
+                        irtd2_identified (reactor, about, self.irtd2_salts)
+                        ):
                         method = reactor.http_request[0]
                         if method == 'GET':
                                 return self.http_get (reactor, about)
@@ -174,11 +215,6 @@ class Control (
         
         def http_resource (self, reactor, about):
                 u"return an XML producer of itself."
-                self.xml_root.xml_children = (
-                        '<json>', 
-                        '{"test": "not the real thing but allmost"}', #json_encode (self.json),
-                        '</json>'
-                        )
                 return xml_200_ok (reactor, self)
         
         def json_application (self, reactor, about, json):
@@ -186,11 +222,15 @@ class Control (
                 return json_200_ok (reactor, json)
                 
         def irtd2_identify (self, reactor, about):
-                u"redirect unauthorized agents to the /irtd2 URL."
-                return rest_302_redirect (reactor, u"/irtd2")
+                u"identify an anonymous user"
+                irtd2_authorize (reactor, about, [
+                        '', 'anonymous', '%d' % time.time (), '',
+                        self.irtd2_salts[0]
+                        ])
+                return __call__ (reactor, about)
+                
         
-        
-class ResourceCache (Control):
+class Cache (Control):
         
         resource_cache = {}
         if __debug__:
@@ -274,14 +314,10 @@ class ResourceCache (Control):
                         teed.mime_headers['Content-Encoding'] = ce
                 return teed
         
-        
+      
 class Listen (async_server.Listen):
         
-        irtd2_salts = [''.join ((
-                chr(o) for o in random.sample (
-                        xrange (ord ('0'), ord ('z')), 20
-                        )
-                )) for x in range (2)]
+        irtd2_salts = [password ()]
 
         def __init__ (self, path, addr, precision):
                 async_server.Listen.__init__ (

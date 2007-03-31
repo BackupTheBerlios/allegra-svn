@@ -28,25 +28,25 @@ def xml_tag (name):
 
 def xml_attr (data):
         assert type (data) == types.StringType
-        data = data.replace ("&", "&amp;")
-        data = data.replace ("\"", "&quot;")
-        data = data.replace ("<", "&lt;")
-        data = data.replace ("\t", "&#x9;")
-        data = data.replace ("\r", "&#xD;")
-        data = data.replace ("\n", "&#xA;")
-        return data.replace (">", "&gt;")
+        data = data.replace ('&', '&amp;')
+        data = data.replace ('"', '&quot;')
+        data = data.replace ('<', '&lt;')
+        data = data.replace ('\t', '&#x9;')
+        data = data.replace ('\r', '&#xD;')
+        data = data.replace ('\n', '&#xA;')
+        return data.replace ('>', '&gt;')
 
 def xml_cdata (data):
         assert type (data) == types.StringType
-        data = data.replace ("&", "&amp;")
-        data = data.replace ("<", "&lt;")
-        return data.replace (">", "&gt;")
+        data = data.replace ('&', '&amp;')
+        data = data.replace ('<', '&lt;')
+        return data.replace ('>', '&gt;')
 
                                         
 def xml_ns (prefixes):
         s = ''
         for uri, prefix in prefixes.items ():
-                if uri == u'http://www.w3.org/XML/1998/namespace':
+                if uri == u"http://www.w3.org/XML/1998/namespace":
                         continue
                 
                 if prefix:
@@ -271,7 +271,7 @@ def transcode (e):
         if e.xml_first:
                 e.xml_first = unicode (e.xml_first, 'utf-8')
         else:
-                e.xml_first = u''
+                e.xml_first = u""
         for child in e.xml_children:
                 utf8_to_unicode (child)
         if e.xml_follow:

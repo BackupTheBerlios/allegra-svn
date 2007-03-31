@@ -26,59 +26,69 @@ from allegra import (
         )
 
 HTTP_RESPONSES = {
-        100: "Continue",
-        101: "Switching Protocols",
-        200: "OK", # GET and/or POST ...
-        201: "Created",
-        202: "Accepted",
-        203: "Non-Authoritative Information",
-        204: "No Content",
-        205: "Reset Content",
-        206: "Partial Content",
-        300: "Multiple Choices",
-        301: "Moved Permanently",
-        302: "Moved Temporarily", # ... continue ...
-        303: "See Other",
-        304: "Not Modified",
-        305: "Use Proxy", # ... that's all folks, use your cache.
-        400: "Bad Request",
-        401: "Unauthorized",
-        402: "Payment Required",
-        403: "Forbidden",
-        404: "Not Found",
-        405: "Method Not Allowed",
-        406: "Not Acceptable",
-        407: "Proxy Authentication Required",
-        408: "Request Time-out",
-        409: "Conflict",
-        410: "Gone",
-        411: "Length Required",
-        412: "Precondition Failed",
-        413: "Request Entity Too Large",
-        414: "Request-URI Too Large",
-        415: "Unsupported Media Type",
-        500: "Internal Server Error", 
-        501: "Not Implemented",
-        502: "Bad Gateway",
-        503: "Service Unavailable",
-        504: "Gateway Time-out",
-        505: "HTTP Version not supported"
+        100: 'Continue',
+        101: 'Switching Protocols',
+        200: 'OK', # GET and/or POST ...
+        201: 'Created',
+        202: 'Accepted',
+        203: 'Non-Authoritative Information',
+        204: 'No Content',
+        205: 'Reset Content',
+        206: 'Partial Content',
+        300: 'Multiple Choices',
+        301: 'Moved Permanently',
+        302: 'Moved Temporarily', # ... continue ...
+        303: 'See Other',
+        304: 'Not Modified',
+        305: 'Use Proxy', # ... that's all folks, use your cache.
+        400: 'Bad Request',
+        401: 'Unauthorized',
+        402: 'Payment Required',
+        403: 'Forbidden',
+        404: 'Not Found',
+        405: 'Method Not Allowed',
+        406: 'Not Acceptable',
+        407: 'Proxy Authentication Required',
+        408: 'Request Time-out',
+        409: 'Conflict',
+        410: 'Gone',
+        411: 'Length Required',
+        412: 'Precondition Failed',
+        413: 'Request Entity Too Large',
+        414: 'Request-URI Too Large',
+        415: 'Unsupported Media Type',
+        500: 'Internal Server Error', 
+        501: 'Not Implemented',
+        502: 'Bad Gateway',
+        503: 'Service Unavailable',
+        504: 'Gateway Time-out',
+        505: 'HTTP Version not supported'
         }
         
+CONNECTION_CLOSE = (('Connection', 'close'),)
+
 HTTP_RESPONSE = (
         '<html><head><title>Error</title></head>'
         '<body><h1>%s %d %s</h1><pre>%s\n%s</pre></body></html>'
         )
 
-class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
+class Reactor (mime_reactor.MIME_producer):
         
         collector_lines = ()
         collector_body = None
+        
+        http_time = None
         http_request = ('?', '?', 'HTTP/0.9')
         
-        def __repr__ (self):
-                return 'presto id="%x"' % id (self)
-        
+        def http_cookies (self, start):
+                cookies = self.collector_headers.get ('cookies')
+                if cookies == None:
+                        return ().__iter__ ()
+                
+                if type (cookies) == string:
+                        cookies = (cookies,)
+                return (c for c in cookies if c.startswith (start))
+
         def http_produce (self, response, headers=(), body=None):
                 self.http_response = response
                 # Complete the HTTP response producer
@@ -129,13 +139,13 @@ class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
                                 self.http_request[2], 
                                 response,
                                 HTTP_RESPONSES[response],
-                                strftime (
+                                self.http_time or strftime (
                                         '%a, %d %b %Y %H:%M:%S GMT', 
                                         gmtime (time ())
                                         )
                                 )
                         )
-                if self.producer_headers.get (
+                if self.producer_headers.setdefault (
                         'Connection', 'close'
                         ) == 'close':
                         self.dispatcher.output_fifo.append (None)
@@ -147,7 +157,35 @@ class Reactor (mime_reactor.MIME_producer, loginfo.Loginfo):
         # may be used to thread an HTTP/1.1 requests and push a stalled
         # producer back to the browser that will "produce" as the request
         # progresses, as it thunks data to produce via the select_trigger.
+
+def http_clock (Class):
+        Class.http_time = strftime (
+                '%a, %d %b %Y %H:%M:%S GMT', gmtime (when)
+                )
+        def scheduled (when):
+                if Class.http_time == None:
+                        return
                 
+                Class.http_time = strftime (
+                        '%a, %d %b %Y %H:%M:%S GMT', gmtime (when)
+                        )
+                return (when + 1.0, scheduled) 
+
+        # Asynchronous Share Everything
+        #
+        # strictly ordered and informative but lacks precision, use TAI64 
+        # is time really matters to you, or digests if it is an audit your
+        # web application demands.
+        #
+        # note the less obvious: no call to time().
+        #
+        # saves a few cycles, less than 0.5% of a millisecond on a 1.7Ghz 
+        # CPU in full use ... unless of course that HTTP date and time
+        # is reused by the reactor handlers, but anyway I could not resist
+        # to showcase the main feature of a high performance peer
+        #
+        # it's so easy to cache right ;-)
+
 # split a URL into ('protocol:', 'hostname', '/path', 'query', '#fragment')
 #
 HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)[?]?([^#]+)?(#.+)?')
@@ -164,7 +202,7 @@ class Dispatcher (
                 self.set_terminator ('\r\n\r\n')
 
         def __repr__ (self):
-                return '%s id="%x"' % (self.__class__.__name__, id (self))
+                return 'http_server.Dispatcher id="%x"' % id (self)
         
 	def collector_continue (self):
 		while (
@@ -183,24 +221,24 @@ class Dispatcher (
                         #  POST requests)" - Sam Rushing
 
                 # instanciate a reactor that will hold all states for the 
-                # HTTP request and response.
+                # HTTP request and response, and push it stalled in the 
+                # channel's output fifo.
                 #
-		reactor = Reactor ()
-                # push the stalled reactor in the channel's output fifo
+                reactor = Reactor ()
                 self.output_fifo.append (reactor)
-                reactor.producer_headers = {}
-                reactor.dispatcher = self
                 try:
                         # split the request in: command, uri and version
 			(
 				method, url, version
 				) = self.collector_lines[0].split ()
 		except:
-                        return reactor.http_response (400, ((
-                                'Connection', 'close'
-                                ),))
+                        # or return 400 Invalid and close the connection
+                        return reactor.http_produce (400, CONNECTION_CLOSE)
 
-                reactor.http_request = (method.upper (), url, version)
+                reactor.http_request = (
+                        method.upper (), url, version.upper ()
+                        ) # be liberal in what is accepted, strict to produce
+                reactor.dispatcher = self
                 # save and parse the collected headers
                 self.collector_lines.pop (0)
                 reactor.collector_lines = self.collector_lines
@@ -231,9 +269,9 @@ class Dispatcher (
                         if not (reactor.http_request[0] in (
                                 'GET', 'HEAD', 'DELETE'
                                 )):
-                                return reactor.http_produce (500, ((
-                                        'Connection', 'close'
-                                        ),))
+                                return reactor.http_produce (
+                                        500, CONNECTION_CLOSE
+                                        )
                         
                 else:
                         self.http_collector_continue (reactor.collector_body)

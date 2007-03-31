@@ -21,10 +21,10 @@ from allegra import xml_dom
 
 
 def xml_tag (name):
-        if name.find (u' ') < 0:
+        if name.find (u" ") < 0:
                 return name
 
-        return name.split (u' ')[1]
+        return name.split (u" ")[1]
 
 def xml_attr (data, encoding='ASCII'):
         assert type (data) == types.UnicodeType
@@ -47,7 +47,7 @@ def xml_cdata (data, encoding='ASCII'):
 def xml_ns (prefixes, encoding='ASCII'):
         s = ''
         for uri, prefix in prefixes.items ():
-                if uri == u'http://www.w3.org/XML/1998/namespace':
+                if uri == u"http://www.w3.org/XML/1998/namespace":
                         continue
                 
                 if prefix:
@@ -62,14 +62,14 @@ def xml_ns (prefixes, encoding='ASCII'):
 
 def xml_auto_prefix (prefixes):
         i = 0
-        while prefixes.has_key (u'ns%d' % i):
+        while prefixes.has_key (u"ns%d" % i):
                 i += 1                
-        return u'ns%d' % i
+        return u"ns%d" % i
         
 
 def xml_prefix_FQN (name, prefixes, encoding='ASCII'):
         try:
-                ns, name = name.split (u' ')
+                ns, name = name.split (u" ")
         except:
                 return name.encode (encoding, 'xmlcharrefreplace'), ''
         
@@ -95,7 +95,7 @@ def xml_prefix_FQN (name, prefixes, encoding='ASCII'):
 
 def xml_prefix_FQN_attribute (name, value, prefixes, encoding='ASCII'):
         try:
-                ns, name = name.split (u' ')
+                ns, name = name.split (u" ")
         except:
                 return ' %s="%s"' % (
                         name.encode (encoding, 'xmlcharrefreplace'),
@@ -140,7 +140,7 @@ def xml_unprefixed (e, xml_attributes='', encoding='ASCII'):
         if e.xml_name.find (' ') < 0:
                 tag = e.xml_name.encode (encoding)
         else:
-                tag = e.xml_name.split (u' ')[1].xml_name.encode (encoding)
+                tag = e.xml_name.split (u" ")[1].xml_name.encode (encoding)
         if e.xml_attributes:
                 xml_attributes = ''.join ((
                         ' %s="%s"' % (

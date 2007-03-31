@@ -21,16 +21,16 @@
 
 def encode (unicodes):
         "encode an iteration of unicode strings as netunicodes"
-        return u''.join ([u'%d:%s,' % (len (u), u) for u in unicodes])
+        return u"".join ([u"%d:%s," % (len (u), u) for u in unicodes])
         
                 
 def decode (buffer, nostrip=True):
         "iterate netunicodes in buffer, maybe strip void, trunk garbage"
-        assert type (buffer) == unicode
+        assert type (buffer) == unicode and nostrip in (True, False)
         size = len (buffer)
         prev = 0
         while prev < size:
-                pos = buffer.find (u':', prev)
+                pos = buffer.find (u":", prev)
                 if pos < 1:
                         break
                         
@@ -42,7 +42,7 @@ def decode (buffer, nostrip=True):
                 if next >= size:
                         break
                 
-                if buffer[next] == u',':
+                if buffer[next] == u",":
                         pos += 1
                         if nostrip or pos < next:
                                 yield buffer[pos:next]
@@ -55,11 +55,14 @@ def decode (buffer, nostrip=True):
 
 def validate (buffer, length):
         "iterate netunicodes, don't strip, keep garbage and fit to size"
-        assert type (buffer) == unicode and length > 0
+        assert (
+                type (buffer) == unicode and 
+                type (length) == int and length > 0
+                )
         size = len (buffer)
         prev = 0
         while prev < size and length:
-                pos = buffer.find (u':', prev)
+                pos = buffer.find (u":", prev)
                 if pos < 1:
                         if prev == 0:
                                 raise StopIteration # not a netstring!
@@ -74,7 +77,7 @@ def validate (buffer, length):
                 if next >= size:
                         break
                 
-                if buffer[next] == u',':
+                if buffer[next] == u",":
                         length -= 1
                         yield buffer[pos+1:next]
 
@@ -89,15 +92,14 @@ def validate (buffer, length):
         
                 while length:
                         length -= 1
-                        yield u''
+                        yield u""
                         
 
-
-def outline (encoded, format=u'%s\r\n', indent=u'  '):
+def outline (encoded, format=u"%s\r\n", indent=u"  "):
         "recursively format nested netunicodes, by default as a CRLF outline"
         n = tuple (decode (encoded))
         if len (n) > 0:
-                return u''.join ((outline (
+                return u"".join ((outline (
                         e, indent + format, indent
                         ) for e in n))
                         
@@ -117,10 +119,10 @@ def netunicodes (instance):
                 return encode ((netunicodes (i) for i in instance.items ()))
 
         try:
-                return u'%s' % instance
+                return u"%s" % instance
                 
         except:
-                return u'%r' % instance
+                return u"%r" % instance
                 
 
 def netlist (encoded):
@@ -137,24 +139,24 @@ def nettree (encoded):
         return encoded
 
 
-def netlines (encoded, format=u'%s\r\n', indent=u'  '):
+def netlines (encoded, format=u"%s\r\n", indent=u"  "):
         "beautify a netunicodes as an outline"
         n = tuple (decode (encoded))
         if len (n) > 0:
-                return format % u''.join ((outline (
+                return format % u"".join ((outline (
                         e, format, indent
                         ) for e in n))
                         
         return format % encoded
 
 
-def netoutline (encoded, indent=u''):
+def netoutline (encoded, indent=u""):
         "recursively format nested netunicodes as an outline"
         n = tuple (decode (encoded))
         if len (n) > 0:
-                return u'%s%d:\r\n%s%s,\r\n' % (
-                        indent, len (encoded), u''.join ((netoutline (
-                                e, indent + u'  '
+                return u"%s%d:\r\n%s%s,\r\n" % (
+                        indent, len (encoded), u"".join ((netoutline (
+                                e, indent + u"  "
                                 ) for e in n)), indent)
         
-        return u'%s%d:%s,\r\n' % (indent, len (encoded), encoded)
+        return u"%s%d:%s,\r\n" % (indent, len (encoded), encoded)

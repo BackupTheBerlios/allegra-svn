@@ -174,7 +174,7 @@ class Dispatcher (loginfo.Loginfo, finalization.Finalization):
                         # effect :-), recv is the function that will be called 
                         # most *and* allocate the more memory.
                         #
-                        sys.exit ("Out of Memory!") # do not even try to log!
+                        sys.exit ('Out of Memory!') # do not even try to log!
                         
                 except socket.error, why:
                         # winsock sometimes throws ENOTCONN

@@ -78,8 +78,8 @@ class XML_collector (xml_dom.Document, finalization.Finalization):
         def __init__ (self, unicoding=1):
                 if unicoding:
                         self.xml_prefixes = ({
-                                u'http://www.w3.org/XML/1998/namespace': 
-                                        u'xml'
+                                u"http://www.w3.org/XML/1998/namespace": 
+                                        u"xml"
                                         })
                 else:
                         self.xml_prefixes = ({

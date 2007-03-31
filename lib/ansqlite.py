@@ -59,7 +59,7 @@ class Server (async_net.Dispatcher):
                         self.loginfo_traceback ()
                         s = 'N.' # None
                 else:
-                        if statement[:6].upper() != "SELECT":
+                        if statement[:6].upper() != 'SELECT':
                                 loginfo.log (data)
                 self.output_fifo.append ('%d:%s,' % (len (s), s))
 
