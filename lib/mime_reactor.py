@@ -25,8 +25,10 @@ from allegra import (
 class MIME_producer (object):
 	
 	producer_lines = None
-	producer_headers = None
         producer_body = None
+
+        def __init__ (self, headers=None):
+                self.producer_headers = headers or {}
 	
 	def more (self):
 		data = ''.join (self.producer_lines)

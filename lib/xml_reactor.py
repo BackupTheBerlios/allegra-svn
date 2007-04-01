@@ -26,7 +26,7 @@ from allegra import (
         )
 
 
-def xml_producer_unprefixed_utf8 (root, pi=None, globbing=512):
+def xml_producer_unprefixed_utf8 (root, pi=None, globbing=16384):
         head = '<?xml version="1.0" encoding="UTF-8"?>'
         if pi:
                 head += xml_utf8.xml_pi (pi)
@@ -35,7 +35,7 @@ def xml_producer_unprefixed_utf8 (root, pi=None, globbing=512):
                 )
          
 
-def xml_producer_utf8 (root, prefixes, pi=None, globbing=512):
+def xml_producer_utf8 (root, prefixes, pi=None, globbing=16384):
         head = '<?xml version="1.0" encoding="UTF-8"?>'
         if pi:
                 head += xml_utf8.xml_pi (pi)
@@ -47,7 +47,7 @@ def xml_producer_utf8 (root, prefixes, pi=None, globbing=512):
 
 
 def xml_producer_unprefixed_unicode (
-        root, pi=None, encoding='ASCII', globbing=512
+        root, pi=None, encoding='ASCII', globbing=16384
         ):
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if pi:
@@ -58,7 +58,8 @@ def xml_producer_unprefixed_unicode (
          
 
 def xml_producer_unicode (
-        root, prefixes, pi=None, encoding='ASCII', globbing=512
+        root, prefixes, 
+        pi=None, encoding='ASCII', globbing=16384
         ):
         head = '<?xml version="1.0" encoding="%s"?>' % encoding
         if pi:

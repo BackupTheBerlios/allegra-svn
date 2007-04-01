@@ -17,44 +17,22 @@
 "Practical REST objects"
 
 import imp, time, random, os, stat, socket, glob, mimetypes
-from urllib import unquote as urldecode
+
 try:
         from hashlib import sha1
 except:
         from sha import new as sha1
-try:
-        import cjson
-        json_encode = cjson.encode 
-        def json_decode (x):
-                return cjson.decode (x, 1)
-                
-except:
-        if False: # not __debug__:
-                raise Exception (
-                        'cjson not installed, see: '
-                        'http://cheeseshop.python.org/pypi/python-cjson'
-                        )
-        # TODO: compile cjson for Win32, use C-types to bind.
-        
+
 random.seed ()
 
-def password ():
-        return ''.join ((chr(o) for o in random.sample (
-                xrange (ord ('0'), ord ('z')), 20
-                )))
+def password (
+        charset=[i for i in xrange (ord ('0'), ord ('z'))], length=10
+        ):
+        return ''.join ((chr(o) for o in random.sample (charset, length)))
                 
 
-from allegra import (
-        loginfo, finalization, 
-        producer, collector, async_server, timeouts,
-        ip_peer, tcp_server, mime_headers, mime_reactor, 
-        http_server, xml_dom, xml_reactor
-        )
-        
-        
-def http_404_close (reactor, about):
-        reactor.http_produce (404, (('Connection', 'close'),))
-        
+from urllib import unquote as urldecode
+
 def urlform_decode (formencoded):
         "map URL encoded form data to UNICODE keys and values"
         query_strings = {}
@@ -72,51 +50,135 @@ def urlform_decode (formencoded):
                                 )] = True
         return query_strings
 
-def irtd2_identified (reactor, about, salts, timeout=3600): 
+try:
+        import cjson
+        json_encode = cjson.encode 
+        def json_decode (x):
+                return cjson.decode (x, 1)
+                
+except:
+        if False: # not __debug__:
+                raise Exception (
+                        'cjson not installed, see: '
+                        'http://cheeseshop.python.org/pypi/python-cjson'
+                        )
+        # TODO: compile cjson for Win32, use C-types to bind.
+        
+from allegra import (
+        netstring, prompt, loginfo, async_loop, finalization,
+        producer, collector, async_server,
+        ip_peer, tcp_server, mime_headers, mime_reactor, 
+        http_server, xml_dom, xml_reactor
+        )
+        
+        
+IRTD2_ERRORS = (
+        '0 IRTD2 ok', # 0, no errors
+        '1 No IRTD2 cookie', # 1
+        '2 Invalid IRTD2 cookie value', # 2
+        '3 IRTD2 cookie timedout', # 3
+        '4 Invalid IRTD2 digest' # 4
+        )
+
+def irtd2_identified (reactor, about, salts, timeout=3600):
         # test that the IRTD2 cookie exists, has not timed out and 
         # bears a valid signature.
         try:
-                cookie = reactor.http_cookies ('IRTD2').next ()
+                value, parameters = reactor.http_cookies ('IRTD2=').next ()
         except StopIteration:
-                return False
+                assert None == loginfo.log (
+                        '%r' % reactor.collector_headers.get ('cookie'),
+                        IRTD2_ERRORS[1]
+                        )
+                return 1
         
-        value, parameters = mime_headers.value_and_parameters (cookie)
         irtd2 = value.split (' ')
         if len (irtd2) != 5:
-                return False
+                assert None == loginfo.log (value, IRTD2_ERRORS[2])
+                return 2
         
-        now = int (time ())
+        now = int (time.time ())
         if not (-1 < now - int (irtd2[2]) < timeout):
-                return False
+                assert None == loginfo.log (value, IRTD2_ERRORS[3])
+                return 3
          
         digest = irtd2[4]
-        for salt in self.irtd2_salts:
+        for salt in salts:
                 irtd2[4] = salt
                 if sha1 (' '.join (irtd2)).hexdigest () == digest:
                         irtd2[2] = str (now) # bytes!
                         irtd2[3] = digest
                         irtd2_authorize (reactor, about, irtd2)
-                        return True
+                        assert None == loginfo.log (value, IRTD2_ERRORS[0])
+                        return 0
                 
-        return False
+        assert None == loginfo.log (value, IRTD2_ERRORS[4])
+        return 4
 
 def irtd2_authorize (reactor, about, irtd2):
         assert type (irtd2) == list and len (irtd2) == 5
         irtd2[4] = (sha1 (' '.join (irtd2)).hexdigest ())
         reactor.producer_headers['Set-Cookie'] = (
-                'IRTD2=%s; expires=%s; path=/%s/; domain=.%s.' % (
-                        ' '.join (irtd2), 'never!', about[1], about[0]
+                'IRTD2=%s; '
+                'expires=Sun 17 Jan 2038 19:14:07 GMT; '
+                'path=/%s; domain=.%s.' % (
+                        ' '.join (irtd2), about[1], about[0]
                         )
                 )
         reactor.irtd2 = irtd2
+
+
+def rest_cache (filename, cache):
+        try:
+                metadata = os.stat (filename)
+        except:
+                metadata = None
+        if metadata == None or not stat.S_ISREG (metadata[0]):
+                return
+
+        subject = unicode (os.path.basename (filename), 'UTF-8')
+        headers = [
+                ('Last-Modified', (
+                        time.asctime (time.gmtime (metadata[7])) + 
+                        (' %d' % time.timezone)
+                        )),
+                ('Content-length', '%d' % metadata[1])
+                ]
+        ct, ce = mimetypes.guess_type (filename)
+        if ce:
+                headers.append ((
+                        'Content-Type', 
+                        '%s; charset=%s' % (ct or 'text/plain', ce)
+                        ))
+        else:
+                headers.append ((
+                        'Content-Type', ct or 'application/octet-stream'
+                        ))
+        teed = producer.Simple (open (filename, 'rb').read ())
+        teed.mime_headers = headers
+        cache[subject] = teed
+
+
+def http_404_close (reactor, about):
+        reactor.http_produce (404, http_server.CONNECTION_CLOSE)
+        
+def http_302_redirect (reactor, uri): 
+        reactor.http_produce (302, (('Location', uri,)))
+        # redirect with a 302 response, log same referer as an error.
+
+
+CONTENT_TYPE_JSON = (('Content-Type', 'application/json; charset=UTF-8'),)
 
 def json_200_ok (reactor, value):
         "Reply with 200 Ok and a JSON body, prevent peer to cache it."
         reactor.http_produce (
                 200, 
-                (('Content-Type', 'application/json'),),
+                CONTENT_TYPE_JSON,
                 producer.Simple (json_encode (value))
                 )
+
+
+CONTENT_TYPE_XML = (('Content-Type', 'text/xml; charset=UTF-8'),)
 
 def xml_200_ok (reactor, dom, content_type='text/xml'): 
         "Reply with 200 Ok and an XML body, allow peer to cache it."
@@ -132,189 +194,139 @@ def xml_200_ok (reactor, dom, content_type='text/xml'):
                 (('Content-Type', ';'.join ((
                         content_type, ('charset=%s' % encoding)
                         ))),),
-                xml_reactor.XML_producer (dom, encoding)
+                xml_reactor.xml_producer_unicode (
+                        dom.xml_root, dom.xml_prefixes, dom.xml_pi, 
+                        encoding
+                        )
                 )
 
-def rest_302_redirect (reactor, uri): 
-        reactor.http_produce (302, (('Location', uri,)))
-        # redirect with a 302 response, log same referer as an error.
+
+def http_get (control, reactor, about):
+        query = reactor.http_uri[3]
+        if query == None:
+                return control.http_resource (
+                        reactor, about
+                        )
+
+        return control.json_application (
+                reactor, about, urlform_decode (query)
+                )
+
+
+def http_post (control, reactor, about):
+        ct = reactor.collector_headers.get ('content-type')
+        if reactor.collector_body == None:
+                if ct in (
+                        'application/json',
+                        'www-application/urlencoded-form-data'
+                        ):
+                        reactor.collector_body = collector.Limited (
+                                control.http_post_limit
+                                )
+                        return False
+                
+                return reactor.http_continue (reactor, about)
+                
+        elif ct == 'application/json':
+                return control.json_application (
+                        reactor, about,
+                        json_decode (reactor.collector_body.data)
+                        )
+                        
+        elif ct == 'www-application/urlencoded-form-data':
+                return control.json_application (
+                        reactor, about,
+                        urlform_decode (reactor.collector_body.data)
+                        )
+                        
+        return reactor.http_produce (500) # Server Error :-(
+
+
+def http_continue (controller, reactor, about):
+        return reactor.http_produce (
+                405, http_server.CONNECTION_CLOSE
+                ) # Method Not Allowed  ... is a fatal HTTP error ;-)
 
 
 class Control (
         xml_dom.Document, loginfo.Loginfo, finalization.Finalization
         ):
-        
-        json = {}
+
+        HTTP = {'GET': http_get, 'POST': http_post}
         
         http_post_limit = 16384 # sweet sixteen 8-bit kilobytes ;-)
+
+        rest_cache = {}
+        
+        JSONR = {u".+": None}
+        
+        xml_prefixes = {}
+        xml_pi = {}
         
         def __init__ (self, peer, about):
                 self.irtd2_salts = peer.irtd2_salts
                 self.xml_root = xml_dom.Element (
-                        u"allegra.presto Control", {
-                                u"context": about[0],
-                                u"subject": about[1],
+                        u"allegra Control", {
+                                u"context": about[-2],
+                                u"subject": about[-1],
                                 }
                         )
-
-        def __call__ (self, reactor, about):
-                if (
-                        hasattr (reactor, 'irtd2') or 
-                        irtd2_identified (reactor, about, self.irtd2_salts)
-                        ):
-                        method = reactor.http_request[0]
-                        if method == 'GET':
-                                return self.http_get (reactor, about)
-                        elif method == 'POST':
-                                return self.http_post (reactor, about)
-                        
-                        return self.http_continue (reactor, r, about)
-
-                return self.irtd2_identify (reactor, about)
-        
-        def http_get (self, reactor, about):
-                query = reactor.http_uri[3]
-                if not query:
-                        return self.http_resource (
-                                reactor, about
-                                )
-
-                return self.json_application (
-                        reactor, about, urlform_decode (query)
-                        )
-
-        def http_post (self, reactor, about):
-                ct = reactor.collector_headers.get ('content-type')
-                if reactor.collector_body == None:
-                        if ct in (
-                                'application/json',
-                                'www-application/urlencoded-form-data'
-                                ):
-                                reactor.collector_body = collector.Limited (
-                                        self.http_post_limit
-                                        )
-                        else:
-                                return reactor.http_produce (501)
-                elif ct == 'application/json':
-                        return self.json_application (
-                                reactor, about,
-                                json_decode (reactor.collector_body.data)
-                                )
-                                
-                elif ct == 'www-application/urlencoded-form-data':
-                        return self.json_application (
-                                reactor, about,
-                                urlform_decode (reactor.collector_body.data)
-                                )
-                                
-                else:
-                        return reactor.http_produce (501) # Not implemented
-
-        def http_continue (self, reactor, request, about):
-                return reactor.http_produce (501) # Not implemented
-        
-        def http_resource (self, reactor, about):
-                u"return an XML producer of itself."
-                return xml_200_ok (reactor, self)
-        
-        def json_application (self, reactor, about, json):
-                u"return the JSON state as one string"
-                return json_200_ok (reactor, json)
-                
-        def irtd2_identify (self, reactor, about):
-                u"identify an anonymous user"
-                irtd2_authorize (reactor, about, [
-                        '', 'anonymous', '%d' % time.time (), '',
-                        self.irtd2_salts[0]
-                        ])
-                return __call__ (reactor, about)
-                
-        
-class Cache (Control):
-        
-        resource_cache = {}
-        if __debug__:
-                resource_precision = 1.0
-                resource_timeout = 0.1
-        else:
-                resource_precision = 60.0
-                resource_timeout = 360.0
-        
-        def __init__ (self, peer, about):
-                Control.__init__ (self, peer, about)
-                self.resource_path = '/'.join ((
+                self.json = {}
+                self.rest_path = '/'.join ((
                         peer.presto_path, (u"/".join (
                                 about[1:]
                                 )).encode ('UTF-8')
                         ))
-                self.resource_load = timeouts.cached (
-                        self.resource_cache, 
-                        self.resource_precision,
-                        self.resource_timeout
-                        )
-                        
+                for filename in glob.glob('%s/*' % self.rest_path):
+                        try:
+                                rest_cache (filename, self.rest_cache)
+                        except:
+                                self.loginfo_traceback ()
+                        else:
+                                self.log (filename, 'cached')
+                                        
+        def __call__ (self, reactor, about):
+                if (hasattr (reactor, 'irtd2') or irtd2_identified (
+                        reactor, about, self.irtd2_salts
+                        ) == 0):
+                        return self.HTTP.get (
+                                reactor.http_request[0], http_continue
+                                ) (self, reactor, about)
+
+                return self.irtd2_identify (reactor, about)
+        
         def http_resource (self, reactor, about):
-                filename = '/'.join ((
-                        self.resource_path, 
-                        reactor.uri_about[-1].encode ('UTF-8')
-                        ))
-                teed = self.resource_cache.get (filename)
-                if teed != None:
+                u"produce a static MIME response or an dynamic XML string."
+                if len (reactor.uri_about) == 3:
+                        # subject/file
+                        teed = self.rest_cache.get (reactor.uri_about[2])
+                        if teed:
+                                return reactor.http_produce (
+                                        200, teed.mime_headers, 
+                                        producer.Tee (teed)
+                                        )
+                                        
                         return reactor.http_produce (
-                                200, teed.mime_headers, producer.Tee (teed)
-                                )
-
-                try:
-                        metadata = os.stat (filename)
-                except:
-                        metadata = None
-                if metadata == None or not stat.S_ISREG (metadata[0]):
-                        return reactor.http_produce (404)
-                        
-                teed = self.resource_teed (filename, metadata)
-                return reactor.http_produce (
-                        200, teed.mime_headers, producer.Tee (teed)
-                        )
+                                404, http_server.CONNECTION_CLOSE
+                                ) # Not Found ... is a fatal HTTP error ;-)
+                                        
+                # context/folder
+                return xml_200_ok (reactor, self)
         
-        def http_continue (self, reactor, command, about, headers):
-                if reactor.http_request[0] != 'HEAD':
-                        return reactor.http_produce (405) # Method Not Allowed 
+        def json_application (self, reactor, about, json):
+                u"return the JSON state as one string"
+                self.json.update (json)
+                return json_200_ok (reactor, self.json)
                 
-                filename = '/'.join ((
-                        self.resource_path, 
-                        reactor.uri_about[-1].encode ('UTF-8')
-                        ))
-                teed = self.resource_cache.get (filename)
-                if teed != None:
-                        return reactor.http_produce (200, teed.mime_headers)
+        def irtd2_identify (self, reactor, about):
+                u"identify an anonymous user"
+                irtd2_authorize (reactor, about, [
+                        password (), '', '%d' % time.time (), '',
+                        self.irtd2_salts[0]
+                        ])
+                return self (reactor, about)
 
-                try:
-                        metadata = os.stat (filename)
-                except:
-                        metadata = None
-                if metadata == None or not stat.S_ISREG (metadata[0]):
-                        return reactor.http_produce (404)
-                        
-                return reactor.http_produce (200, self.resource_teed (
-                        filename, metadata
-                        ).mime_headers)
 
-        def resource_teed (self, filename, metadata):
-                teed = producer.File (open (filename, 'rb'))
-                self.resource_load (filename, teed)
-                ct, ce = mimetypes.guess_type (filename)
-                teed.mime_headers = {
-                        'Last-Modified': (
-                                time.asctime (time.gmtime (metadata[7])) + 
-                                (' %d' % time.timezone)
-                                ),
-                        'Content-Type': ct or 'text/html',
-                        }
-                if ce:
-                        teed.mime_headers['Content-Encoding'] = ce
-                return teed
-        
-      
 class Listen (async_server.Listen):
         
         irtd2_salts = [password ()]
@@ -345,6 +357,12 @@ class Listen (async_server.Listen):
                         module = imp.load_source (name , '/'.join ((
                                 self.presto_path, filename
                                 )))
+                        controllers = [
+                                (about, Control (self, about))
+                                for about, Control 
+                                in module.controllers.items ()
+                                if not self.presto_cached.has_key (about)
+                                ]
                 except:
                         return self.loginfo_traceback ()
                 assert None == self.log (
@@ -353,15 +371,11 @@ class Listen (async_server.Listen):
                                 ), 'debug'
                         )
 
-                self.presto_cached.update ((
-                        (about, Control (self, about))
-                        for about, Control in module.controllers.items ()
-                        if not self.presto_cached.has_key (about)
-                        ))
+                self.presto_cached.update (controllers)
                 self.presto_modules[filename] = module
 
         def presto_unload (self, filename):
-                u"unload a named Python module"
+                "unload a named Python module"
                 module = self.presto_modules.get (filename)
                 if module == None:
                         return
@@ -376,7 +390,7 @@ class Listen (async_server.Listen):
                 del self.presto_modules[filename]
         
         def http_continue (self, reactor):
-                uri = (reactor.http_uri[2]).split ('/', 2)
+                uri = reactor.http_uri[2].split ('/', 2)
                 uri[0] = reactor.collector_headers.get (
                         'host', reactor.http_uri[1] or ''
                         )
@@ -404,11 +418,11 @@ class Listen (async_server.Listen):
                 except:
                         self.loginfo_traceback ()
                         reactor.http_produce (500)
-                        stalled = True
-                loginfo.log ('%s %d %s' % (
+                        stalled = False
+                loginfo.log (str (netstring.encode ((
                         ' '.join (reactor.http_request),
-                        reactor.http_response,
-                        (u"/".join (about)).encode ('UTF-8')
-                        ))
+                        '%d' % reactor.http_response,
+                        '/'.join (uri)
+                        ))), 'presto')
                 return stalled
                 

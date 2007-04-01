@@ -72,6 +72,9 @@ HTTP_RESPONSE = (
         '<body><h1>%s %d %s</h1><pre>%s\n%s</pre></body></html>'
         )
 
+def format_time (when):
+        return strftime ('%a, %d %b %Y %H:%M:%S GMT', gmtime (when))
+                        
 class Reactor (mime_reactor.MIME_producer):
         
         collector_lines = ()
@@ -81,13 +84,16 @@ class Reactor (mime_reactor.MIME_producer):
         http_request = ('?', '?', 'HTTP/0.9')
         
         def http_cookies (self, start):
-                cookies = self.collector_headers.get ('cookies')
+                cookies = self.collector_headers.get ('cookie')
                 if cookies == None:
                         return ().__iter__ ()
                 
-                if type (cookies) == string:
+                if type (cookies) == str:
                         cookies = (cookies,)
-                return (c for c in cookies if c.startswith (start))
+                return (
+                        mime_headers.value_and_parameters (c[len (start):])
+                        for c in cookies if c.startswith (start)
+                        )
 
         def http_produce (self, response, headers=(), body=None):
                 self.http_response = response
@@ -143,13 +149,14 @@ class Reactor (mime_reactor.MIME_producer):
                                         '%a, %d %b %Y %H:%M:%S GMT', 
                                         gmtime (time ())
                                         )
-                                )
+                                ) # supports async HTTP formated time
                         )
-                if self.producer_headers.setdefault (
-                        'Connection', 'close'
-                        ) == 'close':
+                if self.producer_headers.get ('Connection') == 'close':
+                        # close socket when done ...
                         self.dispatcher.output_fifo.append (None)
-                        return True
+                        return True # ... stall input now!
+                
+                return False # let the http_server.Dispatcher continue ...
         
         # Support for stalled producers is a requirement for programming
         # asynchronous peer. It is also a practical solution for simple 
@@ -159,36 +166,35 @@ class Reactor (mime_reactor.MIME_producer):
         # progresses, as it thunks data to produce via the select_trigger.
 
 def http_clock (Class):
-        Class.http_time = strftime (
-                '%a, %d %b %Y %H:%M:%S GMT', gmtime (when)
-                )
+        now = time ()
+        Class.http_time = format_time (now)
         def scheduled (when):
                 if Class.http_time == None:
                         return
                 
-                Class.http_time = strftime (
-                        '%a, %d %b %Y %H:%M:%S GMT', gmtime (when)
-                        )
+                Class.http_time = format_time (when)
                 return (when + 1.0, scheduled) 
 
+        async_loop.schedule (now + 1.0, scheduled)
+        #
         # Asynchronous Share Everything
         #
-        # strictly ordered and informative but lacks precision, use TAI64 
-        # is time really matters to you, or digests if it is an audit your
-        # web application demands.
-        #
-        # note the less obvious: no call to time().
-        #
-        # saves a few cycles, less than 0.5% of a millisecond on a 1.7Ghz 
+        # Saves a few cycles, less than 0.5% of a millisecond on a 1.7Ghz 
         # CPU in full use ... unless of course that HTTP date and time
         # is reused by the reactor handlers, but anyway I could not resist
         # to showcase the main feature of a high performance peer
         #
-        # it's so easy to cache right ;-)
+        # it's so easy to cache asynchronously ;-)
+        #
+        # Note: http_clock times are strictly ordered and informative but 
+        # lacks precision. Use TAI64 if time really matters to you, or 
+        # digests if it is an audit your web application demands.
 
 # split a URL into ('protocol:', 'hostname', '/path', 'query', '#fragment')
 #
-HTTP_URI_RE = re.compile ('(?:([^/]*)//([^/]*))?(/[^?]*)[?]?([^#]+)?(#.+)?')
+HTTP_URI_RE = re.compile (
+        '(?:([^:]+)://([^/]+))?(/(?:[^?#]+)?)(?:[?]([^#]+)?)?(#.+)?'
+        )
 
 class Dispatcher (
         mime_reactor.MIME_collector, async_chat.Dispatcher
