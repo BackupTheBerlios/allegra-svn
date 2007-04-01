@@ -16,7 +16,7 @@
 
 "Practical REST objects"
 
-import imp, time, random, os, stat, socket, glob, mimetypes
+import imp, weakref, time, random, os, stat, socket, glob, mimetypes
 
 try:
         from hashlib import sha1
@@ -40,13 +40,11 @@ def urlform_decode (formencoded):
                 if param.find ('=') > -1:
                         name, value = param.split ('=', 1)
                         query_strings[unicode (
-                                urldecode (name), 'UTF-8', 'replace'
-                                )] = unicode (
-                                        urldecode (value), 'UTF-8', 'replace'
-                                        )
+                                urldecode (name), 'UTF-8'
+                                )] = unicode (urldecode (value), 'UTF-8')
                 elif param:
                         query_strings[unicode (
-                                urldecode (param), 'UTF-8', 'replace'
+                                urldecode (param), 'UTF-8'
                                 )] = True
         return query_strings
 
@@ -80,40 +78,43 @@ IRTD2_ERRORS = (
         '4 Invalid IRTD2 digest' # 4
         )
 
-def irtd2_identified (reactor, about, salts, timeout=3600):
-        # test that the IRTD2 cookie exists, has not timed out and 
-        # bears a valid signature.
-        try:
-                value, parameters = reactor.http_cookies ('IRTD2=').next ()
-        except StopIteration:
-                assert None == loginfo.log (
-                        '%r' % reactor.collector_headers.get ('cookie'),
-                        IRTD2_ERRORS[1]
-                        )
-                return 1
-        
-        irtd2 = value.split (' ')
-        if len (irtd2) != 5:
-                assert None == loginfo.log (value, IRTD2_ERRORS[2])
-                return 2
-        
-        now = int (time.time ())
-        if not (-1 < now - int (irtd2[2]) < timeout):
-                assert None == loginfo.log (value, IRTD2_ERRORS[3])
-                return 3
-         
-        digest = irtd2[4]
-        for salt in salts:
-                irtd2[4] = salt
-                if sha1 (' '.join (irtd2)).hexdigest () == digest:
-                        irtd2[2] = str (now) # bytes!
-                        irtd2[3] = digest
-                        irtd2_authorize (reactor, about, irtd2)
-                        assert None == loginfo.log (value, IRTD2_ERRORS[0])
-                        return 0
+def irtd2_identified (reactor, about, salts, timeout):
+        # test that one IRTD2 cookie exists, has not timed out and bears a 
+        # valid signature (note: I assume that the most specific cookie is
+        # listed first, that "/context/subject" precedes "/context".
+        error = 1
+        cookies = reactor.http_cookies ('IRTD2=')
+        while True:
+                try:
+                        value = cookies.next ()
+                except StopIteration:
+                        assert None == loginfo.log (
+                                '%r' % reactor.collector_headers.get ('cookie'),
+                                IRTD2_ERRORS[1]
+                                )
+                        return error
                 
-        assert None == loginfo.log (value, IRTD2_ERRORS[4])
-        return 4
+                irtd2 = value.split (' ')
+                if len (irtd2) != 5:
+                        assert None == loginfo.log (value, IRTD2_ERRORS[2])
+                        continue
+                
+                now = long (time.time ())
+                if not (-1 < now - long (irtd2[2]) < timeout):
+                        assert None == loginfo.log (value, IRTD2_ERRORS[3])
+                        continue
+                 
+                digest = irtd2[4]
+                for salt in salts:
+                        irtd2[4] = salt
+                        if sha1 (' '.join (irtd2)).hexdigest () == digest:
+                                irtd2[2] = str (now) # bytes!
+                                irtd2[3] = digest
+                                irtd2_authorize (reactor, about, irtd2)
+                                assert None == loginfo.log (value, IRTD2_ERRORS[0])
+                                return 0
+                        
+                assert None == loginfo.log (value, IRTD2_ERRORS[4])
 
 def irtd2_authorize (reactor, about, irtd2):
         assert type (irtd2) == list and len (irtd2) == 5
@@ -204,9 +205,7 @@ def xml_200_ok (reactor, dom, content_type='text/xml'):
 def http_get (control, reactor, about):
         query = reactor.http_uri[3]
         if query == None:
-                return control.http_resource (
-                        reactor, about
-                        )
+                return control.http_resource (reactor, about)
 
         return control.json_application (
                 reactor, about, urlform_decode (query)
@@ -255,13 +254,15 @@ class Control (
         HTTP = {'GET': http_get, 'POST': http_post}
         
         http_post_limit = 16384 # sweet sixteen 8-bit kilobytes ;-)
+        
+        irtd2_timeout = 1<<32 # practically never by default
 
         rest_cache = {}
         
-        JSONR = {u".+": None}
-        
         xml_prefixes = {}
         xml_pi = {}
+        
+        JSONR = {u".+": None}
         
         def __init__ (self, peer, about):
                 self.irtd2_salts = peer.irtd2_salts
@@ -271,7 +272,6 @@ class Control (
                                 u"subject": about[-1],
                                 }
                         )
-                self.json = {}
                 self.rest_path = '/'.join ((
                         peer.presto_path, (u"/".join (
                                 about[1:]
@@ -284,10 +284,11 @@ class Control (
                                 self.loginfo_traceback ()
                         else:
                                 self.log (filename, 'cached')
+                self.json = {}
                                         
         def __call__ (self, reactor, about):
                 if (hasattr (reactor, 'irtd2') or irtd2_identified (
-                        reactor, about, self.irtd2_salts
+                        reactor, about, self.irtd2_salts, self.irtd2_timeout
                         ) == 0):
                         return self.HTTP.get (
                                 reactor.http_request[0], http_continue
@@ -328,6 +329,8 @@ class Control (
 
 
 class Listen (async_server.Listen):
+
+        presto_root = {}
         
         irtd2_salts = [password ()]
 
@@ -341,6 +344,7 @@ class Listen (async_server.Listen):
                 self.presto_path = path
                 self.presto_modules = {}
                 self.presto_cached = {}
+                self.presto_root[path] = weakref.ref (self)
         
         def presto_dir (self):
                 "list all source modules's name found in modules/"
@@ -364,7 +368,9 @@ class Listen (async_server.Listen):
                                 if not self.presto_cached.has_key (about)
                                 ]
                 except:
-                        return self.loginfo_traceback ()
+                        self.loginfo_traceback ()
+                        return ()
+                
                 assert None == self.log (
                         'load filename="%s" id="%x"' % (
                                 filename, id (module)
@@ -372,22 +378,24 @@ class Listen (async_server.Listen):
                         )
 
                 self.presto_cached.update (controllers)
-                self.presto_modules[filename] = module
+                self.presto_modules[filename] = (module, controllers)
+                return controllers
 
         def presto_unload (self, filename):
                 "unload a named Python module"
-                module = self.presto_modules.get (filename)
+                module, controllers = self.presto_modules.get (filename)
                 if module == None:
-                        return
+                        return ()
                         
                 assert None == self.log (
                         'unload filename="%s" id="%x"' % (
                                 filename, id (module)
                                 ), 'debug'
                         )
-                for about in module.controllers.keys ():
+                for about, controller in controllers:
                         del self.presto_cached[about]
                 del self.presto_modules[filename]
+                return controllers
         
         def http_continue (self, reactor):
                 uri = reactor.http_uri[2].split ('/', 2)
@@ -425,4 +433,3 @@ class Listen (async_server.Listen):
                         '/'.join (uri)
                         ))), 'presto')
                 return stalled
-                

@@ -74,7 +74,7 @@ HTTP_RESPONSE = (
 
 def format_time (when):
         return strftime ('%a, %d %b %Y %H:%M:%S GMT', gmtime (when))
-                        
+        
 class Reactor (mime_reactor.MIME_producer):
         
         collector_lines = ()
@@ -88,11 +88,9 @@ class Reactor (mime_reactor.MIME_producer):
                 if cookies == None:
                         return ().__iter__ ()
                 
-                if type (cookies) == str:
-                        cookies = (cookies,)
                 return (
-                        mime_headers.value_and_parameters (c[len (start):])
-                        for c in cookies if c.startswith (start)
+                        c[len (start):] for c in cookies.split ('; ')
+                        if c.startswith (start)
                         )
 
         def http_produce (self, response, headers=(), body=None):
