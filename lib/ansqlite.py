@@ -45,6 +45,25 @@ class Client (async_net.Dispatcher):
                         self.async_net_continue ('N.')
 
 
+class Proxy (Object):
+        
+        def __init__ (self, dispatcher):
+                self.output_fifo, self.sql_defered = (
+                        dispatcher.output_fifo, dispatcher.sql_defered
+                        )
+                        
+        def __call__ (self, callback, statement, params=()):
+                self.output_fifo.append ('%d:%s,' % (len (s), s))
+                self.sql_defered.append (callback)
+                
+
+def connect (name, finalize, timeout=3.0):
+        dispatcher = Client ()
+        dispatcher.finalization = finalize
+        if tcp_client.connect (dispatcher, name, timeout=3.0):
+                return Proxy (dispatcher)
+        
+
 class Server (async_net.Dispatcher):
         
         def async_net_continue (self, data):
