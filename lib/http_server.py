@@ -67,10 +67,37 @@ HTTP_RESPONSES = {
         
 CONNECTION_CLOSE = (('Connection', 'close'),)
 
-HTTP_RESPONSE = (
-        '<html><head><title>Error</title></head>'
-        '<body><h1>%s %d %s</h1><pre>%s\n%s</pre></body></html>'
-        )
+if __debug__:
+        HTTP_RESPONSE = (
+                '<html><head><title>Allegra PRESTo!</title></head><body>'
+                '<h1>%s %d %s</h1>'
+                '<pre>%s</pre>'
+                '<h3>%s</h3>'
+                '<pre>%s\n...</pre>'
+                '</body></html>'
+                )
+        def http_response (reactor, response):
+                return HTTP_RESPONSE % (
+                        reactor.http_request[2], 
+                        response,
+                        HTTP_RESPONSES[response],
+                        '\n'.join (mime_headers.lines (
+                                reactor.producer_headers
+                                )),
+                        ' '.join (reactor.http_request),
+                        '\n'.join (reactor.collector_lines)
+                        )
+else:
+        HTTP_RESPONSE = (
+                '<html><head><title>%s %d %s</title></head></html>'
+                )
+        def http_response (reactor, response):
+                return HTTP_RESPONSE % (
+                        reactor.http_request[2], 
+                        response,
+                        HTTP_RESPONSES[response]
+                        )
+                        
 
 def format_time (when):
         return strftime ('%a, %d %b %Y %H:%M:%S GMT', gmtime (when))
@@ -91,31 +118,44 @@ class Reactor (mime_reactor.MIME_producer):
                 return (
                         c[len (start):] for c in cookies.split ('; ')
                         if c.startswith (start)
-                        )
+                        ) # this is a generator ;-)
+                        
+        def http_redirect (self, response, url):
+                assert response in (301, 302, 303)
+                uri = reactor.http_uri[:2]
+                uri.append (url)
+                self.http_produce (response, (('Location', ''.join (uri)),))
+
+        def http_error (self, response):
+                assert (399 < response < 416) or (499 < response < 505)
+                self.http_produce (response, CONNECTION_CLOSE)
+
+        # MIME producer are stalled before call to http_produce!
+        #
+        # Support for stalled producers is a requirement for programming
+        # asynchronous peer. It is also a practical solution for simple 
+        # asynchronous pipelining of threaded requests. For instance it
+        # may be used to thread an HTTP/1.1 requests and push a stalled
+        # producer back to the browser that will "produce" as the request
+        # progresses, as it thunks data to produce via the select_trigger.
 
         def http_produce (self, response, headers=(), body=None):
                 self.http_response = response
                 # Complete the HTTP response producer
                 self.producer_headers.update (headers)
                 if body == None and (
-                        self.http_request[0] in ('GET', 'POST')
+                        self.http_request[0] in ('GET', 'POST') # and
+                        # response != 204 # No content
                         ):
-                        # supply a response entity if one is required for the
-                        # request's method and that none has been assigned
-                        # by a previous handler
+                        # Supply a response entity if one is required for the
+                        # request's method and that none has been assigned.
                         self.producer_body = producer.Simple (
-                                HTTP_RESPONSE % (
-                                        self.http_request[2], 
-                                        response,
-                                        HTTP_RESPONSES[response],
-                                        ' '.join (self.http_request),
-                                        '\n'.join (self.collector_lines)
-                                        )
+                                http_response (self, response)
                                 )
                 else:
-                        self.producer_body = body
+                        self.producer_body = body # Use the given body.
                 if self.http_request[2] == 'HTTP/1.1':
-                        # allways use Chunked Transfer-Encoding for HTTP/1.1
+                        # Allways use Chunked Transfer-Encoding for HTTP/1.1!
                         if self.producer_body != None:
                                 self.producer_headers[
                                         'Transfer-Encoding'
@@ -125,16 +165,13 @@ class Reactor (mime_reactor.MIME_producer):
                                                 self.producer_body
                                                 )
                 else:
-                        # Do not keep-alive without chunk-encoding
+                        # Do not keep-alive without chunk-encoding!
                         self.producer_headers['Connection'] = 'close'
                 # Build the response head with the reactor's MIME headers, 
-                # the channel's HTTP version the reactor's HTTP response
-                # code. Then initiate send decide wether or not to close 
-                # when done ...
-                #
+                # the channel's HTTP version the reactor's HTTP response.
                 self.producer_lines = mime_headers.lines (
                         self.producer_headers
-                        )
+                        ) # TODO: Revise the MIME_producer API as generator ?
                 self.producer_lines.insert (
                         0, 
                         '%s %d %s\r\n' 
@@ -156,12 +193,6 @@ class Reactor (mime_reactor.MIME_producer):
                 
                 return False # let the http_server.Dispatcher continue ...
         
-        # Support for stalled producers is a requirement for programming
-        # asynchronous peer. It is also a practical solution for simple 
-        # asynchronous pipelining of threaded requests. For instance it
-        # may be used to thread an HTTP/1.1 requests and push a stalled
-        # producer back to the browser that will "produce" as the request
-        # progresses, as it thunks data to produce via the select_trigger.
 
 def http_clock (Class):
         now = time ()
@@ -191,7 +222,7 @@ def http_clock (Class):
 # split a URL into ('protocol:', 'hostname', '/path', 'query', '#fragment')
 #
 HTTP_URI_RE = re.compile (
-        '(?:([^:]+)://([^/]+))?(/(?:[^?#]+)?)(?:[?]([^#]+)?)?(#.+)?'
+        '(?:([^:]+://)([^/]+))?(/(?:[^?#]+)?)(?:[?]([^#]+)?)?(#.+)?'
         )
 
 class Dispatcher (
