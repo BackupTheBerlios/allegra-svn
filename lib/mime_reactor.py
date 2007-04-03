@@ -21,6 +21,7 @@ from allegra import (
         mime_headers
         )
 
+_no_more = (lambda: '')
 
 class MIME_producer (object):
 	
@@ -34,6 +35,7 @@ class MIME_producer (object):
 		data = ''.join (self.producer_lines)
                 if self.producer_body == None:
                         self.producer_lines == ()
+                        self.more = _no_more
                         return data
                 
                 self.more = self.producer_body.more
