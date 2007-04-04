@@ -49,19 +49,15 @@ def urlform_decode (formencoded):
         return query_strings
 
 try:
-        import cjson
-        json_encode = cjson.encode 
-        def json_decode (x):
-                return cjson.decode (x, 1)
-                
+        from cjson import decode as json_decode
+        from cjson import encode as json_encode
 except:
-        if False: # not __debug__:
-                raise Exception (
-                        'cjson not installed, see: '
-                        'http://cheeseshop.python.org/pypi/python-cjson'
-                        )
-        # TODO: compile cjson for Win32, use C-types to bind.
-        
+        raise Exception (
+                'install cjson, see: '
+                'http://cheeseshop.python.org/pypi/python-cjson'
+                )
+
+
 from allegra import (
         netstring, prompt, loginfo, async_loop, finalization,
         producer, collector, async_server,
@@ -79,50 +75,44 @@ IRTD2_ERRORS = (
         )
 
 def irtd2_identified (reactor, about, salts, timeout):
-        # test that one IRTD2 cookie exists, has not timed out and bears a 
-        # valid signature (note: I assume that the most specific cookie is
-        # listed first, that "/context/subject" precedes "/context".
-        error = 1
         cookies = reactor.http_cookies ('IRTD2=')
-        while True:
-                try:
-                        value = cookies.next ()
-                except StopIteration:
-                        assert None == loginfo.log (
-                                '%r' % reactor.collector_headers.get ('cookie'),
-                                IRTD2_ERRORS[1]
-                                )
-                        return error
-                
-                irtd2 = value.split (' ')
-                if len (irtd2) != 5:
-                        assert None == loginfo.log (value, IRTD2_ERRORS[2])
-                        continue
-                
-                now = long (time.time ())
-                if not (-1 < now - long (irtd2[2]) < timeout):
-                        assert None == loginfo.log (value, IRTD2_ERRORS[3])
-                        continue
-                 
-                digest = irtd2[4]
-                for salt in salts:
-                        irtd2[4] = salt
-                        if sha1 (' '.join (irtd2)).hexdigest () == digest:
-                                irtd2[2] = str (now) # bytes!
-                                irtd2[3] = digest
-                                irtd2_authorize (reactor, about, irtd2)
-                                assert None == loginfo.log (value, IRTD2_ERRORS[0])
-                                return 0
-                        
-                assert None == loginfo.log (value, IRTD2_ERRORS[4])
-
+        try:
+                value = cookies.next ()
+        except StopIteration:
+                return 1
+        
+        irtd2 = value.split (' ')
+        if len (irtd2) != 5:
+                return 2
+        
+        now = long (time.time ())
+        if not (-1 < now - long (irtd2[2]) < timeout):
+                return 3
+         
+        digest = irtd2[4]
+        for salt in salts:
+                irtd2[4] = salt
+                if sha1 (' '.join (irtd2)).hexdigest () == digest:
+                        irtd2[2] = str (now) # bytes!
+                        irtd2[3] = digest
+                        irtd2_authorize (reactor, about, irtd2)
+                        return 0
+        
+        return 4
+        #
+        # Test that one IRTD2 cookie exists, has not timed out and bears a 
+        # valid signature. Note that I assume that the most specific cookie 
+        # is listed first, that "/context/subject" precedes "/context" and
+        # that more cookies don't masquerade/merge the authorizations or 
+        # identity they carry.
+        
 def irtd2_authorize (reactor, about, irtd2):
         assert type (irtd2) == list and len (irtd2) == 5
         irtd2[4] = (sha1 (' '.join (irtd2)).hexdigest ())
         reactor.producer_headers['Set-Cookie'] = (
                 'IRTD2=%s; '
                 'expires=Sun 17 Jan 2038 19:14:07 GMT; '
-                'path=/%s; domain=.%s.' % (
+                'path=/%s/; domain=.%s.' % (
                         ' '.join (irtd2), about[1], about[0]
                         )
                 )
@@ -168,13 +158,21 @@ def http_302_redirect (reactor, uri):
         # redirect with a 302 response, log same referer as an error.
 
 
-CONTENT_TYPE_JSON = (('Content-Type', 'application/json; charset=UTF-8'),)
+if __debug__:
+        CONTENT_TYPE_JSON = ((
+                'Content-Type', 'text/javascript; charset=UTF-8'
+                ),) # you need this to see what you get ;-)
+else:
+        CONTENT_TYPE_JSON = ((
+                'Content-Type', 'application/json; charset=UTF-8'
+                ),)
+                
 
 def json_200_ok (reactor, value):
         "Reply with 200 Ok and a JSON body, prevent peer to cache it."
         reactor.http_produce (
                 200, 
-                CONTENT_TYPE_JSON,
+                CONTENT_TYPE_JSON, 
                 producer.Simple (json_encode (value))
                 )
 
@@ -202,13 +200,17 @@ def xml_200_ok (reactor, dom, content_type='text/xml'):
                 )
 
 
+def http_head (control, reactor, about):
+        return control.http_resource (reactor, about, 'HEAD')
+
+
 def http_get (control, reactor, about):
-        query = reactor.http_uri[3]
-        if query == None:
-                return control.http_resource (reactor, about)
+        querystring = reactor.http_uri[3]
+        if querystring == None:
+                return control.http_resource (reactor, about, 'GET')
 
         return control.json_application (
-                reactor, about, urlform_decode (query)
+                reactor, about, urlform_decode (querystring)
                 )
 
 
@@ -238,20 +240,18 @@ def http_post (control, reactor, about):
                         urlform_decode (reactor.collector_body.data)
                         )
                         
-        return reactor.http_produce (500) # Server Error :-(
+        return reactor.http_produce (500) # Server Error
 
 
 def http_continue (controller, reactor, about):
-        return reactor.http_produce (
-                405, http_server.CONNECTION_CLOSE
-                ) # Method Not Allowed  ... is a fatal HTTP error ;-)
+        return reactor.http_produce (405) # Method Not Allowed
 
 
 class Control (
         xml_dom.Document, loginfo.Loginfo, finalization.Finalization
         ):
 
-        HTTP = {'GET': http_get, 'POST': http_post}
+        HTTP = {'HEAD': http_head, 'GET': http_get, 'POST': http_post}
         
         http_post_limit = 16384 # sweet sixteen 8-bit kilobytes ;-)
         
@@ -262,7 +262,7 @@ class Control (
         xml_prefixes = {}
         xml_pi = {}
         
-        JSONR = {u".+": None}
+        JSONR = None
         
         def __init__ (self, peer, about):
                 self.irtd2_salts = peer.irtd2_salts
@@ -296,23 +296,32 @@ class Control (
 
                 return self.irtd2_identify (reactor, about)
         
-        def http_resource (self, reactor, about):
+        def http_resource (self, reactor, about, method):
                 u"produce a static MIME response or an dynamic XML string."
                 if len (reactor.uri_about) == 3:
                         # subject/file
                         teed = self.rest_cache.get (reactor.uri_about[2])
                         if teed:
-                                return reactor.http_produce (
-                                        200, teed.mime_headers, 
-                                        producer.Tee (teed)
-                                        )
-                                        
-                        return reactor.http_produce (
-                                404, http_server.CONNECTION_CLOSE
-                                ) # Not Found ... is a fatal HTTP error ;-)
+                                if method == 'GET':
+                                        return reactor.http_produce (
+                                                200, 
+                                                teed.mime_headers, 
+                                                producer.Tee (teed)
+                                                ) # Ok
+                                                
+                                elif method == 'HEAD':
+                                        return reactor.http_produce (
+                                                200, teed.mime_headers
+                                                )
+                                
+                        return reactor.http_produce (404) # Not Found
                                         
                 # context/folder
-                return xml_200_ok (reactor, self)
+                if method == 'GET':
+                        return xml_200_ok (reactor, self)
+                
+                elif method == 'HEAD':
+                        return reactor.http_produce (200, CONTENT_TYPE_XML)
         
         def json_application (self, reactor, about, json):
                 u"return the JSON state as one string"
@@ -433,3 +442,32 @@ class Listen (async_server.Listen):
                         '/'.join (uri)
                         ))), 'presto')
                 return stalled
+        
+"""
+Flat is better than nested
+
+http://host/resource
+http://host/function?...
+http://host/control/resource
+http://host/control/function?...
+
+root/
+        127.0.0.2/
+                resource
+                function?...
+                control/
+                        resource
+                        function?...
+
+A controller "control" access to resources, static and dynamic. 
+
+The static resources are text representation of the application invariant 
+state (the style sheets, the localized text, the JavaScript interactions, 
+etc ...), they are cached in-memory every time the controller that depends
+upon them is loaded.
+
+Dynamic resources are the result of functions applied by the controller
+to variable resources of the application: databases on the server side, 
+AJAX display in the browser ... or just the peer state held by PRESTo.
+
+"""
