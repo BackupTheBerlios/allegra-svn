@@ -25,7 +25,7 @@ from allegra import (
         mime_headers, mime_reactor, http_reactor
         )
 
-HTTP_RESPONSES = {
+RESPONSES = {
         100: 'Continue',
         101: 'Switching Protocols',
         200: 'OK', # GET and/or POST ...
@@ -68,34 +68,34 @@ HTTP_RESPONSES = {
 CONNECTION_CLOSE = (('Connection', 'close'),)
 
 if __debug__:
-        HTTP_RESPONSE = (
+        _RESPONSE = (
                 '<html><head><title>Allegra PRESTo!</title></head><body>'
                 '<h1>%s %d %s</h1>'
-                '<pre>%s</pre>'
+                '<pre>%s%s</pre>'
                 '<h3>%s</h3>'
                 '<pre>%s\n...</pre>'
                 '</body></html>'
                 )
-        def http_response (reactor, response):
-                return HTTP_RESPONSE % (
+        def _response (reactor, response, head):
+                return _RESPONSE % (
                         reactor.http_request[2], 
                         response,
-                        HTTP_RESPONSES[response],
-                        '\n'.join (mime_headers.lines (
+                        RESPONSES[response],
+                        head, '\r\n'.join (mime_headers.lines (
                                 reactor.producer_headers
                                 )),
                         ' '.join (reactor.http_request),
-                        '\n'.join (reactor.collector_lines)
+                        '\r\n'.join (reactor.collector_lines)
                         )
 else:
-        HTTP_RESPONSE = (
+        _RESPONSE = (
                 '<html><head><title>%s %d %s</title></head></html>'
                 )
-        def http_response (reactor, response):
-                return HTTP_RESPONSE % (
+        def _response (reactor, response, heads):
+                return _RESPONSE % (
                         reactor.http_request[2], 
                         response,
-                        HTTP_RESPONSES[response]
+                        RESPONSES[response]
                         )
                         
 
@@ -109,6 +109,7 @@ class Reactor (mime_reactor.MIME_producer):
         
         http_time = None
         http_request = ('?', '?', 'HTTP/0.9')
+        http_response = 101 # Continue
         
         def http_cookies (self, start):
                 cookies = self.collector_headers.get ('cookie')
@@ -120,15 +121,8 @@ class Reactor (mime_reactor.MIME_producer):
                         if c.startswith (start)
                         ) # this is a generator ;-)
                         
-        def http_redirect (self, response, url):
-                assert response in (301, 302, 303)
-                uri = reactor.http_uri[:2]
-                uri.append (url)
-                self.http_produce (response, (('Location', ''.join (uri)),))
-
         def http_error (self, response):
-                assert (399 < response < 416) or (499 < response < 505)
-                self.http_produce (response, CONNECTION_CLOSE)
+                return self.http_produce (response, CONNECTION_CLOSE)
 
         # MIME producer are stalled before call to http_produce!
         #
@@ -141,6 +135,19 @@ class Reactor (mime_reactor.MIME_producer):
 
         def http_produce (self, response, headers=(), body=None):
                 self.http_response = response
+                head = (
+                        '%s %d %s\r\n' 
+                        'Date: %s\r\n' 
+                        'Server: Allegra\r\n' % (
+                                self.http_request[2], 
+                                response,
+                                RESPONSES[response],
+                                self.http_time or strftime (
+                                        '%a, %d %b %Y %H:%M:%S GMT', 
+                                        gmtime (time ())
+                                        )
+                                ) # supports async HTTP formated time
+                        )
                 # Complete the HTTP response producer
                 self.producer_headers.update (headers)
                 if body == None and (
@@ -150,7 +157,7 @@ class Reactor (mime_reactor.MIME_producer):
                         # Supply a response entity if one is required for the
                         # request's method and that none has been assigned.
                         self.producer_body = producer.Simple (
-                                http_response (self, response)
+                                _response (self, response, head)
                                 )
                 else:
                         self.producer_body = body # Use the given body.
@@ -172,20 +179,7 @@ class Reactor (mime_reactor.MIME_producer):
                 self.producer_lines = mime_headers.lines (
                         self.producer_headers
                         ) # TODO: Revise the MIME_producer API as generator ?
-                self.producer_lines.insert (
-                        0, 
-                        '%s %d %s\r\n' 
-                        'Date: %s\r\n' 
-                        'Server: Allegra\r\n' % (
-                                self.http_request[2], 
-                                response,
-                                HTTP_RESPONSES[response],
-                                self.http_time or strftime (
-                                        '%a, %d %b %Y %H:%M:%S GMT', 
-                                        gmtime (time ())
-                                        )
-                                ) # supports async HTTP formated time
-                        )
+                self.producer_lines.insert (0, head)
                 if self.producer_headers.get ('Connection') == 'close':
                         # close socket when done ...
                         self.dispatcher.output_fifo.append (None)
@@ -216,14 +210,8 @@ def http_clock (Class):
         # it's so easy to cache asynchronously ;-)
         #
         # Note: http_clock times are strictly ordered and informative but 
-        # lacks precision. Use TAI64 if time really matters to you, or 
+        # they lack precision. Use TAI64 if time really matters to you, or 
         # digests if it is an audit your web application demands.
-
-# split a URL into ('protocol:', 'hostname', '/path', 'query', '#fragment')
-#
-HTTP_URI_RE = re.compile (
-        '(?:([^:]+://)([^/]+))?(/(?:[^?#]+)?)(?:[?]([^#]+)?)?(#.+)?'
-        )
 
 class Dispatcher (
         mime_reactor.MIME_collector, async_chat.Dispatcher
@@ -239,13 +227,11 @@ class Dispatcher (
         def __repr__ (self):
                 return 'http_server.Dispatcher id="%x"' % id (self)
         
-	def collector_continue (self):
-		while (
-                        self.collector_lines and not 
-                        self.collector_lines[0]
-                        ):
-			self.collector_lines.pop (0)
-                if not self.collector_lines:
+	def collector_continue (self, lines):
+                self.collector_buffer = ''
+		while (lines and not lines[0]):
+			lines.pop (0)
+                if not lines:
                         return False
                         #
                         # From Medusa's http_server.py Original Comment:
@@ -263,9 +249,7 @@ class Dispatcher (
                 self.output_fifo.append (reactor)
                 try:
                         # split the request in: command, uri and version
-			(
-				method, url, version
-				) = self.collector_lines[0].split ()
+			(method, url, version) = lines.pop (0).split (' ')
 		except:
                         # or return 400 Invalid and close the connection
                         return reactor.http_produce (400, CONNECTION_CLOSE)
@@ -274,19 +258,9 @@ class Dispatcher (
                         method.upper (), url, version.upper ()
                         ) # be liberal in what is accepted, strict to produce
                 reactor.dispatcher = self
-                # save and parse the collected headers
-                self.collector_lines.pop (0)
-                reactor.collector_lines = self.collector_lines
-                reactor.collector_headers = mime_headers.map (
-                        self.collector_lines
-                        )
-                self.collector_lines = None
-                # Split the URI parts if any ...
-                m = HTTP_URI_RE.match (url)
-                if m:
-                        reactor.http_uri = m.groups ()
-                else:
-                        reactor.http_uri = ('', '', url, '', '')
+                # save and parse the collected lines and headers
+                reactor.collector_lines = lines
+                reactor.collector_headers = mime_headers.map (lines)
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
                 if self.async_server.http_continue (reactor):
@@ -308,11 +282,14 @@ class Dispatcher (
                                         500, CONNECTION_CLOSE
                                         )
                         
-                else:
-                        self.http_collector_continue (reactor.collector_body)
-                return self.closing
+                        return self.closing
                         
-        http_collector_continue = http_reactor.http_collector_continue
+                http_reactor.http_collector (
+                        self,
+                        reactor.collector_body,
+                        reactor.collector_headers
+                        )
+                return self.closing
         
         def collector_finalize (self):
                 # reset the channel state to collect the next request,
@@ -337,3 +314,4 @@ class Dispatcher (
                                         '%d' % self.collector_depth,
                                         'collector-leak'
                                         )
+                        self.collector_body = None

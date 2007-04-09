@@ -16,7 +16,7 @@
 
 ""
 
-from allegra import collector
+from allegra import collector, loginfo
 
 
 # Simple transfert-encoding and content-encoding Producers
@@ -71,7 +71,7 @@ class Chunk_collector (object):
                 "insert a chunked collector between two MIME collectors"
                 self.chunk_collector = collector
                 self.set_terminator = set_terminator
-                self.mime_collector_headers = headers or {}
+                self.collector_headers = headers or {}
                 self.collect_incoming_data = self.chunk_collect_size
                 self.chunk_size = ''
                 self.chunk_trailers = None
@@ -111,8 +111,8 @@ class Chunk_collector (object):
                                 return False # continue ...
                         
                         elif self.chunk_trailers:
-                                self.mime_collector_headers.update (
-                                        mime_headers_map (self.chunk_trailers)
+                                self.collector_headers.update (
+                                        headers_map (self.chunk_trailers)
                                         )
                 elif self.chunk_size != '':
                         # end of chunk size, collect the chunk with the
@@ -139,29 +139,23 @@ class Chunk_collector (object):
                 return True # final!                
 
 
-def http_collector_continue (dispatcher, collected):
+def http_collector (dispatcher, collected, headers):
         # decide wether and wich collector wrappers are needed
         if not collected.collector_is_simple:
                 collected = collector.simple (collected)
-        if dispatcher.mime_collector_headers.get (
+        if headers.get (
                 'transfer-encoding', ''
                 ).lower () == 'chunked':
-                # HTTP/1.1 mostly
-                dispatcher.mime_collector_body = Chunk_collector (
-                        collected,
-                        dispatcher.set_terminator,
-                        dispatcher.mime_collector_headers
+                dispatcher.collector_body = Chunk_collector (
+                        collected, dispatcher.set_terminator, headers
                         )
         else:
-                # HTTP/1.0 mostly
-                content_length = dispatcher.mime_collector_headers.get (
-                        'content-length'
-                        )
+                content_length = headers.get ('content-length')
                 if content_length:
                         dispatcher.set_terminator (int (content_length))
                 else:
                         dispatcher.set_terminator (None)
-                dispatcher.mime_collector_body = collected
+                dispatcher.collector_body = collected
 
 # TODO: charset and compression decoding.
 #

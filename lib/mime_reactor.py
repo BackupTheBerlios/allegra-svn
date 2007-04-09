@@ -17,8 +17,8 @@
 ""
 
 from allegra import (
-	finalization, async_chat, collector, producer, reactor, async_client, 
-        mime_headers
+	finalization, loginfo, async_chat, collector, producer, reactor, 
+        async_client, mime_headers
         )
 
 _no_more = (lambda: '')
@@ -67,21 +67,26 @@ class MIME_collector (object):
                 else:
                         self.collector_body.collect_incoming_data (data)
 
+        @loginfo.debug
         def found_terminator (self):
                 if self.collector_body == None:
                         # MIME headers collected, clear the buffer, split the
                         # headers and continue ...
-                        self.collector_lines = mime_headers.split (
-                                self.collector_buffer
+                        return self.collector_continue (
+                                mime_headers.split (self.collector_buffer)
                                 )
-                        self.collector_buffer = ''
-                        return self.collector_continue ()
                         
                 elif self.collector_body.found_terminator ():
                         # if the MIME body final terminator is reached,
                         # finalize it and reset the state of the collector
                         # self.collector_buffer = '' # ?
                         return self.collector_finalize ()
+                
+        def collector_continue (self, lines):
+                self.collector_buffer = None
+        
+        def collector_finalize (self):
+                self.collector_body = None
 
 
 class Escaping_producer (object):
@@ -297,24 +302,22 @@ class Pipeline (
                 self.pipeline_close ()
                 async_chat.Dispatcher.close (self)
                 
-        def collector_continue (self):
+        def collector_continue (self, lines):
+                self.collector_buffer = ''
                 self.pipelined_responses += 1
                 if self.pipeline_responses:
                         assert None == self.log (''.join ((
                                 self.pipeline_responses[0][0],
-                                '\r\n'.join (self.collector_lines)
+                                '\r\n'.join (lines)
                                 )), 'debug')
-                        if not self.pipeline_responses.popleft (
-                                )[1] (self.collector_lines):
+                        if not self.pipeline_responses.popleft ()[1] (lines):
                                 self.collector_finalize ()
                 else:
-                        assert None == self.log (
-                                self.collector_lines[0], 'unexpected'
-                                )
+                        assert None == self.log (lines[0], 'unexpected')
                 return self.closing
                 
         def collector_finalize (self):
-                self.collector_lines = self.collector_body = None
+                self.collector_body = None
                 if self.pipeline_requests:
                         self.pipeline_wake_up ()
                 if self.pipeline_responses:

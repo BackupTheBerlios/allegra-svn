@@ -16,18 +16,18 @@
 
 "Practical REST objects"
 
-import imp, weakref, time, random, os, stat, socket, glob, mimetypes
+import imp, weakref, time, random, os, stat, socket, glob, re, mimetypes
 
 try:
         from hashlib import sha1
 except:
         from sha import new as sha1
 
-random.seed ()
 
 def password (
         charset=[i for i in xrange (ord ('0'), ord ('z'))], length=10
         ):
+        random.seed ()
         return ''.join ((chr(o) for o in random.sample (charset, length)))
                 
 
@@ -45,7 +45,7 @@ def urlform_decode (formencoded):
                 elif param:
                         query_strings[unicode (
                                 urldecode (param), 'UTF-8'
-                                )] = True
+                                )] = None
         return query_strings
 
 try:
@@ -66,6 +66,49 @@ from allegra import (
         )
         
         
+def rest_cache (filename, cache):
+        subject = unicode (os.path.basename (filename), 'UTF-8')
+        try:
+                metadata = os.stat (filename)
+        except:
+                metadata = None
+        if metadata == None or not stat.S_ISREG (metadata[0]):
+                return subject, None
+
+        headers = [
+                ('Last-Modified', (
+                        time.asctime (time.gmtime (metadata[7])) + 
+                        (' %d' % time.timezone)
+                        )),
+                ('Content-length', '%d' % metadata[1])
+                ]
+        ct, ce = mimetypes.guess_type (filename)
+        if ce:
+                headers.append ((
+                        'Content-Type', 
+                        '%s; charset=%s' % (ct or 'text/plain', ce)
+                        ))
+        else:
+                headers.append ((
+                        'Content-Type', ct or 'application/octet-stream'
+                        ))
+        teed = producer.Simple (open (filename, 'rb').read ())
+        teed.mime_headers = headers
+        cache[subject] = teed
+        return subject, teed
+
+if __debug__:
+        def _rest_weak (fun):
+                def decorated (filename, cache):
+                        subject, teed  = fun (filename, cache)
+                        if teed != None:
+                                cache[subject] = weakref.ref (teed)
+                        return subject, teed
+                        
+                return decorated
+
+        rest_cache = _rest_weak (rest_cache)
+
 IRTD2_ERRORS = (
         '0 IRTD2 ok', # 0, no errors
         '1 No IRTD2 cookie', # 1
@@ -119,43 +162,88 @@ def irtd2_authorize (reactor, about, irtd2):
         reactor.irtd2 = irtd2
 
 
-def rest_cache (filename, cache):
-        try:
-                metadata = os.stat (filename)
-        except:
-                metadata = None
-        if metadata == None or not stat.S_ISREG (metadata[0]):
-                return
+def http_head (control, reactor, about):
+        return control.http_resource (reactor, about, 'HEAD')
 
-        subject = unicode (os.path.basename (filename), 'UTF-8')
-        headers = [
-                ('Last-Modified', (
-                        time.asctime (time.gmtime (metadata[7])) + 
-                        (' %d' % time.timezone)
-                        )),
-                ('Content-length', '%d' % metadata[1])
-                ]
-        ct, ce = mimetypes.guess_type (filename)
-        if ce:
-                headers.append ((
-                        'Content-Type', 
-                        '%s; charset=%s' % (ct or 'text/plain', ce)
-                        ))
-        else:
-                headers.append ((
-                        'Content-Type', ct or 'application/octet-stream'
-                        ))
-        teed = producer.Simple (open (filename, 'rb').read ())
-        teed.mime_headers = headers
-        cache[subject] = teed
+
+def http_get (control, reactor, about):
+        "default continuation for GET: dispatch resource and calls"
+        querystring = reactor.http_uri[3]
+        if querystring == None:
+                return control.http_resource (reactor, about, 'GET')
+
+        return control.json_application (
+                reactor, about, urlform_decode (querystring)
+                ) # Web 1.0 & 2.0
+
+def http_post (control, reactor, about, overrideMIME='application/json'):
+        "default continuation for POST: handle JSON and URL encoded form"
+        ct = reactor.collector_headers.get (
+                'content-type', overrideMIME
+                ).split (';', 1)[0]
+        if reactor.collector_body == None:
+                if ct in (
+                        'application/json',
+                        'www-application/urlencoded-form-data'
+                        ):
+                        reactor.collector_body = control.http_collector ()
+                        return False # Web 1.0 & 2.0
+                
+                return control.http_continue (reactor, about)
+                
+        if ct == 'application/json':
+                return control.json_application (
+                        reactor, about, json_decode (
+                                reactor.collector_body.data
+                                )
+                        ) # Web 2.0
+                        
+        elif ct == 'www-application/urlencoded-form-data':
+                return control.json_application (
+                        reactor, about, urlform_decode (
+                                reactor.collector_body.data
+                                )
+                        ) # Web 1.0
+                        
+        return reactor.http_produce (500) # Server Error
+
+
+def http_continue (controller, reactor, about):
+        "reply with 405 Not Implemented and close the connection when done"
+        return reactor.http_produce (405, http_server.CONNECTION_CLOSE)
 
 
 def http_404_close (reactor, about):
-        reactor.http_produce (404, http_server.CONNECTION_CLOSE)
-        
-def http_302_redirect (reactor, uri): 
-        reactor.http_produce (302, (('Location', uri,)))
-        # redirect with a 302 response, log same referer as an error.
+        "reply with 404 Not Found and close the connection when done"
+        return reactor.http_produce (404, http_server.CONNECTION_CLOSE)
+
+
+def rest_302_redirect (reactor, about):
+        "redirect to the request context's url"
+        uri = reactor.http_uri[:2]
+        uri.append ('/')
+        uri.append ('/'.join ((n.encode ('UTF-8') for n in about[1:])))
+        return reactor.http_produce (302, (('Location', ''.join (uri)),))
+
+
+CONTENT_TYPE_XML = (('Content-Type', 'text/xml; charset=UTF-8'),)
+
+def xml_200_ok (reactor, dom, content_type='text/xml'): 
+        "Reply with 200 Ok and an XML body encoded in UTF-8."
+        #accept_charsets = mime_headers.preferences (
+        #        reactor.collector_headers, 'accept-charset', 'ASCII'
+        #        )
+        #if 'utf-8' in accept_charsets:
+        #        encoding = 'UTF-8' # prefer UTF-8 over any other encoding!
+        #else:
+        #        encoding = accept_charsets[-1].upper ()
+        return reactor.http_produce (
+                200, 
+                (('Content-Type', content_type + '; charset=UTF-8'),), 
+                xml_reactor.xml_producer_unicode (
+                        dom.xml_root, dom.xml_prefixes, dom.xml_pi, 'UTF-8'
+                        )
+                )
 
 
 if __debug__:
@@ -167,101 +255,30 @@ else:
                 'Content-Type', 'application/json; charset=UTF-8'
                 ),)
                 
-
 def json_200_ok (reactor, value):
         "Reply with 200 Ok and a JSON body, prevent peer to cache it."
-        reactor.http_produce (
+        return reactor.http_produce (
                 200, 
                 CONTENT_TYPE_JSON, 
                 producer.Simple (json_encode (value))
                 )
 
 
-CONTENT_TYPE_XML = (('Content-Type', 'text/xml; charset=UTF-8'),)
-
-def xml_200_ok (reactor, dom, content_type='text/xml'): 
-        "Reply with 200 Ok and an XML body, allow peer to cache it."
-        accept_charsets = mime_headers.preferences (
-                reactor.collector_headers, 'accept-charset', 'ASCII'
-                )
-        if 'utf-8' in accept_charsets:
-                encoding = 'UTF-8' # prefer UTF-8 over any other encoding!
-        else:
-                encoding = accept_charsets[-1].upper ()
-        reactor.http_produce (
-                200, 
-                (('Content-Type', ';'.join ((
-                        content_type, ('charset=%s' % encoding)
-                        ))),),
-                xml_reactor.xml_producer_unicode (
-                        dom.xml_root, dom.xml_prefixes, dom.xml_pi, 
-                        encoding
-                        )
-                )
-
-
-def http_head (control, reactor, about):
-        return control.http_resource (reactor, about, 'HEAD')
-
-
-def http_get (control, reactor, about):
-        querystring = reactor.http_uri[3]
-        if querystring == None:
-                return control.http_resource (reactor, about, 'GET')
-
-        return control.json_application (
-                reactor, about, urlform_decode (querystring)
-                )
-
-
-def http_post (control, reactor, about):
-        ct = reactor.collector_headers.get ('content-type')
-        if reactor.collector_body == None:
-                if ct in (
-                        'application/json',
-                        'www-application/urlencoded-form-data'
-                        ):
-                        reactor.collector_body = collector.Limited (
-                                control.http_post_limit
-                                )
-                        return False
-                
-                return reactor.http_continue (reactor, about)
-                
-        elif ct == 'application/json':
-                return control.json_application (
-                        reactor, about,
-                        json_decode (reactor.collector_body.data)
-                        )
-                        
-        elif ct == 'www-application/urlencoded-form-data':
-                return control.json_application (
-                        reactor, about,
-                        urlform_decode (reactor.collector_body.data)
-                        )
-                        
-        return reactor.http_produce (500) # Server Error
-
-
-def http_continue (controller, reactor, about):
-        return reactor.http_produce (405) # Method Not Allowed
-
 
 class Control (
         xml_dom.Document, loginfo.Loginfo, finalization.Finalization
         ):
 
-        HTTP = {'HEAD': http_head, 'GET': http_get, 'POST': http_post}
-        
-        http_post_limit = 16384 # sweet sixteen 8-bit kilobytes ;-)
-        
-        irtd2_timeout = 1<<32 # practically never by default
-
-        rest_cache = {}
-        
         xml_prefixes = {}
         xml_pi = {}
         
+        HTTP = {'HEAD': http_head, 'GET': http_get, 'POST': http_post}
+        
+        irtd2_timeout = 1<<32 # practically never by default
+        
+        rest_cache = {}
+        rest_redirect = u"index.html"
+
         JSONR = None
         
         def __init__ (self, peer, about):
@@ -272,19 +289,36 @@ class Control (
                                 u"subject": about[-1],
                                 }
                         )
+                self.json = {}
                 self.rest_path = '/'.join ((
                         peer.presto_path, (u"/".join (
                                 about[1:]
                                 )).encode ('UTF-8')
                         ))
-                for filename in glob.glob('%s/*' % self.rest_path):
-                        try:
-                                rest_cache (filename, self.rest_cache)
-                        except:
-                                self.loginfo_traceback ()
-                        else:
-                                self.log (filename, 'cached')
-                self.json = {}
+                if __debug__:
+                        null = (lambda: None)
+                        def rest_cache_get (name):
+                                teed = self.rest_cache.get (name, null) ()
+                                if not teed:
+                                        subject, teed = rest_cache (
+                                                '/'.join ((
+                                                        self.rest_path,
+                                                        name.encode ('UTF-8')
+                                                        )), 
+                                                self.rest_cache
+                                                )
+                                return teed
+                        
+                        self.rest_cache_get = rest_cache_get
+                else:
+                        for filename in glob.glob('%s/*' % self.rest_path):
+                                try:
+                                        rest_cache (filename, self.rest_cache)
+                                except:
+                                        self.loginfo_traceback ()
+                                else:
+                                        self.log (filename, 'cached')
+                        self.rest_cache_get = self.rest_cache.get
                                         
         def __call__ (self, reactor, about):
                 if (hasattr (reactor, 'irtd2') or irtd2_identified (
@@ -299,8 +333,14 @@ class Control (
         def http_resource (self, reactor, about, method):
                 u"produce a static MIME response or an dynamic XML string."
                 if len (reactor.uri_about) == 3:
-                        # subject/file
-                        teed = self.rest_cache.get (reactor.uri_about[2])
+                        if reactor.uri_about[-1] == u"":
+                                # context/subject/ -> 302 context/subject
+                                about = list (reactor.uri_about)
+                                about[-1] = self.rest_redirect
+                                return rest_302_redirect (reactor, about)
+                        
+                        # context/subject/predicate -> 200 Ok | 404 Not Found
+                        teed = self.rest_cache_get (reactor.uri_about[2])
                         if teed:
                                 if method == 'GET':
                                         return reactor.http_produce (
@@ -314,15 +354,21 @@ class Control (
                                                 200, teed.mime_headers
                                                 )
                                 
-                        return reactor.http_produce (404) # Not Found
+                        return rest_302_redirect (reactor, about)
                                         
-                # context/folder
+                # context/subject -> 200 Ok XML
                 if method == 'GET':
-                        return xml_200_ok (reactor, self)
+                        return xml_200_ok (reactor, self) # what else?
                 
                 elif method == 'HEAD':
                         return reactor.http_produce (200, CONTENT_TYPE_XML)
+                        #
+                        # if you care to ask for HEAD, expect to accept UTF-8
         
+        def http_collector (self):
+                return collector.Limited (16384)
+                # sweet sixteen 8-bit kilobytes ;-)
+                
         def json_application (self, reactor, about, json):
                 u"return the JSON state as one string"
                 self.json.update (json)
@@ -334,8 +380,18 @@ class Control (
                         password (), '', '%d' % time.time (), '',
                         self.irtd2_salts[0]
                         ])
-                return self (reactor, about)
+                return self (reactor, about) # recurse through __call__ ...
 
+        def http_continue (self, reactor, about):
+                "405 Method Not Allowed"
+                return reactor.http_produce (
+                        405, http_server.CONNECTION_CLOSE
+                        )
+
+
+HTTP_URI = re.compile (
+        '(?:([^:]+://)([^/]+))?(/(?:[^?#]+)?)(?:[?]([^#]+)?)?(#.+)?'
+        )
 
 class Listen (async_server.Listen):
 
@@ -406,14 +462,25 @@ class Listen (async_server.Listen):
                 del self.presto_modules[filename]
                 return controllers
         
+        @loginfo.debug
         def http_continue (self, reactor):
-                uri = reactor.http_uri[2].split ('/', 2)
-                uri[0] = reactor.collector_headers.get (
-                        'host', reactor.http_uri[1] or ''
-                        )
+                uri = reactor.http_request[1]
+                try:
+                        uri = list (HTTP_URI.match (uri).groups ())
+                except:
+                        uri = ['http://', reactor.collector_headers.get (
+                                'host', self.presto_path
+                                ), uri, '', '']
+                else:
+                        uri[0] = uri[0] or 'http://'
+                        uri[1] = uri[1] or reactor.collector_headers.get (
+                                'host', self.presto_path
+                                )
+                reactor.http_uri = uri
+                about = uri[2].split ('/', 2)
+                about[0] = uri[1]
                 about = reactor.uri_about = tuple ((
-                        unicode (urldecode (token), 'UTF-8')
-                        for token in uri
+                        unicode (urldecode (n), 'UTF-8') for n in about
                         ))
                 try:
                         # context, subject and maybe predicate 
@@ -439,25 +506,47 @@ class Listen (async_server.Listen):
                 loginfo.log (str (netstring.encode ((
                         ' '.join (reactor.http_request),
                         '%d' % reactor.http_response,
-                        '/'.join (uri)
+                        ''.join (uri[:3])
                         ))), 'presto')
                 return stalled
         
 """
-Flat is better than nested
+What PRESTo provides over Allegra's bare http_server API is one obvious way
+to do Web 2.0 applications right, as simply as practically possible.
+        
+With three request methods:
+        
+    HEAD, GET and POST
 
-http://host/resource
-http://host/function?...
-http://host/control/resource
-http://host/control/function?...
+Only two responses:
+        
+    200 Ok ... transfer a state/resources
+    302 Redirect ... transfer *to* a state/resource
+
+No other errors than the client's protocol failure (400, 401, 404, 405) or
+the controllers unhandled exceptions (500).
+
+And, last but not least, triple for resource locators:
+        
+    http://context/subject/predicate
+
+Because flat is better than nested ;-)
+
+    http://host/control
+    http://host/control?...
+    http://host/control/
+    http://host/control/?...
+    http://host/control/resource
+    http://host/control/application?...
 
 root/
         127.0.0.2/
                 resource
-                function?...
+                application?...
                 control/
+                        ?...
                         resource
-                        function?...
+                        application?...
 
 A controller "control" access to resources, static and dynamic. 
 

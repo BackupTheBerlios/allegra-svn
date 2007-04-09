@@ -217,7 +217,16 @@ def toggle (logging=None, Class=Loginfo):
 	elif logging == False and Class.log == Class.loginfo_log:
 		Class.log = Class.loginfo_null
 	return logging
-        
+
+
+def debug (fun):
+        if not __debug__:
+                return fun
+
+        def debugged (*args, **kwargs):
+                log ('args = %r, kwargs = %r' % (args, kwargs), fun.__name__)
+                fun (*args, **kwargs)
+        return debugged
 
 # SYNOPSIS
 #

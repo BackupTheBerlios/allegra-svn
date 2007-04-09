@@ -160,17 +160,19 @@ class Pipeline (
 			return True
 
                 self.http_version = http_version[-3:]
-		request.collector_headers = \
-			self.collector_headers = \
-			mime_headers.map (self.collector_lines)
+		request.collector_headers = mime_headers.map (
+                        self.collector_lines
+                        )
 		if (
 			request.http_method == 'HEAD' or
 			request.http_response[:3] in ('204', '304', '305')
 			):
                         self.collector_finalize ()
                 else:
-		        self.http_collector_continue (
-                                request.collector_body
+		        http_reactor.http_collect (
+                                self,
+                                request.collector_body,
+                                request.collector_headers
                                 )
                 return self.closing # stall the collector if closing
 		
