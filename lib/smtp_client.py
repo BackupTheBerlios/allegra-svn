@@ -80,7 +80,7 @@ SMTP_RESPONSE_CLOSE = frozenset ((
 
 class Reactor (finalization.Finalization):
 
-        def __init__ (self, mail_from, rcpt_to, body, headers):
+        def __init__ (self, mail_from, rcpt_to, body, headers=None):
                 self.smtp_when = time.time ()
                 self.smtp_mail_from = mail_from
                 self.smtp_rcpt_to = rcpt_to[:]
@@ -115,6 +115,11 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
 
         def __repr__ (self):
                 return 'smtp-client-pipeline id="%x"' % id (self)
+        
+        def __call__ (self, *args, **kwargs):
+                req = Reactor (*args, **kwargs)
+                self.pipeline_requests.append (req)
+                return req
 
         def handle_connect (self): 
                 pass
@@ -228,14 +233,12 @@ def mailto (mail_from, rcpt_to, body, headers=None, continuation=None):
                         address.split ('@', 1)[1], []
                         ).append (address)
         if len (domains) == 1:
-                req = Reactor (mail_from, rcpt_to, body, headers)
-                req.finalization = continuation
-                connect (domains.keys ()[0]).pipeline_requests.append (req)
+                connect (domains.keys ()[0]) (
+                        mail_from, rcpt_to, body, headers
+                        ).finalization = continuation
                 return
         
         for domain, rcpt_to in domains.items ():
-                req = Reactor (
+                connect (domain) (
                         mail_from, rcpt_to, producer.Tee (body), headers
-                        )
-                req.finalization = continuation
-                connect (domain).pipeline_requests.append (req)
+                        ).finalization = continuation
