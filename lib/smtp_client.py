@@ -30,9 +30,6 @@ HOSTNAME = socket.gethostname ()
 SMTP_RESPONSE_INFO = frozenset ((
         '211', #System status, or system help reply'
         '214', #Help message
-               #[Information on how to use the receiver or the meaning of a
-               #particular non-standard command; this reply is useful only
-               #to the human user]
         ))
         #
         # not used
@@ -81,14 +78,12 @@ SMTP_RESPONSE_CLOSE = frozenset ((
         # close this unreliable pipeline.
 
 
-class Request (finalization.Finalization):
+class Reactor (finalization.Finalization):
 
-        smtp_recipient = 0
-
-        def __init__ (self, mail_from, rcpt_to, body, headers={}):
+        def __init__ (self, mail_from, rcpt_to, body, headers):
                 self.smtp_when = time.time ()
                 self.smtp_mail_from = mail_from
-                self.smtp_rcpt_to = rcpt_to
+                self.smtp_rcpt_to = rcpt_to[:]
                 self.producer_body = body
                 self.producer_headers = {
                         'Message-id': '<%f.%d@%s>' % (
@@ -101,12 +96,12 @@ class Request (finalization.Finalization):
                         'From': mail_from,
                         'To': ', '.join (rcpt_to)
                         }
-                self.producer_headers.update (headers)
+                if headers: self.producer_headers.update (headers)
                 self.smtp_responses = []
 
 
 class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
-
+        
         # This SMTP client waits for 220 to wake up the pipeline, then uses 
         # the RSET command after each request is completed, in effect leaving
         # up to the SMTP server to "pull" reactors from the client's requests 
@@ -121,28 +116,36 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
         def __repr__ (self):
                 return 'smtp-client-pipeline id="%x"' % id (self)
 
-        def handle_connect (self):
-                assert None == self.log ('connected', 'info')
+        def handle_connect (self): 
+                pass
+                
+        def handle_close (self): 
+                self.close ()
                 
         def collect_incoming_data (self, data):
                 self.smtp_response += data
 
         def found_terminator (self):
-                assert None == self.log (self.smtp_response, 'debug')
+                if self.smtp_response[3] == '-':
+                        # rest of a multi-line response, drop it!
+                        self.smtp_response = ''
+                        return
+                
                 response = self.smtp_response[:3]
+                self.smtp_response = ''
                 if not response in SMTP_RESPONSE_CONTINUE:
                         if response in SMTP_RESPONSE_CLOSE:
                                 self.handle_close ()
+                                return True
+                        
                         elif response in SMTP_RESPONSE_ABORT:
                                 self.pipeline_responses.popleft ()
                         return
                         
-                if self.smtp_response[3] == '-':
-                        # multi-line response, drop
-                        self.smtp_response = ''
+                if response == '220':
+                        self.output_fifo.append ('HELO %s\r\n' % HOSTNAME)
                         return
-                        
-                self.smtp_response = ''
+                
                 if not self.pipeline_responses:
                         # no response expected. if there is a pending reactor,
                         # pipelined pop it from the requests queue, send MAIL 
@@ -151,29 +154,25 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                         #
                         if self.pipeline_requests:
                                 reactor = self.pipeline_requests.popleft ()
-                                self.push (
+                                self.output_fifo.append (
                                         'MAIL FROM: <%s>\r\n'
                                         '' % reactor.smtp_mail_from
                                         )
                                 reactor.smtp_recipient = 0
                                 self.pipeline_responses.append (reactor)
-                        elif self.pipeline_keep_alive:
-                                self.pipeline_sleeping = True
-                        else:
+                        elif not self.pipeline_keep_alive:
                                 self.output_fifo.append ('QUIT\r\n')
+                                self.output_fifo.append (None)
                         return
                 
                 # response expected ...
                 reactor = self.pipeline_responses[0]
-                if reactor.smtp_recipient < len (reactor.smtp_rctp_to):
+                if reactor.smtp_rcpt_to:
                         # RCPT TO command for next recipient
                         self.output_fifo.append (
                                 'RCPT TO: <%s>\r\n'
-                                '' % reactor.smtp_rcpt_to[
-                                        reactor.smtp_recipient
-                                        ]
+                                '' % reactor.smtp_rcpt_to.pop (0)
                                 )
-                        reactor.smtp_recipient += 1
                 elif reactor.smtp_responses[-1] != '354':
                         # send DATA command or mail input
                         if response == '354':
@@ -188,7 +187,7 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                                 push ('\r\n.\r\n')
                                 self.handle_write ()
                         else:
-                                self.push ('DATA\r\n')
+                                self.output_fifo.append ('DATA\r\n')
                 else:
                         # reactor completed, 
                         self.pipeline_responses.popleft ()
@@ -199,44 +198,44 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 self.output_fifo.append ('NOOP\r\n')
         
         
-def connect (dispatcher, domain, order=1):
-        # and here is another form ... what a bounty
+def connect (domain):
+        dispatcher = Pipeline ()
         def resolve (request):
-                dispatcher.mx_records = request.dns_resources
-                if tcp_client.connect (
-                        dispatcher, (request.dns_resources[0])
-                        ):
-                        if order == len (dispatcher.mx_records[order]):
-                                return # last finalization, do not retry
-                        
-                dispatcher.finalization = connect_next
-        
+                if not request.dns_resources:
+                        return 
+                
+                dispatcher.mx_records = request.dns_resources[:] # copy!
+                tcp_client.connect (
+                        dispatcher, (dispatcher.mx_records.pop (0), 25)
+                        )
+                                                
         dns_client.lookup ((domain, 'MX'), resolve)
+        return dispatcher
   
 
-def connect_next (dispatcher, order=0):
-        # that's a very nice asynchronous continuation :-)
-        order += 1
+def try_next_mx (dispatcher):
         if not (dispatcher.connected or dispatcher.closing):
                 if tcp_client.connect (
-                        dispatcher, (dispatcher.mx_records[order], 25)
+                        dispatcher, (dispatcher.mx_records.pop (0), 25)
                         ):
-                        if order == len (dispatcher.mx_records[order]):
-                                return # last finalization, do not retry
+                        dispatcher.finalization = try_next_mx (d)
                         
-        return (lambda d: connect_next (d, order))
+
+def mailto (mail_from, rcpt_to, body, headers=None, continuation=None):
+        domains = {}
+        for address in rcpt_to:
+                domains.setdefault (
+                        address.split ('@', 1)[1], []
+                        ).append (address)
+        if len (domains) == 1:
+                req = Reactor (mail_from, rcpt_to, body, headers)
+                req.finalization = continuation
+                connect (domains.keys ()[0]).pipeline_requests.append (req)
+                return
         
-              
-      
-# Note About This Implementation
-#
-# sendmail = smpt_client.Cache ()
-# sendmail ('192.168.1.1').mailto (mail_from, rcpt_to, body)
-# sendmail ('domain.name').mailto (mail_from, rcpt_to, body)
-# sendmail.mailto (mail_from, rcpt_to, body)
-#
-# Most peers won't use a simpler connection manager or SMTP pool, what
-# matters most is the ability to send e-mails without a local relay.
-#
-# Also, as you noticed, the body is the ideal place to add a finalization,
-# possibly decorate one ... before
+        for domain, rcpt_to in domains.items ():
+                req = Reactor (
+                        mail_from, rcpt_to, producer.Tee (body), headers
+                        )
+                req.finalization = continuation
+                connect (domain).pipeline_requests.append (req)

@@ -16,8 +16,6 @@
 
 "http://laurentszyster.be/blog/pop_client/"
 
-import socket
-
 from allegra import collector, tcp_client, mime_reactor
 
 

@@ -462,7 +462,6 @@ class Listen (async_server.Listen):
                 del self.presto_modules[filename]
                 return controllers
         
-        @loginfo.debug
         def http_continue (self, reactor):
                 uri = reactor.http_request[1]
                 try:
@@ -503,11 +502,15 @@ class Listen (async_server.Listen):
                         self.loginfo_traceback ()
                         reactor.http_produce (500)
                         stalled = False
+                try:
+                        digest = reactor.irtd2[4]
+                except:
+                        digest = '%x' % id (reactor)
                 loginfo.log (str (netstring.encode ((
                         ' '.join (reactor.http_request),
-                        '%d' % reactor.http_response,
-                        ''.join (uri[:3])
-                        ))), 'presto')
+                        ''.join (uri[:3]),
+                        digest
+                        ))), '%d' % reactor.http_response)
                 return stalled
         
 """
