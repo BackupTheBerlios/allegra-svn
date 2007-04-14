@@ -16,7 +16,7 @@
 
 "http://laurentszyster.be/blog/pop_client/"
 
-from allegra import collector, tcp_client, mime_reactor
+from allegra import loginfo, collector, tcp_client, mime_reactor
 
 
 class Pipeline (mime_reactor.Pipeline):
@@ -84,8 +84,8 @@ class Pipeline (mime_reactor.Pipeline):
                         'USER %s\r\n' % username, _USER, '\r\n'
                         ))
                         
-        def pop_retr (self, Collect):
-                def _RETR (response):
+        def pop_retr_or_top (self, Collect):
+                def _RETR_OR_TOP (response):
                         if response[0].startswith ('+OK'):
                                 collect = Collect ()
                                 if not collect.collector_is_simple:
@@ -97,22 +97,33 @@ class Pipeline (mime_reactor.Pipeline):
                                 self.set_terminator ('\r\n.\r\n')
                                 return True
         
-                return _RETR
+                return _RETR_OR_TOP
         
-        def pop_retr_one (self, order, Collect):
+        def pop_retr (self, order, Collect):
                 self.pipeline_requests.append ((
-                        'RETR %s\r\n' % order, self.pop_retr (Collect), '\r\n'
+                        'RETR %s\r\n' % order, 
+                        self.pop_retr_or_top (Collect), '\r\n'
                         ))
         
-        
+        def pop_top (self, order, Collect):
+                self.pipeline_requests.append ((
+                        'TOP %s\r\n' % order, 
+                        self.pop_retr_or_top (Collect), '\r\n'
+                        ))
+                
         def pop_retr_many (self, messages, Collect):
-                _RETR = self.pop_retr (Collect)
+                _RETR = self.pop_retr_or_top (Collect)
                 self.pipeline_requests.extend (((
                         'RETR %s\r\n' % order, _RETR, '\r\n'
                         ) for order in messages))
         
+        def pop_top_many (self, messages, Collect):
+                _TOP = self.pop_retr_or_top (Collect)
+                self.pipeline_requests.extend (((
+                        'TOP %s\r\n' % order, _TOP, '\r\n'
+                        ) for order in messages))
         
-        def pop_list_and_retr (dispatcher, Collect):
+        def pop_list_and_retr (self, Collect):
                 "pipeline a LIST command, RETR all listed on success"
                 def _LIST (response):
                         if response[0].startswith ('+OK'):
@@ -121,7 +132,20 @@ class Pipeline (mime_reactor.Pipeline):
                                         for line in response[1:]
                                         ), Collect)
         
-                dispatcher.pipeline_requests.append ((
+                self.pipeline_requests.append ((
+                        'LIST\r\n', _LIST, '\r\n.\r\n'
+                        ))
+        
+        def pop_list_and_top (self, Collect):
+                "pipeline a LIST command, TOP all listed on success"
+                def _LIST (response):
+                        if response[0].startswith ('+OK'):
+                                self.pop_top_many ((
+                                        line.split (' ', 1)[0] 
+                                        for line in response[1:]
+                                        ), Collect)
+        
+                self.pipeline_requests.append ((
                         'LIST\r\n', _LIST, '\r\n.\r\n'
                         ))
         
@@ -133,7 +157,22 @@ class Pipeline (mime_reactor.Pipeline):
                                         order for order, uid in (
                                                 line.split (' ', 1) 
                                                 for line in response[1:]
-                                                ) if not (uid in uids)
+                                                ) if not uids.has_key (uid)
+                                        ), Collect)
+        
+                self.pipeline_requests.append ((
+                        'UIDL\r\n', _UIDL, '\r\n.\r\n'
+                        ))
+                        
+        def pop_uidl_and_top (self, uids, Collect):
+                "pipeline a UIDL command, TOP all listed on success"
+                def _UIDL (response):
+                        if response[0].startswith ('+OK'):
+                                self.pop_top_many ((
+                                        order for order, uid in (
+                                                line.split (' ', 1) 
+                                                for line in response[1:]
+                                                ) if not uids.has_key (uid)
                                         ), Collect)
         
                 self.pipeline_requests.append ((
@@ -148,20 +187,36 @@ class Pipeline (mime_reactor.Pipeline):
                                 
 any_capabilities = (lambda r: False)                     
 
-class Mailbox (object):
+class Mailbox (loginfo.Loginfo):
+        
+        pipeline = None
         
         def __init__ (
                 authorized, username, password, host, port=110, timeout=3.0
                 ):
-                dispatcher = Pipeline ()
-                if tcp_client.connect (dispatcher, (host, port), timeout):
-                        dispatcher.pop_capable (any_capabilities)
-                        dispatcher.pop_authorize (
-                            username, password, authorized
-                            )
-                        self.pipeline = dispatcher
-        
+                pipeline = Pipeline ()
+                if not tcp_client.connect (pipeline, (host, port), timeout):
+                        return
                 
+                self.pipeline = pipeline
+                self.pop_uidl = {} # {'uid': N, ...}
+                self.pop_list = [] # [top]
+                self.pop_update ()
+                pipeline.pop_capable (any_capabilities)
+                pipeline.pop_authorize (
+                        username, password, self.pop3_update
+                        )
+        
+        def pop_update (self):
+                self.pipeline.pop_uidl_and_retr (
+                        self.pop_uidl, (lambda: self)
+                        )
+                        
+        def collect_incoming_data (self, data):
+                pass
+        
+        def found_terminator (self):
+                pass
 
 # Note about this implementation
 #
