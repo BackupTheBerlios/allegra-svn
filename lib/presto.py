@@ -66,7 +66,7 @@ from allegra import (
         )
         
         
-def rest_cache (filename, cache):
+def mime_cache (filename, cache):
         subject = unicode (os.path.basename (filename), 'UTF-8')
         try:
                 metadata = os.stat (filename)
@@ -98,7 +98,7 @@ def rest_cache (filename, cache):
         return subject, teed
 
 if __debug__:
-        def _rest_weak (fun):
+        def mime_cache_weak (fun):
                 def decorated (filename, cache):
                         subject, teed  = fun (filename, cache)
                         if teed != None:
@@ -107,7 +107,7 @@ if __debug__:
                         
                 return decorated
 
-        rest_cache = _rest_weak (rest_cache)
+        mime_cache = mime_cache_weak (mime_cache)
 
 IRTD2_ERRORS = (
         '0 IRTD2 ok', # 0, no errors
@@ -218,13 +218,14 @@ def http_404_close (reactor, about):
         return reactor.http_produce (404, http_server.CONNECTION_CLOSE)
 
 
-def rest_302_redirect (reactor, about):
-        "redirect to the request context's url"
+def rest_302_redirect (reactor, path_utf8):
+        "redirect to the controller's locator in the context of the reactor"
         uri = reactor.http_uri[:2]
         uri.append ('/')
-        uri.append ('/'.join ((n.encode ('UTF-8') for n in about[1:])))
-        return reactor.http_produce (302, (('Location', ''.join (uri)),))
-
+        uri.append ('/'.join (path_utf8))
+        return reactor.http_produce (
+                302, (('Location', ''.join (uri)),)
+                )
 
 CONTENT_TYPE_XML = (('Content-Type', 'text/xml; charset=UTF-8'),)
 
@@ -263,6 +264,8 @@ def json_200_ok (reactor, value):
                 producer.Simple (json_encode (value))
                 )
 
+def json_noop (controller, json):
+        return json
 
 
 class Control (
@@ -274,15 +277,21 @@ class Control (
         
         HTTP = {'HEAD': http_head, 'GET': http_get, 'POST': http_post}
         
+        irtd2_salts = [password ()]
         irtd2_timeout = 1<<32 # practically never by default
         
-        rest_cache = {}
+        mime_cache = {}
         rest_redirect = u"index.html"
 
+        json_actions = {}
         JSONR = None
         
         def __init__ (self, peer, about):
-                self.irtd2_salts = peer.irtd2_salts
+                about_utf8 = [s.encode ('UTF-8') for s in about]
+                about_utf8[0] = 'http://' + about_utf8[0]
+                self.http_uri = '/'.join (about_utf8)
+                about_utf8[0] = peer.presto_path
+                self.presto_path = '/'.join (about_utf8)
                 self.xml_root = xml_dom.Element (
                         u"allegra Control", {
                                 u"context": about[-2],
@@ -290,35 +299,30 @@ class Control (
                                 }
                         )
                 self.json = {}
-                self.rest_path = '/'.join ((
-                        peer.presto_path, (u"/".join (
-                                about[1:]
-                                )).encode ('UTF-8')
-                        ))
                 if __debug__:
                         null = (lambda: None)
-                        def rest_cache_get (name):
-                                teed = self.rest_cache.get (name, null) ()
+                        def mime_cache_get (name):
+                                teed = self.mime_cache.get (name, null) ()
                                 if not teed:
-                                        subject, teed = rest_cache (
+                                        subject, teed = mime_cache (
                                                 '/'.join ((
-                                                        self.rest_path,
+                                                        self.presto_path,
                                                         name.encode ('UTF-8')
                                                         )), 
-                                                self.rest_cache
+                                                self.mime_cache
                                                 )
                                 return teed
                         
-                        self.rest_cache_get = rest_cache_get
+                        self.mime_cache_get = mime_cache_get
                 else:
                         for filename in glob.glob('%s/*' % self.rest_path):
                                 try:
-                                        rest_cache (filename, self.rest_cache)
+                                        mime_cache (filename, self.mime_cache)
                                 except:
                                         self.loginfo_traceback ()
                                 else:
                                         self.log (filename, 'cached')
-                        self.rest_cache_get = self.rest_cache.get
+                        self.mime_cache_get = self.mime_cache.get
                                         
         def __call__ (self, reactor, about):
                 if (hasattr (reactor, 'irtd2') or irtd2_identified (
@@ -337,10 +341,12 @@ class Control (
                                 # context/subject/ -> 302 context/subject
                                 about = list (reactor.uri_about)
                                 about[-1] = self.rest_redirect
-                                return rest_302_redirect (reactor, about)
+                                return rest_302_redirect (
+                                        reactor, self.about_ut8[1:]
+                                        )
                         
                         # context/subject/predicate -> 200 Ok | 404 Not Found
-                        teed = self.rest_cache_get (reactor.uri_about[2])
+                        teed = self.mime_cache_get (reactor.uri_about[2])
                         if teed:
                                 if method == 'GET':
                                         return reactor.http_produce (
@@ -354,7 +360,7 @@ class Control (
                                                 200, teed.mime_headers
                                                 )
                                 
-                        return rest_302_redirect (reactor, about)
+                        return rest_302_redirect (reactor, self.about_ut8[1:])
                                         
                 # context/subject -> 200 Ok XML
                 if method == 'GET':
@@ -370,10 +376,16 @@ class Control (
                 # sweet sixteen 8-bit kilobytes ;-)
                 
         def json_application (self, reactor, about, json):
-                u"return the JSON state as one string"
-                self.json.update (json)
-                return json_200_ok (reactor, self.json)
+                u"dispatch requests to actions, produce a JSON object"
+                if len (reactor.uri_about) == 3:
+                        return json_200_ok (
+                                reactor, self.json_actions.get(
+                                        reactor.uri_about[-1], json_noop
+                                        ) (self, json)
+                                )
                 
+                return rest_302_redirect (reactor, self.about_ut8[1:])
+                                
         def irtd2_identify (self, reactor, about):
                 u"identify an anonymous user"
                 irtd2_authorize (reactor, about, [
@@ -397,8 +409,6 @@ class Listen (async_server.Listen):
 
         presto_root = {}
         
-        irtd2_salts = [password ()]
-
         def __init__ (self, path, addr, precision):
                 async_server.Listen.__init__ (
                         self, http_server.Dispatcher, addr, 

@@ -94,7 +94,8 @@ class Reactor (finalization.Finalization):
                                 time.timezone
                                 ),
                         'From': mail_from,
-                        'To': ', '.join (rcpt_to)
+                        'To': ', '.join (rcpt_to),
+                        'Content-type': 'text/plain; charset=UTF-8'
                         }
                 if headers: self.producer_headers.update (headers)
                 self.smtp_responses = []
@@ -227,6 +228,8 @@ def try_next_mx (dispatcher):
                         
 
 def mailto (mail_from, rcpt_to, body, headers=None, continuation=None):
+        if type (body) == str:
+                body = producer.Simple (body)
         domains = {}
         for address in rcpt_to:
                 domains.setdefault (
