@@ -14,53 +14,51 @@
 # along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-from allegra import presto, ansqlite
+from allegra import loginfo, presto, ansqlite
 
 
 class M4 (presto.Control):
+        
+        sql = None
         
         irtd2_timeout = 360 # Ten minute ... between actions
         
         def __init__ (self, peer, about):
                 presto.Control.__init__ (self, peer, about)
                 self.xml_root.xml_name = u"m4"
-                self.sql = ansqlite.connect (('127.0.0.2', 3999))
-                self.sql (
-                        'create if not exist table M4 ('
-                        '...' # TODO: paste the SQL declaration
-                        ');'
+                self.sql_initialize ()
+        
+        def sql_initialize (self, finalized=None):
+                self.sql = ansqlite.connect (
+                        ('127.0.0.2', 3999), self.sql_initialize, 3.0
                         )
-                        
-        def m4_authorize (self, reactor, about):
-                def continuation (response):
-                        if response == None:
-                                reactor.http_error (401)
-                                
-                        presto.xml_200_ok (reactor, self)
-                        
+                self.sql (
+                        self.sql_initialized,
+                        "CREATE TABLE m4statements ("
+                                "m4subject, m4predicate, m4object, m4context"
+                                ");"
+                        "CREATE INDEX m4routes ON m4statements ("
+                                "m4subject, m4context"
+                                ");"
+                        "CREATE INDEX m4contexts ON m4statements (m4context);"
+                        "CREATE TABLE m4index (m4names, m4index);",
+                        None
+                        )
+                
+        def sql_initialized (self, response):
+                if response == None:
+                        self.sql = None
+        
+        def m4_authorize (self, reactor, continuation):
                 self.sql (
                         continuation,
-                        'SELECT m4.object FROM m4 WHERE'
-                        ' m4.predicate=password AND'
-                        ' m4.subject=? AND'
-                        ' m4.context=?',
-                        (reactor.irdt2[0], u"".join (reactor.uri_about[0]))
+                        "SELECT m4object FROM m4statements WHERE"
+                                " m4predicate = 'password' AND"
+                                " m4subject = ? AND"
+                                " m4context = ?",
+                        (reactor.irtd2[0], u"".join (reactor.uri_about[0]))
                         )
-                
-        def http_resource (self, reactor, about):
-                if about != reactor.uri_about:
-                        if reactor.irtd2[1].find ('4:root,') < 0:
-                                return presto.rest_302_redirect (
-                                        reactor, about
-                                        )
-                
-                        return reactor.http_produce (
-                                200, 
-                                
-                                )
-                
-                return presto.xml_200_ok (reactor, self)
-                                
+                        
         def json_application (self, reactor, about, json):
                 # check authorizations, maybe grant them ...
                 if reactor.irtd2[1].find ('4:root,') < 0:

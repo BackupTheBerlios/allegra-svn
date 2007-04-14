@@ -14,24 +14,31 @@
 # along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-from allegra import presto
+from allegra import presto, smtp_client
 
 class Root (presto.Control):
 
         irtd2_timeout = 360 # Ten minute ... between actions
         
         root_password = 'presto'
-        
+
         if __debug__:
-                def new_password (self): pass
+                def new_password (self, about): pass
         else:
-                def new_password (self): 
+                def new_password (self, about): 
                         self.log (self.root_password, 'root')
                         self.root_password = presto.password ()
         
         def __init__ (self, peer, about):
                 presto.Control.__init__ (self, peer, about)
-                self.new_password ()
+                self.new_password (about)
+                smtp_client.mailto (
+                        'root@127.0.0.2', 
+                        ['contact@laurentszyster.be'],
+                        self.http_uri + (
+                                '?root=%s' % self.root_password
+                                )
+                        )
 
         def irtd2_unauthorized (self, reactor, about, json):
                 if '4:root,' in reactor.irtd2[1]:
@@ -48,6 +55,21 @@ class Root (presto.Control):
                         return False # Authorized ?-)
                 
                 return True # Unauthorized !-(
+        
+        json_actions = {
+                u"load": (
+                        lambda json: 
+                        presto.Listen.presto_root.get(
+                                json.get (u"host", u"127.0.0.2")
+                                ).presto_load (json[u"filename"])
+                        ),
+                u"unload": (
+                        lambda json: 
+                        presto.Listen.presto_root.get(
+                                json.get (u"host", u"127.0.0.2")
+                                ).presto_load (json[u"filename"])
+                        )
+                }
                                 
         def json_application (self, reactor, about, json):
                 # check authorizations, maybe grant them ...
