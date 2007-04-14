@@ -18,6 +18,10 @@
 
 import collections
 from cPickle import dumps, loads
+try:
+        import sqlite
+except:
+        from pysqlite2 import dbapi2 as sqlite
 
 from allegra import loginfo, async_net, tcp_client
 
@@ -27,11 +31,6 @@ class Client (async_net.Dispatcher):
         def __init__ (self):
                 async_net.Dispatcher.__init__ (self)
                 self.sql_defered = collections.deque ()
-        
-        def __call__ (self, callback, statement, params=()):
-                s = dumps ((statement.lstrip (), params))
-                self.output_fifo.append ('%d:%s,' % (len (s), s))
-                self.sql_defered.append (callback)
         
         def async_net_continue (self, data):
                 try:
@@ -53,12 +52,11 @@ class Proxy (object):
                         )
                         
         def __call__ (self, callback, statement, params=()):
-                self.output_fifo.append (
-                        '%d:%s,' % (len (statement), statement)
-                        )
+                s = dumps ((statement.lstrip (), params))
+                self.output_fifo.append ('%d:%s,' % (len (s), s))
                 self.sql_defered.append (callback)
                 
-        def reconnect (self, finalize, timeout=3.0):
+        def reconnect (self, name, finalize, timeout=3.0):
                 dispatcher = Client ()
                 dispatcher.finalization = finalize
                 if tcp_client.connect (dispatcher, name, timeout):
