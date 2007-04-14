@@ -19,7 +19,7 @@
 import collections
 from cPickle import dumps, loads
 
-from allegra import loginfo, async_net
+from allegra import loginfo, async_net, tcp_client
 
 
 class Client (async_net.Dispatcher):
@@ -53,8 +53,16 @@ class Proxy (object):
                         )
                         
         def __call__ (self, callback, statement, params=()):
-                self.output_fifo.append ('%d:%s,' % (len (s), s))
+                self.output_fifo.append (
+                        '%d:%s,' % (len (statement), statement)
+                        )
                 self.sql_defered.append (callback)
+                
+        def reconnect (self, finalize, timeout=3.0):
+                dispatcher = Client ()
+                dispatcher.finalization = finalize
+                if tcp_client.connect (dispatcher, name, timeout):
+                        self.__init__ (dispatcher)
                 
 
 def connect (name, finalize, timeout=3.0):
