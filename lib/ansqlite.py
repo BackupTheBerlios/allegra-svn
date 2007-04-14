@@ -45,7 +45,7 @@ class Client (async_net.Dispatcher):
                         self.async_net_continue ('N.')
 
 
-class Proxy (Object):
+class Proxy (object):
         
         def __init__ (self, dispatcher):
                 self.output_fifo, self.sql_defered = (
