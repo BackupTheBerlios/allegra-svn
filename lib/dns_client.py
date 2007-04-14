@@ -360,8 +360,8 @@ class Resolver (async_core.Dispatcher, timeouts.Timeouts):
                 "call back all resolution handlers for this request"
                 defered = request.dns_defered
                 del request.dns_defered
-                self.dns_cache[request.dns_question] = request
                 if request.dns_response:
+                        self.dns_cache[request.dns_question] = request
                         del request.dns_response
                 for resolve in defered:
                         resolve (request)
