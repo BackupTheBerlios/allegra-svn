@@ -342,7 +342,7 @@ class Control (
                                 about = list (reactor.uri_about)
                                 about[-1] = self.rest_redirect
                                 return rest_302_redirect (
-                                        reactor, self.about_ut8[1:]
+                                        reactor, self.about_utf8[1:]
                                         )
                         
                         # context/subject/predicate -> 200 Ok | 404 Not Found
@@ -360,7 +360,9 @@ class Control (
                                                 200, teed.mime_headers
                                                 )
                                 
-                        return rest_302_redirect (reactor, self.about_ut8[1:])
+                        return rest_302_redirect (
+                                reactor, self.about_utf8[1:]
+                                )
                                         
                 # context/subject -> 200 Ok XML
                 if method == 'GET':
