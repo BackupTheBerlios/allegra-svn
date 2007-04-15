@@ -67,7 +67,6 @@ class MIME_collector (object):
                 else:
                         self.collector_body.collect_incoming_data (data)
 
-        @loginfo.debug
         def found_terminator (self):
                 if self.collector_body == None:
                         # MIME headers collected, clear the buffer, split the
