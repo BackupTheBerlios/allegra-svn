@@ -218,11 +218,11 @@ def http_404_close (reactor, about):
         return reactor.http_produce (404, http_server.CONNECTION_CLOSE)
 
 
-def rest_302_redirect (reactor, path_utf8):
+def rest_302_redirect (reactor, about):
         "redirect to the controller's locator in the context of the reactor"
         uri = reactor.http_uri[:2]
         uri.append ('/')
-        uri.append ('/'.join (path_utf8))
+        uri.append ((u"/".join (about)).encode ('UTF-8'))
         return reactor.http_produce (
                 302, (('Location', ''.join (uri)),)
                 )
@@ -342,7 +342,7 @@ class Control (
                                 about = list (reactor.uri_about)
                                 about[-1] = self.rest_redirect
                                 return rest_302_redirect (
-                                        reactor, self.about_utf8[1:]
+                                        reactor, about[1:]
                                         )
                         
                         # context/subject/predicate -> 200 Ok | 404 Not Found
@@ -360,9 +360,7 @@ class Control (
                                                 200, teed.mime_headers
                                                 )
                                 
-                        return rest_302_redirect (
-                                reactor, self.about_utf8[1:]
-                                )
+                        return rest_302_redirect (reactor, about[1:])
                                         
                 # context/subject -> 200 Ok XML
                 if method == 'GET':
@@ -386,7 +384,7 @@ class Control (
                                         ) (self, json)
                                 )
                 
-                return rest_302_redirect (reactor, self.about_ut8[1:])
+                return rest_302_redirect (reactor, about[1:])
                                 
         def irtd2_identify (self, reactor, about):
                 u"identify an anonymous user"
