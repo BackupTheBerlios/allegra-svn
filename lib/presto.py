@@ -315,7 +315,7 @@ class Control (
                         
                         self.mime_cache_get = mime_cache_get
                 else:
-                        for filename in glob.glob('%s/*' % self.rest_path):
+                        for filename in glob.glob('%s/*' % self.presto_path):
                                 try:
                                         mime_cache (filename, self.mime_cache)
                                 except:
