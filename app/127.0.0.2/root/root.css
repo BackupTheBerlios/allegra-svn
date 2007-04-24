@@ -1,0 +1,42 @@
+body {
+    font-family: 'Trebuchet MS', 'Lucida Grande', Verdana, Arial, Sans-Serif;
+    }
+a {color: #3333FF;text-decoration: none;}
+h1 a {color: #000000; text-decoration: none;}
+h2 a {color: #000000; text-decoration: none;}
+h3 a {color: #000000; text-decoration: none;}
+a:visited {color: #000099;}
+a:hover {color: #3333FF;}
+a:active {color: #6666FF;}
+body > div {margin: auto; width: 720px;}
+input textarea {font-family: 'Courier New'; font-size: 10pt;}
+.hidden {display: none;}
+#footer {color: grey; font-size: small; text-align: center;}
+
+.JSONobject {
+	border: 1px solid #AAAAAA;
+	padding: 2px 4px 2px 4px ;
+	}
+.JSONarray {
+	border: 1px solid #AAAAAA;
+	padding: 2px 4px 2px 4px ;
+	}
+.JSONproperty {
+	overflow: auto;
+	background-color: white; 
+	}
+.JSONname {
+	font-weight: bold; 
+	margin-right: 4px; 
+	}
+.JSONvalue {
+	margin-right: 4px;
+	}
+.JSONboolean {margin-right: 4px;}
+.JSONnumber {margin-right: 4px;}
+.JSONstring {margin-right: 4px;}
+
+.response {margin-bottom: 4px;}
+#eval > .JSONobject {border: 1px solid blue}
+#exec > .JSONobject {border: 1px solid green}
+#excp > .JSONarray {border: 1px solid crimson}

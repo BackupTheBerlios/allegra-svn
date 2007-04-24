@@ -14,7 +14,27 @@
 # along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-from allegra import presto, smtp_client
+from allegra import prompt, presto, smtp_client
+
+def json_inspect (controller, reactor, about, json):
+        response = {}
+        response[u"method"], o = prompt.python_prompt (json.get(
+                u"object", u"controller"
+                ), {
+                        'controller': controller, 
+                        'reactor': reactor,
+                        'about': about,
+                        'json': json
+                        })
+        response[u"namespace"] = dir (o)
+        if type (o) in presto.JSON_TYPES:
+                response["value"] = presto.json_safe (o, set())
+        else:
+                if o != __builtins__ and hasattr(o, '__dict__'):
+                        response[u"attributes"] = presto.json_safe (
+                                o.__dict__, set()
+                                )
+        return response
 
 class Root (presto.Control):
 
@@ -22,24 +42,23 @@ class Root (presto.Control):
         
         root_password = 'presto'
 
-        if __debug__:
-                def new_password (self, about): pass
-        else:
-                def new_password (self, about): 
-                        self.log (self.root_password, 'root')
-                        self.root_password = presto.password ()
-        
         def __init__ (self, peer, about):
                 presto.Control.__init__ (self, peer, about)
                 self.new_password (about)
-                smtp_client.mailto (
-                        'root@127.0.0.2', 
-                        ['contact@laurentszyster.be'],
-                        self.http_uri + (
-                                '?root=%s' % self.root_password
-                                )
-                        )
 
+        def new_password (self, about): 
+                pass
+        
+#        def new_password (self, about): 
+#                self.root_password = presto.password ()
+#                smtp_client.mailto (
+#                        'root@127.0.0.2', 
+#                        ['contact@laurentszyster.be'],
+#                        self.http_uri + (
+#                                '?root=%s' % self.root_password
+#                                )
+#                        )
+        
         def irtd2_unauthorized (self, reactor, about, json):
                 if '4:root,' in reactor.irtd2[1]:
                         return False # authentic authorization found.
@@ -51,12 +70,13 @@ class Root (presto.Control):
                         presto.irtd2_authorize (
                                 reactor, about, reactor.irtd2
                                 ) # ... digest authentic authorizations.
-                        self.new_password ()
+                        self.new_password (about)
                         return False # Authorized ?-)
                 
                 return True # Unauthorized !-(
         
         json_actions = {
+                u"inspect": json_inspect,
                 u"load": (
                         lambda json: 
                         presto.Listen.presto_root.get(
@@ -78,20 +98,9 @@ class Root (presto.Control):
                                 401, presto.http_server.CONNECTION_CLOSE
                                 ) # Unauthorized ... is a fatal HTTP error.
                                 
-                # dispatch the URL encoded form or JSON request ...
-                if json.has_key (u"address"):
-                        listen = presto.Listen.presto_root.get(
-                                json[u"address"], (lambda x: None)
-                                ) ()
-                        if listen == None:
-                                pass
-                        elif json.has_key (u"load"):
-                                listen.presto_load (json[u"load"])
-                        elif json.has_key (u"unload"):
-                                listen.presto_unload (json[u"unload"])
-                return presto.json_200_ok (reactor, json)
-        
-if __debug__:
-        controllers = {(u"127.0.0.2", u"root"): Root}
-else:
-        controllers = {(u"127.0.0.2", presto.password()): Root}
+                return presto.Control.json_application (
+                        self, reactor, about, json
+                        )
+                
+
+controllers = {(u"127.0.0.2", u"root"): Root}
