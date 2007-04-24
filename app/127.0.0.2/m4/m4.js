@@ -300,7 +300,7 @@ JSON.escaped = {
     '\\': '\\\\'
     };
 JSON.escape = function (a, b) {
-    var c = this.escaped[b];
+    var c = JSON.escaped[b];
     if (c) return c;
     c = b.charCodeAt();
     return '\\u00'+Math.floor(c/16).toString(16)+(c%16).toString(16);
@@ -359,7 +359,7 @@ JSON.innerHTML = function (v, sb) {
     switch (typeof v) {
     case 'string':
         sb.push ('<span class="JSONstring">');
-        sb.push(v);
+        HTML.encode(v, sb);
         sb.push ('</span>');
         return sb;
     case 'number':
@@ -379,15 +379,15 @@ JSON.innerHTML = function (v, sb) {
     case 'object': {
         if (v == null) sb.push ('<span class="JSONnull">null</span>'); 
         else if (v.length == null) { // Object
-            sb.push ('<table class="JSONobject"><tbody>');
+            sb.push ('<div class="JSONobject">');
             for (k in v) {
-                sb.push ('<tr><td class="JSONname">');
-                this.innerHTML (k, sb), 
-                sb.push ('</td><td class="JSONvalue">');
+                sb.push ('<div class="JSONproperty"><span class="JSONname">');
+                HTML.encode (k, sb), 
+                sb.push ('</span>');
                 this.innerHTML (v[k], sb); 
-                sb.push ('</td></tr>');
+                sb.push ('</div>');
                 }
-            sb.push ('</tbody></table>');
+            sb.push ('</div>');
         } else { // Array
             sb.push ('<div class="JSONarray">');
             for (var i=0, L=v.length; i<L; i++) this.innerHTML (v[i], sb)
@@ -398,11 +398,18 @@ JSON.innerHTML = function (v, sb) {
         sb.push ('<span class="');
         sb.push (typeof v);
         sb.push ('">');
-        sb.push(v.toString());
+        HTML.encode(v.toString(), sb);
         sb.push ('</span>');
         return sb;
     }
 }
+/**
+ * The core value of m4.js: an interpreter that binds a JSON object to
+ * a regular model and the HTML templates found in the current document,
+ * using class names as bindings.
+ * 
+ * 
+ **/
 JSON.regular = function (pattern, object) {
     // -> innerHTML
 }
@@ -475,8 +482,10 @@ HTTP.JSON_continue = function (req, ok, error, exception) {
                 try {
                     if (req.status == 200) 
                         ok (JSON.decode(req.responseText));
-                    else if (error)    error (req.status)
-                } catch (e) {error (0)}
+                    else {
+                    	if (error) error (req.status);
+                    }
+                } catch (e) {}
             }
         } catch (e) {if (exception) exception(e);}
     }
@@ -502,7 +511,30 @@ HTTP.POST_json = function (url, object, ok, error, exception) {
 } // why bother with periodicals in a one minute web page?
 
 var HTML = {}; // more conveniences for more applications for more ... 
-HTML.POST_json = function (el, ok, error, exception) {
+HTML.escaped = {'<': '&lt;', '>': '&gt;', '"': '&quot;', '&': '&amp;'};
+HTML.escape = function (a, b) {return HTML.escaped[b];}
+HTML.encode = function (s, sb) {
+    if (/[<>"&]/.test(s)) 
+        sb.push(s.replace(/([<>"&])/g, HTML.escape));
+    else
+        sb.push(s);
+}
+HTML.class_add = function (el, name) {
+	var current = el.className;
+	if (!current)
+		el.className = name;
+	else if (current.indexOf(name) < 0)
+		el.className = ' '.join ([current, name]);
+}
+HTML.class_remove = function (el, name) {
+	var current = el.className;
+	if (current != null) {
+		var i = current.indexOf(name);
+		if (i > -1)
+			el.className = current.split(name).join('');
+	}
+}
+HTML.query = function (el) {
 	var query = {}, children = el.parentNode.childNodes, child;
 	for (var i=0, L=children.length; i<L; i++) {
 		child = children[i];
@@ -515,7 +547,7 @@ HTML.POST_json = function (el, ok, error, exception) {
 		)
 		query[child.name] = child.value;
 	}
-	HTTP.POST_json(el.value||'', query, ok, error, exception);
+	return query;
 }
 HTML.JSON_update = function (id) {
 	return function (json) {
