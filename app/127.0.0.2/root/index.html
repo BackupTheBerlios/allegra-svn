@@ -15,34 +15,9 @@
   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA -->
   <head>
     <title>/root/index.html</title>
-    <script src="/m4/m4.js" type="text/javascript"></script>
-    <link type="text/css" rel="stylesheet" href="root.css"></link>
-    <script type="text/javascript">
-      function login () {
-        HTTP.GET_json('/root', HTML.query($('pass')), login_200);
-      }
-      function login_200 (json) {
-        HTML.class_remove($('inspect_object'), 'hidden');
-        HTML.class_add($('login_password'), 'hidden');
-      }
-      function inspect () {
-        $('excp').innerHTML = null;
-        HTTP.POST_json(
-          'inspect', HTML.query($('object')), inspect_200, inspect_401
-          );
-      }
-      function inspect_200 (json) {
-        $(json['method']).innerHTML = JSON.innerHTML(
-          json['value']||json['attributes'], []
-          ).join ('');
-      }
-      function inspect_401 (response) {
-        if (response==401) {
-          HTML.class_add($('inspect_object'), 'hidden');
-          HTML.class_remove($('login_password'), 'hidden');
-        }
-      }
-    </script>
+    <link href="root.css" type="text/css" rel="stylesheet"></link>
+    <script src="protocols.js" type="text/javascript"></script>
+    <script src="root.js" type="text/javascript"></script>
   </head>
   <body><div>
     <h1>Root</h1>
@@ -53,16 +28,12 @@
       >
       password <input id="pass" name="password" type="password"/>
     </form>
-    <div id="inspect_object">
-      <form
-        action="javascript:inspect();"
-        >
-        <input id="object" name="object" type="text" style="{width: 100%}"/>
-      </form>
-      <div id="namespace"></div>
-      <div id="exec" class="response"></div>
-      <div id="eval" class="response"></div>
-      <div id="excp" class="response"></div>
-    </div>
+    <form
+      id="inspect_object"
+      action="javascript:inspect();"
+      >
+      <input id="object" name="object" type="text" style="{width: 100%}"/>
+      <div id="inspected"></div>
+    </form>
   </div></body>
 </html>

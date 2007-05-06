@@ -16,7 +16,9 @@
 
 "Practical REST objects"
 
-import imp, weakref, time, random, os, stat, socket, glob, re, mimetypes
+import \
+        types, imp, weakref, time, random, os, stat, socket, glob, \
+        re, mimetypes
 
 try:
         from hashlib import sha1
@@ -47,6 +49,32 @@ def urlform_decode (formencoded):
                                 urldecode (param), 'UTF-8'
                                 )] = None
         return query_strings
+
+JSON_ATOMS = frozenset ((
+        types.NoneType, bool, int, long, float, str, unicode
+        ))
+JSON_ITERS = frozenset ((list, tuple, set, frozenset))
+JSON_TYPES = frozenset (JSON_ATOMS|JSON_ITERS|set((dict,)))
+def json_safe (value, walked):
+        t = type (value)
+        if t in JSON_ATOMS:
+                return value # JSON null, boolean, number and string
+        
+        _id = id (value)
+        if _id in walked:
+                return
+        
+        walked.add (_id)
+        if t in JSON_ITERS:
+                return [json_safe (v, walked) for v in value] # JSON array
+        
+        elif t == dict:
+                return dict ((
+                        (unicode (k), json_safe (v, walked)) 
+                        for k, v in value.items ()
+                        )) # a Python dictionnary is a JSON object
+                        
+        return repr (value)
 
 try:
         from cjson import decode as json_decode
@@ -264,9 +292,8 @@ def json_200_ok (reactor, value):
                 producer.Simple (json_encode (value))
                 )
 
-def json_noop (controller, json):
-        return json
-
+def json_noop (controller, reactor, about, json):
+        return None
 
 class Control (
         xml_dom.Document, loginfo.Loginfo, finalization.Finalization
@@ -280,11 +307,10 @@ class Control (
         irtd2_salts = [password ()]
         irtd2_timeout = 1<<32 # practically never by default
         
-        mime_cache = {}
         rest_redirect = u"index.html"
 
         json_actions = {}
-        JSONR = None
+        jsonr_model = None
         
         def __init__ (self, peer, about):
                 about_utf8 = [s.encode ('UTF-8') for s in about]
@@ -299,6 +325,7 @@ class Control (
                                 }
                         )
                 self.json = {}
+                self.mime_cache = {}
                 if __debug__:
                         null = (lambda: None)
                         def mime_cache_get (name):
@@ -374,17 +401,12 @@ class Control (
         def http_collector (self):
                 return collector.Limited (16384)
                 # sweet sixteen 8-bit kilobytes ;-)
-                
+        
         def json_application (self, reactor, about, json):
                 u"dispatch requests to actions, produce a JSON object"
-                if len (reactor.uri_about) == 3:
-                        return json_200_ok (
-                                reactor, self.json_actions.get(
-                                        reactor.uri_about[-1], json_noop
-                                        ) (self, json)
-                                )
-                
-                return rest_302_redirect (reactor, about[1:])
+                return json_200_ok (reactor, self.json_actions.get(
+                        reactor.uri_about[-1], json_noop
+                        ) (self, reactor, about, json))
                                 
         def irtd2_identify (self, reactor, about):
                 u"identify an anonymous user"

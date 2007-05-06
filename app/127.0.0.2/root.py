@@ -14,7 +14,8 @@
 # along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-from allegra import prompt, presto, smtp_client
+from allegra import prompt, tcp_client, smtp_client, presto
+
 
 def json_inspect (controller, reactor, about, json):
         response = {}
@@ -36,28 +37,30 @@ def json_inspect (controller, reactor, about, json):
                                 )
         return response
 
+
 class Root (presto.Control):
 
         irtd2_timeout = 360 # Ten minute ... between actions
         
         root_password = 'presto'
+        smtp_relay = ('relay.chello.be', 25)
 
         def __init__ (self, peer, about):
                 presto.Control.__init__ (self, peer, about)
-                self.new_password (about)
+                # self.new_password (about)
 
         def new_password (self, about): 
-                pass
-        
-#        def new_password (self, about): 
-#                self.root_password = presto.password ()
-#                smtp_client.mailto (
-#                        'root@127.0.0.2', 
-#                        ['contact@laurentszyster.be'],
-#                        self.http_uri + (
-#                                '?root=%s' % self.root_password
-#                                )
-#                        )
+                mailto = smtp_client.Pipeline()
+                if tcp_client.connect (mailto, self.smtp_relay):
+                        def pipeline_close (reactor):
+                                mailto.output_fifo.append ('QUIT\r\n')
+                        mailto (
+                                'root@127.0.0.2', 
+                                ['contact@laurentszyster.be'],
+                                self.http_uri + (
+                                        '?root=%s' % self.root_password
+                                        )
+                                ).finalization = pipeline_close
         
         def irtd2_unauthorized (self, reactor, about, json):
                 if '4:root,' in reactor.irtd2[1]:
@@ -70,7 +73,7 @@ class Root (presto.Control):
                         presto.irtd2_authorize (
                                 reactor, about, reactor.irtd2
                                 ) # ... digest authentic authorizations.
-                        self.new_password (about)
+                        # self.new_password (about)
                         return False # Authorized ?-)
                 
                 return True # Unauthorized !-(
@@ -87,7 +90,7 @@ class Root (presto.Control):
                         lambda json: 
                         presto.Listen.presto_root.get(
                                 json.get (u"host", u"127.0.0.2")
-                                ).presto_load (json[u"filename"])
+                                ).presto_unload (json[u"filename"])
                         )
                 }
                                 
