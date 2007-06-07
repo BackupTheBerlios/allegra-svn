@@ -271,10 +271,11 @@ class Pipeline (
         MIME_collector, async_chat.Dispatcher, async_client.Pipeline
         ):
 
+        terminator = '\r\n'
+        
         def __init__ (self):
                 async_chat.Dispatcher.__init__ (self)
                 self.pipeline_set ()
-                self.set_terminator ('\r\n')
                 
         __call__ = async_client.Pipeline.pipeline
                                         

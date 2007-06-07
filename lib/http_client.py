@@ -1,4 +1,4 @@
-# Copyright (C) 2005 Laurent A.V. Szyster
+# Copyright (C) 2005-2007 Laurent A.V. Szyster
 #
 # This library is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -12,22 +12,33 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this library; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-# USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-"http://laurentszyster.be/blog/http_client/"
+"""
+from allegra import loginfo, collector, http_client
+
+http = http_client.connect
+Request = http_client.Reactor
+
+def finalize (request):
+        loginfo.log (request.http_response)
+        
+Request ('GET', http ('www.google.com'), '/index.html', {}) (
+        collector.LOGINFO
+        ).finalization = finalize
+"""
+        
 
 import socket
 
 from allegra import (
-	loginfo, finalization,
-        async_chat, producer, collector, async_client,
+	loginfo, finalization, producer, collector,
         tcp_client, mime_headers, mime_reactor, http_reactor
         )
 
 
 class Reactor (finalization.Finalization):
-                
+        
         http_response = collector_headers = collector_body = None
         
         def __init__ (
@@ -47,52 +58,18 @@ class Reactor (finalization.Finalization):
                 return self
                         
 
-class Pipeline (
-        mime_reactor.MIME_collector,
-	async_chat.Dispatcher, 
-        async_client.Pipeline
-	):
+class Pipeline (mime_reactor.Pipeline):
 
 	"HTTP/1.0 keep-alive and HTTP/1.1 pipeline channel"
         
         ac_in_buffer_size = 1<<16 # 64KB input buffer
         ac_out_buffer_size = 4096 # 4KB output buffer
+        terminator = '\r\n\r\n'
 
         pipeline_keep_alive = True
 
-        def __init__ (self):
-                async_chat.Dispatcher.__init__ (self)
-                self.set_terminator ('\r\n\r\n')
-                self.pipeline_set ()
+        __call__ = mime_reactor.Pipeline.pipeline
                 
-        def __repr__ (self):
-                return 'http-client-pipeline id="%x"' % id (self)
-
-        __call__ = Pipeline.pipeline # pipeline(request) -> request
-                
-	# async_chat
-        
-	def handle_connect (self):
-                "fill the pipeline's output_fifo if there are new requests"
-                if self.pipeline_requests:
-			self.pipeline_wake_up ()
-
-        def handle_close (self):
-                "assert debug log of the pipeline queues states and counters"
-                assert None == self.log ('{'
-                        ' "requests": %d, "responses": %d,'
-                        ' "pending": %d, "failed": %d'
-                        ' }' % (
-                                self.http_requests, 
-                                self.http_responses,
-                                len (self.pipeline_requests),
-                                len (self.pipeline_responses)
-                                ), 'debug'
-                        )
-		self.close ()
-                
-	# pipeline
-
         def pipeline_wake_up (self):
                 if self.http_version == '1.1':
                         self.pipeline_wake_up_11 ()
@@ -133,13 +110,10 @@ class Pipeline (
  		
 	# MIME collector
 
-	def collector_continue (self):
-                while (
-                        self.collector_lines and not 
-                        self.collector_lines[0]
-                        ):
-                        self.collector_lines.pop (0)
-                if not self.collector_lines:
+	def collector_continue (self, lines):
+                while (lines and not lines[0]):
+                        lines.pop (0)
+                if not lines:
                         return self.closing
                         #
                         # make sure that the collector is stalled once the
@@ -149,9 +123,7 @@ class Pipeline (
 		try:
 			(
 				http_version, request.http_response
-				) = self.collector_lines.pop (
-					0
-					).split (' ', 1)
+				) = lines.pop (0).split (' ', 1)
 		except:
                         assert None == self.log (
                                 'invalid response line', 'debug'
@@ -160,17 +132,14 @@ class Pipeline (
 			return True
 
                 self.http_version = http_version[-3:]
-		request.collector_headers = mime_headers.map (
-                        self.collector_lines
-                        )
+		request.collector_headers = mime_headers.map (lines)
 		if (
 			request.http_method == 'HEAD' or
 			request.http_response[:3] in ('204', '304', '305')
 			):
                         self.collector_finalize ()
                 else:
-		        http_reactor.http_collect (
-                                self,
+		        self.http_collector_continue (
                                 request.collector_body,
                                 request.collector_headers
                                 )
@@ -194,8 +163,7 @@ class Pipeline (
                         self.pipeline_wake_up ()
                 # reset the channel state to collect the next request ...
                 self.set_terminator ('\r\n\r\n')
-                self.collector_headers = \
-                        self.collector_lines = self.collector_body = None
+                self.collector_headers = self.collector_body = None
                 return False
 
 	# HTTP/1.1 client reactor
@@ -204,8 +172,8 @@ class Pipeline (
         http_version = '1.1'
         http_requests = http_responses = 0
 
-        http_collector_error = handle_close
-	http_collector_continue = http_reactor.http_collector_continue
+        http_collector_error = mime_reactor.Pipeline.handle_close
+	http_collector_continue = http_reactor.http_collector
 
         def http_client_continue (self, request):
                 # push one string and maybe a producer in the output fifo ...
@@ -293,16 +261,3 @@ def Pool (host, port=80, version='1.1', size=2, timeout=3.0, precision=1.0):
                 decorated (host, port, version), 
                 (host, port), size, timeout, precision
                 )
-
-if __name__ == '__main__':
-        #
-        # TODO: 
-        #
-        # implement Apache's ab interface subset, starting with:
-        #
-        #   -n -c "http://host/path?query" < POST.DATA
-        #
-        # and quickly move up to the real thing, with Cookies and basic
-        # authorization. 
-        
-        pass

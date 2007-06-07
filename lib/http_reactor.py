@@ -133,10 +133,10 @@ class Chunk_collector (object):
                                 self.chunk_collector.collect_incoming_data
                         return False # continue ...
 
-                # chunk collector closure
+                # all chunks collected
                 self.chunk_collector.found_terminator ()
                 del self.set_terminator, self.collect_incoming_data
-                return True # final!                
+                return True               
 
 
 def http_collector (dispatcher, collected, headers):
