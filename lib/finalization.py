@@ -1,4 +1,4 @@
-# Copyright (C) 2005 Laurent A.V. Szyster
+# Copyright (C) 2005-2007 Laurent A.V. Szyster
 #
 # This library is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -12,8 +12,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this library; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-# USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 "http://laurentszyster.be/blog/finalization/"
 
