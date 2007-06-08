@@ -39,8 +39,6 @@ from allegra import (
 
 class Reactor (finalization.Finalization):
         
-        http_response = collector_headers = collector_body = None
-        
         def __init__ (
                 self, method, pipeline, url, headers, produce=None
                 ):
@@ -50,6 +48,8 @@ class Reactor (finalization.Finalization):
                 self.http_method = method
                 self.producer_headers = headers
                 self.producer_body = produce
+                self.http_response = \
+                        self.collector_headers = self.collector_body = None
 
         def __call__ (self, collect=None):
                 self.collector_body = collect
@@ -111,6 +111,7 @@ class Pipeline (mime_reactor.Pipeline):
 	# MIME collector
 
 	def collector_continue (self, lines):
+                self.collector_buffer = ''
                 while (lines and not lines[0]):
                         lines.pop (0)
                 if not lines:
@@ -119,6 +120,7 @@ class Pipeline (mime_reactor.Pipeline):
                         # make sure that the collector is stalled once the
                         # dispatcher has been closed.
                 
+                # self.pipelined_responses += 1
 		request = self.pipeline_responses[0]
 		try:
 			(
