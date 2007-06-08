@@ -38,6 +38,8 @@ from allegra import (
 
 
 class Reactor (finalization.Finalization):
+
+        http_response = collector_headers = collector_body = None
         
         def __init__ (
                 self, method, pipeline, url, headers, produce=None
@@ -48,8 +50,6 @@ class Reactor (finalization.Finalization):
                 self.http_method = method
                 self.producer_headers = headers
                 self.producer_body = produce
-                self.http_response = \
-                        self.collector_headers = self.collector_body = None
 
         def __call__ (self, collect=None):
                 self.collector_body = collect
@@ -120,7 +120,7 @@ class Pipeline (mime_reactor.Pipeline):
                         # make sure that the collector is stalled once the
                         # dispatcher has been closed.
                 
-                # self.pipelined_responses += 1
+                self.pipelined_responses += 1
 		request = self.pipeline_responses[0]
 		try:
 			(
@@ -150,7 +150,6 @@ class Pipeline (mime_reactor.Pipeline):
 	def collector_finalize (self):
                 # pop the reactor finalized and count the response
                 self.pipeline_responses.popleft ()
-                self.http_responses += 1
                 if self.closing:
                         return True # stall the collector if closing
                 
@@ -203,7 +202,7 @@ class Pipeline (mime_reactor.Pipeline):
                         self.output_fifo.append (request.producer_body)
                 # append the reactor to the queue of responses expected ...
                 self.pipeline_responses.append (request)
-                self.http_requests += 1
+                self.pipelined_requests += 1
                 #
                 # ready to send.
                 
