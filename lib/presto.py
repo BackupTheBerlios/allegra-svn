@@ -150,15 +150,15 @@ def irtd2_identified (reactor, about, salts, timeout):
         try:
                 value = cookies.next ()
         except StopIteration:
-                return 1
+                return 1 # no IRTD2 cookie
         
         irtd2 = value.split (' ')
         if len (irtd2) != 5:
-                return 2
+                return 2 # invalid IRTD2 cookie
         
         now = long (time.time ())
         if not (-1 < now - long (irtd2[2]) < timeout):
-                return 3
+                return 3 # timed out IRTD2 cookie
          
         digest = irtd2[4]
         for salt in salts:
@@ -166,10 +166,10 @@ def irtd2_identified (reactor, about, salts, timeout):
                 if sha1 (' '.join (irtd2)).hexdigest () == digest:
                         irtd2[2] = str (now) # bytes!
                         irtd2[3] = digest
-                        irtd2_authorize (reactor, about, irtd2)
-                        return 0
+                        irtd2_identify (reactor, about, irtd2)
+                        return 0 # identified
         
-        return 4
+        return 4 # 
         #
         # Test that one IRTD2 cookie exists, has not timed out and bears a 
         # valid signature. Note that I assume that the most specific cookie 
@@ -177,7 +177,7 @@ def irtd2_identified (reactor, about, salts, timeout):
         # that more cookies don't masquerade/merge the authorizations or 
         # identity they carry.
         
-def irtd2_authorize (reactor, about, irtd2):
+def irtd2_identify (reactor, about, irtd2):
         assert type (irtd2) == list and len (irtd2) == 5
         irtd2[4] = (sha1 (' '.join (irtd2)).hexdigest ())
         reactor.producer_headers['Set-Cookie'] = (
@@ -209,29 +209,30 @@ def http_post (control, reactor, about, overrideMIME='application/json'):
         ct = reactor.collector_headers.get (
                 'content-type', overrideMIME
                 ).split (';', 1)[0]
-        if reactor.collector_body == None:
+        if reactor.collector_body == None: # no body collector yet ...
                 if ct in (
                         'application/json',
                         'www-application/urlencoded-form-data'
-                        ):
+                        ): # instanciate one for JSON or URL encoded form 
                         reactor.collector_body = control.http_collector ()
                         return False # Web 1.0 & 2.0
                 
-                return control.http_continue (reactor, about)
+                return control.http_continue (reactor, about) # or continue.
                 
+        # body collected, decode the posted JSON or form data ...
         if ct == 'application/json':
                 return control.json_application (
                         reactor, about, json_decode (
                                 reactor.collector_body.data
                                 )
-                        ) # Web 2.0
+                        ) # Web 2.0 is JSON
                         
         elif ct == 'www-application/urlencoded-form-data':
                 return control.json_application (
                         reactor, about, urlform_decode (
                                 reactor.collector_body.data
                                 )
-                        ) # Web 1.0
+                        ) # Web 1.0 is URL form
                         
         return reactor.http_produce (500) # Server Error
 
@@ -293,7 +294,7 @@ def json_200_ok (reactor, value):
                 )
 
 def json_noop (controller, reactor, about, json):
-        return None
+        return 501 # Not Implemented ;-)
 
 class Control (
         xml_dom.Document, loginfo.Loginfo, finalization.Finalization
@@ -397,25 +398,33 @@ class Control (
                         return reactor.http_produce (200, CONTENT_TYPE_XML)
                         #
                         # if you care to ask for HEAD, expect to accept UTF-8
+                        
+                return self.http_continue (reactor, about)
         
         def http_collector (self):
                 return collector.Limited (16384)
                 # sweet sixteen 8-bit kilobytes ;-)
         
         def json_application (self, reactor, about, json):
-                u"dispatch requests to actions, produce a JSON object"
-                return json_200_ok (reactor, self.json_actions.get(
-                        reactor.uri_about[-1], json_noop
-                        ) (self, reactor, about, json))
+                u"try to dispatch requests to actions, produce a JSON object"
+                try:
+                        status = self.json_actions.get(
+                                reactor.uri_about[-1], json_noop
+                                ) (self, reactor, about, json)
+                except:
+                        json[u"exception"] = self.loginfo_traceback ()
+                        return json_response (500, json_encode (json))
+                
+                return json_response (status, json_encode (json))
                                 
         def irtd2_identify (self, reactor, about):
                 u"identify an anonymous user"
-                irtd2_authorize (reactor, about, [
+                irtd2_identify (reactor, about, [
                         password (), '', '%d' % time.time (), '',
                         self.irtd2_salts[0]
                         ])
                 return self (reactor, about) # recurse through __call__ ...
-
+        
         def http_continue (self, reactor, about):
                 "405 Method Not Allowed"
                 return reactor.http_produce (
