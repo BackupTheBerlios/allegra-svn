@@ -145,7 +145,7 @@ def http_collector (dispatcher, collected, headers):
                 collected = collector.simple (collected)
         if headers.get (
                 'transfer-encoding', ''
-                ).lower () == 'chunked':
+                ).lower ().startswith ('chunked'):
                 dispatcher.collector_body = Chunk_collector (
                         collected, dispatcher.set_terminator, headers
                         )
