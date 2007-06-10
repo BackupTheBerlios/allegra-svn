@@ -19,13 +19,12 @@ from allegra import loginfo, collector, http_client
 
 http = http_client.connect
 Request = http_client.Reactor
-
-def finalize (request):
-        loginfo.log (request.http_response)
         
 Request ('GET', http ('www.google.com'), '/index.html', {}) (
-        collector.LOGINFO
-        ).finalization = finalize
+        (lambda request: collector.LOGINFO)
+        ).finalization = (
+                lambda request: loginfo.log (request.http_response)
+                )
 """
         
 
@@ -51,8 +50,8 @@ class Reactor (finalization.Finalization):
                 self.producer_headers = headers
                 self.producer_body = produce
 
-        def __call__ (self, collect=None):
-                self.collector_body = collect
+        def __call__ (self, collect=(lambda: None)):
+                self.http_collect = collect
                 self.http_pipeline (self)
                 self.http_pipeline = None
                 return self
@@ -141,6 +140,7 @@ class Pipeline (mime_reactor.Pipeline):
 			):
                         self.collector_finalize ()
                 else:
+                        request.collector_body = request.http_collect ()
 		        self.http_collector_continue (
                                 request.collector_body,
                                 request.collector_headers
