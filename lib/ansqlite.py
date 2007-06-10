@@ -17,92 +17,144 @@
 "http://laurentszyster.be/blog/ansqlite/"
 
 import collections
-from cPickle import dumps, loads
-try:
-        import sqlite
-except:
-        from pysqlite2 import dbapi2 as sqlite
+try: # try JSON-The-Model ...
+        import cjson  
+        json_decode = cjson.decode
+        loads = (lambda s: json_decode (s, 1)) # ... and use UNICODE only ...
+        dumps = cjson.encode
+except:  # ... or fail over to CPython only encoding
+        from cPickle import loads, dumps
 
-from allegra import loginfo, async_net, tcp_client
+from allegra import netstring, loginfo, async_net, tcp_client
 
 
 class Client (async_net.Dispatcher):
+        """
+        from allegra import async_loop, tcp_client, ansqlite
 
+        ansql = ansqlite.Client ()
+        callback = (lambda response: 
+            ansql.log (ansqlite.loads (response)))
+        if tcp_client.connect (ansql, ('127.0.0.2', 3999)):
+            ansql (callback, u"SELECT ...")
+        async_loop.dispatch ()
+        """
         def __init__ (self):
                 async_net.Dispatcher.__init__ (self)
-                self.sql_defered = collections.deque ()
-        
-        def async_net_continue (self, data):
-                try:
-                        self.sql_defered.popleft () (loads (data))
-                except:
-                        self.loginfo_traceback ()
+                self.callbacks = collections.deque ()
                 
-        def handle_close (self):
-                self.close ()
-                while self.sql_defered:
-                        self.async_net_continue ('N.')
-
-
-class Proxy (object):
-        
-        def __init__ (self, dispatcher):
-                self.output_fifo, self.sql_defered = (
-                        dispatcher.output_fifo, dispatcher.sql_defered
-                        )
-                        
         def __call__ (self, callback, statement, params=()):
-                s = dumps ((statement.lstrip (), params))
+                s = dumps ((statement, params))
                 self.output_fifo.append ('%d:%s,' % (len (s), s))
-                self.sql_defered.append (callback)
+                self.callbacks.append (callback)
                 
-        def reconnect (self, name, finalize, timeout=3.0):
-                dispatcher = Client ()
-                dispatcher.finalization = finalize
-                if tcp_client.connect (dispatcher, name, timeout):
-                        self.__init__ (dispatcher)
-                
+        def json (self, callback, prepared, params=()):
+                s = dumps (params)
+                self.output_fifo.append ('%d:[%s,%s],' % (
+                        len (s) + len (prepared) + 3, prepared, s
+                        ))
+                self.callbacks.append (callback)
 
-def connect (name, finalize, timeout=3.0):
-        dispatcher = Client ()
-        dispatcher.finalization = finalize
-        if tcp_client.connect (dispatcher, name, timeout=3.0):
-                return Proxy (dispatcher)
-        
-
-class Server (async_net.Dispatcher):
-        
         def async_net_continue (self, data):
                 try:
-                        statement, params = loads (data)
-                        s = dumps (
-                                self.ansqlite (statement, params).fetchall ()
-                                ) # ansqlite is not a bounded method!
-                except sqlite.DatabaseError, e:
-                        s = dumps (e.args[0])
+                        self.callbacks.popleft () (data)
                 except:
                         self.loginfo_traceback ()
-                        s = 'N.' # None
-                else:
-                        if statement[:6].upper() != 'SELECT':
-                                loginfo.log (data)
-                self.output_fifo.append ('%d:%s,' % (len (s), s))
+                        
+
+def connect (name, timeout=3.0):
+        sql = Client ()
+        if not tcp_client.connect (sql, name, timeout):
+               return sql
+       
+        def finalize (dispatcher):
+                while dispatcher.sql_defered:
+                        try:
+                                dispatcher.callbacks.popleft () (None)
+                        except:
+                                dispatcher.loginfo_traceback ()
+
+        sql.finalization = finalize
 
 
-def decorate (Class, conn):
-        "factor a handler for ansqlite.Server from an SQLite connection"
-        def handle (statement, params):
-                if params == (): # a single statement
-                        return conn.execute (statement)
+def open (database, Base=async_net.Dispatcher):
+        """
+        from allegra import async_loop, tcp_server, ansqlite
+
+        conn, Dispatcher = ansqlite.open (":memory:")
+        try:
+            async_loop.catch (tcp_server.Listen (
+                ansqlite.Dispatcher, ('127.0.0.2', 3999), 1.0
+                ).server_shutdown)
+            async_loop.dispatch ()
+        finally:
+            conn.close ()
+        """
+        try:
+                import sqlite
+                bindings = (list, tuple, dict)
+        except:
+                from pysqlite2 import dbapi2 as sqlite
+                bindings = (list, tuple)
                 
-                elif params == None: # a batch of SQL statements
-                        return conn.executescript (statement)
-                
-                elif type (params[0]) == tuple: # many prepared statements
-                        return conn.executemany (statement, params)
+        conn = sqlite.connect (database, check_same_thread=False)
+        sql1 = conn.execute 
+        sqlM = conn.executemany
+        def ansql (statement, parameters):
+                if type (statement) == unicode:
+                        if parameters == None:
+                                return [i[0] for i in (
+                                        sql1 (statement).description or ()
+                                        )] # eventually list column names
                                 
-                else: # a single prepared statement
-                        return conn.execute (statement, params)
-                                
-        Class.ansqlite = staticmethod (handle)
-        return Class
+                        if len (parameters) > 0 and (
+                                type (parameters[0]) in bindings
+                                ):
+                                return sqlM (statement, parameters).fetchall()
+        
+                        else:
+                                return sql1 (statement, parameters).fetchall()
+                else: 
+                        # ODBC/JDBC batches, done asynchronously ACID!
+                        results = []
+                        push = results.append 
+                        try:
+                                # push all results ...
+                                for s, p in zip (statement, parameters):
+                                        if p == None:
+                                                push ([meta[0] for meta in (
+                                                        sql1 (s).description 
+                                                        or ())])
+                                        elif len (p) > 0 and (
+                                                type (p[0]) in bindings
+                                                ):
+                                                push (sqlM (s, p).fetchall())
+                                        else:
+                                                push (sql1 (s, p).fetchall())
+                        except: # stop on exception and rollback
+                                sql1 ('ROLLBACK')
+                                push (False)
+                        else: #  commit transaction without error
+                                sql1 ('COMMIT')
+                                push (True)
+                        return results # ... results[-1] == success | failure
+
+        class Dispatcher (Base):
+                def async_net_continue (self, data):
+                        try:
+                                statement, params = loads (data)
+                                s = dumps (self.ansql (statement, params)) 
+                        except self.SQLiteError, e:
+                                self.loginfo_traceback ()
+                                s = dumps (e.args[0])
+                        except:
+                                self.loginfo_traceback ()
+                                s = dumps ("ansqlite exception")
+                        else:
+                                if statement[:6].upper() != 'SELECT':
+                                        loginfo.log (data)
+                        self.output_fifo.append ('%d:%s,' % (len (s), s))
+        
+        Dispatcher.SQLiteError = sqlite.Error
+        Dispatcher.ansql = staticmethod (ansql)
+        return conn, Dispatcher
