@@ -82,6 +82,12 @@ else:
         LISTEN_MAX = 1024
 
 
+def Listen (Dispatcher, name, precision, max=5):
+        return async_server.Listen (
+                Dispatcher, name, precision, max, socket.AF_INET
+                )
+
+
 def decorate (
         listen, inactive, local, private, public, resolved=dns_PTR_resolved
         ):
@@ -103,6 +109,7 @@ def decorate (
                 async_server.inactive (listen, min (inactive, 3.0))
                 resolved (listen)
         return listen
+
 
 # The ultimate convenience: decorate TCP/IP servers relevantly according
 # to its runtime environment (development/production) and the degree of
