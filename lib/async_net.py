@@ -28,7 +28,7 @@ def collect_net (next, buffer, collect, terminate):
         "consume a buffer of netstrings into a stallable collector sink"
         lb = len (buffer)
         if next > 0:
-                if next > lb:
+                if next >= lb:
                         collect (buffer)
                         return next - lb, '', False # buffer more ...
 
