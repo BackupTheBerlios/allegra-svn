@@ -28,19 +28,18 @@ def collect_net (next, buffer, collect, terminate):
         "consume a buffer of netstrings into a stallable collector sink"
         lb = len (buffer)
         if next > 0:
-                if next >= lb:
+                if next > lb:
                         collect (buffer)
                         return next - lb, '', False # buffer more ...
 
-                if buffer[next] == ',':
-                        collect (buffer[:next])
-                        if terminate (None):
-                                return 0, buffer[next+1:], True # stop now!
+                if buffer[next-1] == ',':
+                        if terminate (buffer[:next-1]):
+                                return 0, buffer[next:], True # stop now!
                         
                 else:
                         raise NetstringError, '3 missing comma'
                 
-                prev = next + 1
+                prev = next
         else:
                 prev = 0
         while prev < lb:
@@ -54,22 +53,24 @@ def collect_net (next, buffer, collect, terminate):
                         return 0, buffer, False # buffer more ...
                         
                 try:
-                        next = pos + int (buffer[prev:pos]) + 1
+                        next = pos + int (buffer[prev:pos]) + 2
                 except:
                         raise NetstringError, '2 not a length'
                         
-                if next >= lb:
-                        collect (buffer[pos+1:])
+                pos += 1
+                if next > lb:
+                        if pos < lb:
+                                collect (buffer[pos:])
                         return next - lb, '', False # buffer more
                 
-                elif buffer[next] == ',':
-                        if terminate (buffer[pos+1:next]):
-                                return 0, buffer[next+1:], True # stop now!
+                elif buffer[next-1] == ',':
+                        if terminate (buffer[pos:next-1]):
+                                return 0, buffer[next:], True # stop now!
                         
                 else:
                         raise NetstringError, '3 missing comma'
                       
-                prev = next + 1 # continue ...
+                prev = next # continue ...
         return 0, '', False # buffer consumed.
 
 
@@ -167,8 +168,10 @@ class Dispatcher (async_core.Dispatcher_with_fifo):
                 return False
         
         def async_net_error (self, message):
-                "log netstrings error and close the channel"
+                "log netstrings error and close the channel when done"
                 self.log (message, 'async-net-error')
-                self.handle_close ()
+                self.close_when_done ()
+                self.collector_stalled = True
+                assert None == self.log (self.ac_in_buffer, 'debug')
                 
                 
