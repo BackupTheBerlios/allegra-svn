@@ -33,7 +33,8 @@ def collect_net (next, buffer, collect, terminate):
                         return next - lb, '', False # buffer more ...
 
                 if buffer[next-1] == ',':
-                        if terminate (buffer[:next-1]):
+                        collect (buffer[:next-1])
+                        if terminate (None):
                                 return 0, buffer[next:], True # stop now!
                         
                 else:
