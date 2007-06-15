@@ -185,7 +185,7 @@ class Dispatcher (async_core.Dispatcher):
                                 if p.producer_stalled ():
                                         break
                                 
-                                data = p.more ()
+                                data = p.more () # str (p.more ()) > safe!
                                 if data:
                                         buffer += data
                                         break
@@ -255,6 +255,42 @@ class Dispatcher (async_core.Dispatcher):
                         )
                 return True # do not pipeline 
         
+
+class Trempoline (Dispatcher):
+        "a practical dispatcher for synchronized protocol generators"
+
+        collected = ''
+        protocol = None
+    
+        def collect_incoming_data (self, data):
+                "buffer incoming data"
+                self.collected += data
+        
+        def jump (self):
+                "iterate once through the protocol generator"
+                try:
+                        next = self.protocol.next (self.collected)
+                        try:
+                                data, terminator = next
+                        except:
+                                pass
+                        else:
+                                self.async_chat_push (data)
+                                self.set_terminator (terminator)
+                except:
+                        self.loginfo_traceback()
+                        final = True # force to stop incoming data collection.
+                else:
+                        # let the protocol decide to continue or not.
+                        final = (next == True)
+                if final:
+                        self.protocol = None # break any circular reference
+                        self.handle_close () # close the dispatcher too
+                self.collected = ''
+                return final
+                    
+        handle_connect = found_terminator = jump
+
 # Note about this implementation
 #
 # This is a refactored version of asynchat.py as found in Python 2.4, and
