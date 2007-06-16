@@ -78,13 +78,11 @@ if __debug__:
                 )
         def _response (reactor, response, head):
                 return _RESPONSE % (
-                        reactor.http_request[2], 
-                        response,
-                        RESPONSES[response],
+                        reactor.request[2], response, RESPONSES[response],
                         head, '\r\n'.join (mime_headers.lines (
                                 reactor.producer_headers
                                 )),
-                        ' '.join (reactor.http_request),
+                        ' '.join (reactor.request),
                         '\r\n'.join (reactor.collector_lines)
                         )
 else:
@@ -93,9 +91,7 @@ else:
                 )
         def _response (reactor, response, heads):
                 return _RESPONSE % (
-                        reactor.http_request[2], 
-                        response,
-                        RESPONSES[response]
+                        reactor.request[2], response, RESPONSES[response]
                         )
                         
 
@@ -134,15 +130,15 @@ class Reactor (mime_reactor.MIME_producer):
         # progresses, as it thunks data to produce via the select_trigger.
 
         def __call__ (self, response, headers=(), body=None):
-                self.http_response = response
+                self.response = response
                 head = (
                         '%s %d %s\r\n' 
                         'Date: %s\r\n' 
                         'Server: Allegra\r\n' % (
-                                self.http_request[2], 
+                                self.request[2], 
                                 response,
                                 RESPONSES[response],
-                                self.http_time or strftime (
+                                self.time or strftime (
                                         '%a, %d %b %Y %H:%M:%S GMT', 
                                         gmtime (time ())
                                         )
@@ -151,7 +147,7 @@ class Reactor (mime_reactor.MIME_producer):
                 # Complete the HTTP response producer
                 self.producer_headers.update (headers)
                 if body == None and (
-                        self.http_request[0] in ('GET', 'POST') # and
+                        self.request[0] in ('GET', 'POST') # and
                         # response != 204 # No content
                         ):
                         # Supply a response entity if one is required for the
@@ -161,7 +157,7 @@ class Reactor (mime_reactor.MIME_producer):
                                 )
                 else:
                         self.producer_body = body # Use the given body.
-                if self.http_request[2] == 'HTTP/1.1':
+                if self.request[2] == 'HTTP/1.1':
                         # Allways use Chunked Transfer-Encoding for HTTP/1.1!
                         if self.producer_body != None:
                                 self.producer_headers[

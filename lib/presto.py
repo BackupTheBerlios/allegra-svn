@@ -282,12 +282,6 @@ else:
                 'Content-Type', 'application/json; charset=UTF-8'
                 ),)
                 
-def json_200_ok (http, value):
-        "Reply with 200 Ok and a JSON body, prevent peer to cache it."
-        return http (200, CONTENT_TYPE_JSON, producer.Simple (
-                json_encode (value)
-                ))
-
 def json_noop (controller, http, about, json):
         return 501 # Not Implemented ;-)
 
@@ -408,9 +402,17 @@ class Control (
                                 ) (self, http, about, json)
                 except:
                         json[u"exception"] = self.loginfo_traceback ()
-                        return json_response (500, json_encode (json))
+                        return http (
+                                500, CONTENT_TYPE_JSON, producer.Simple (
+                                        json_encode (json)
+                                        )
+                                )
                 
-                return json_response (status, json_encode (json))
+                return http (
+                        status, CONTENT_TYPE_JSON, producer.Simple (
+                                json_encode (json)
+                                )
+                        )
                                 
         def irtd2_identify (self, http, about):
                 u"identify an anonymous user"

@@ -18,8 +18,7 @@ from allegra import prompt, tcp_client, smtp_client, presto
 
 
 def json_inspect (control, http, about, json):
-        response = {}
-        response[u"method"], o = prompt.python_prompt (json.get(
+        method, o = prompt.python_prompt (json.setdefault(
                 u"object", u"control"
                 ), {
                         'control': control, 
@@ -27,15 +26,17 @@ def json_inspect (control, http, about, json):
                         'about': about,
                         'json': json
                         })
-        response[u"namespace"] = dir (o)
-        if type (o) in presto.JSON_TYPES:
-                response["value"] = presto.json_safe (o, set())
+        if (method == 'excp'):
+                json[method] = presto.json_encode (o)
         else:
-                if o != __builtins__ and hasattr(o, '__dict__'):
-                        response[u"attributes"] = presto.json_safe (
+                if type (o) in presto.JSON_TYPES:
+                        json[method] = presto.json_safe (o, set())
+                elif o != __builtins__ and hasattr(o, '__dict__'):
+                        json[u"properties"] = presto.json_safe (
                                 o.__dict__, set()
                                 )
-        return response
+                json[u"names"] = dir (o)
+        return 200
 
 
 class Root (presto.Control):
@@ -68,7 +69,7 @@ class Root (presto.Control):
                 if self.root_password == json.get (u"password"):
                         http.irtd2[1] += '4:root,' # add a role, ...
                         http.irtd2[4] = self.irtd2_salts[0] # salt and ...
-                        presto.irtd2_authorize (
+                        presto.irtd2_identify (
                                 http, about, http.irtd2
                                 ) # ... digest authentic authorizations.
                         # self.new_password (about)

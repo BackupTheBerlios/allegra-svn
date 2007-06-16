@@ -1,39 +1,28 @@
-<html><!-- Copyright (C) 2007 Laurent A.V. Szyster
-
-  This library is free software; you can redistribute it and/or modify
-  it under the terms of version 2 of the GNU General Public License as
-  published by the Free Software Foundation.
-
-    http://www.gnu.org/copyleft/gpl.html
-
-  This library is distributed in the hope that it will be useful, but
-  WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-  You should have received a copy of the GNU General Public License
-  along with this library; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA -->
+<html>
+  <!-- Copyright (C) 2007 Laurent A.V. Szyster | Copyleft GPL 2.0 -->
   <head>
     <title>/root/index.html</title>
     <link href="root.css" type="text/css" rel="stylesheet"></link>
     <script src="protocols.js" type="text/javascript"></script>
     <script src="root.js" type="text/javascript"></script>
   </head>
-  <body><div>
-    <h1>Root</h1>
-    <form 
-      action="javascript:login();"
-      id="login_password" 
-      class="hidden" 
-      >
-      password <input id="pass" name="password" type="password"/>
-    </form>
-    <form
-      id="inspect_object"
-      action="javascript:inspect();"
-      >
-      <input id="object" name="object" type="text" style="{width: 100%}"/>
-      <div id="inspected"></div>
-    </form>
-  </div></body>
+  <body>
+    <div>
+      <h1>Root</h1>
+      <form 
+        action="javascript:login($('login_password'));"
+        id="login_password" 
+        class="hidden" 
+        >
+        password <input id="pass" name="password" type="password"/>
+      </form>
+      <form
+        id="inspect_object"
+        action="javascript:inspect($('inspect_object'));"
+        >
+        <input id="object" name="object" type="text" style="{width: 100%}"/>
+        <div id="inspected"></div>
+      </form>
+    </div>
+  </body>
 </html>

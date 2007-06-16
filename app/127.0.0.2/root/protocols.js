@@ -14,37 +14,43 @@ You should have received a copy of the GNU General Public License
 along with this library; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA */
 
-function Protocols (protocols) {
-    var name, Fun = function () {this.initialize.apply(this, arguments)};
-    for (var i=0, L=protocols.length; i<L; i++)
-        for (name in protocols[i]) 
-            Fun.prototype[name] = protocols[i][name];
-    return Fun;
-} // the only OO convenience you need in JavaScript: 7 lines.
-
-Function.prototype.bindAsEventListener = function (object) {
-    var method = this;
-    return function bound (event) {
-        return method.apply(object, [event||window.event]);
-    }
-} // a simple event listener binding (I mean, simpler than Prototype's ;-)
+var pass = function () {};
 
 var $ = function (id) {
     return document.getElementById(id)
 } // the simplest implementation of Prototype's defacto standard.
 
-var pass = function () {};
+var bindAsEventListener = function (object, fun) {
+    return function bound (event) {
+        return fun.apply(object, [event||window.event]);
+    }
+} // a different event listener binding than Prototype's, as effective.
+
+var Protocols = function (protocols) {
+    var name, Fun = function () {this.initialize.apply(this, arguments)};
+    for (var i=0, L=protocols.length; i<L; i++)
+        for (name in protocols[i]) 
+            Fun.prototype[name] = protocols[i][name];
+    return Fun;
+} // the only OO convenience you need in JavaScript 1.5: 7 lines.
 
 var HTTP = { // may be used as a prototype too, because ...
     requests: {},
 } 
+HTTP.fieldencode = function (s) {
+	var a = s.split("+");
+	for (var i=0, L=a.length; i<L; i++) {
+		a[i] = escape(a[i]);
+	}
+	return a.join("%2B");
+}
 HTTP.formencode = function (sb, query) {
     start = sb.length;
     for (key in query) {
         sb.push('&'); 
-        sb.push(escape(key));
+        sb.push(this.fieldencode(key));
         sb.push('='); 
-        sb.push(escape(query[key]));
+        sb.push(this.fieldencode(query[key]));
     }
     if (sb.length - start > 1) sb[start] = '?';
     return sb;
@@ -308,78 +314,63 @@ JSON.templates = {
     'string': ['<span class="JSONstring">', '</span>'],
     'number': ['<span class="JSONnumber">', '</span>'],
     'boolean': ['<span class="JSONboolean">', '</span>'],
-    'object': ['<span class="JSONnumber">', '</span>'],
-    'array': ['<span class="JSONnumber">', '</span>'],
-    'null': '<span class="JSONnull"/>',
-}; // {'class': ['before', 'after']}
-JSON.template = function (tags, pattern) {
-    var i, LT, els, j, LE, className;
-    for (var tag, i=0, LT=tags.length; i<LT; i++) {
-	    els = node.getElementsByTagName(tag);
-	    for (j=0, LE=els.length; j<LE; j++)
-	        if (els[j].id && pattern.test(els[j].className||'')) {
-	            ;
-	        }
-    }
-}
-JSON.HTML = function (value, sb) {
-    switch (typeof value) {
+} // {'class': ['before', 'after']}
+JSON.HTML = function (value, sb, className) {
+    var t = typeof value;
+    var template = (
+        this.templates[className] || 
+        this.templates[t] ||
+        ['<span>', '</span>']
+        );
+    if (template) sb.push(template[0]);
+    switch (t) {
     case 'string':
-        sb.push ('<span class="JSONstring">');
-        sb.push (HTML.encode(value));
-        sb.push ('</span>');
-        return sb;
+        sb.push (HTML.encode(value)); break;
     case 'number':
-        sb.push ('<span class="JSONnumber">');
-        sb.push (isFinite(value) ? value : "null");
-        sb.push ('</span>');
-        return sb;
+        sb.push (isFinite(value) ? value : "null"); break;
     case 'boolean':
-        sb.push ('<span class="JSONboolean">');
-        sb.push (value); 
-        sb.push ('</span>');
-        return sb;
+        sb.push (value); break;
     case 'undefined': case 'function': case 'unknown':
-        return sb;
+        break;
     case 'object': {
-        if (value == null) sb.push ('<span class="JSONnull">null</span>'); 
+        if (value == null) 
+            sb.push ('<span class="null"/>'); 
         else if (value.length == null) { // Object
             sb.push ('<div class="JSONobject">');
             for (var k in value) {
-                sb.push ('<div class="JSONproperty"><span class="JSONname">');
-                sb.push (HTML.encode (k)), 
-                sb.push ('</span>');
-                this.HTML (value[k], sb); 
+                sb.push('<div class="JSONproperty"><span class="JSONname">');
+                sb.push(HTML.encode (k)), 
+                sb.push('</span>');
+                this.HTML (value[k], sb, k); 
                 sb.push ('</div>');
                 }
-            sb.push ('</div>');
+            sb.push('</div>');
         } else { // Array
-            sb.push ('<div class="JSONarray">');
+            sb.push('<div class="JSONarray">');
             for (var i=0, L=value.length; i<L; i++) 
-                this.HTML (value[i], sb)
-            sb.push ('</div>');
+                this.HTML(value[i], sb, className)
+            sb.push('</div>');
         }
-        return sb;
+
+        break;
     } default:
-        sb.push ('<span class="JSON');
-        sb.push (typeof value);
-        sb.push ('">');
-        sb.push (HTML.encode(value.toString()));
-        sb.push ('</span>');
-        return sb;
+        sb.push(HTML.encode(value.toString())); break;
     }
+    if (template) sb.push(template[1]);
+    return sb;
 }
 JSON.timeout = 3000; // 3 seconds
 JSON.errors = {};
 JSON.exceptions = [];
-JSON.GET = function (url, query, ok, errors, timeout) {
-    errors = errors || this.errors;
-    exceptions = this.exceptions;
+JSON.GET = function (url, query, ok, timeout) {
+    var errors = this.errors;
+    var exceptions = this.exceptions;
+    if (query!=null)
+        var url = HTTP.formencode([url], query).join ('')
     return HTTP.request(
-        'GET', HTTP.formencode([url], query).join (''), {
-            'Accept': 'application/json'
-            }, null, 
-        ok, 
+        'GET', url, {
+            'Accept': 'text/javascript'
+            }, null, ok, 
         function (response) {
             (errors[response.toString()]||pass)(url, query);
         }, 
@@ -387,15 +378,14 @@ JSON.GET = function (url, query, ok, errors, timeout) {
         timeout || this.timeout
         );
 }
-JSON.POST = function (url, payload, ok, errors, timeout) {
-    errors = errors || this.errors;
-    exceptions = this.exceptions;
+JSON.POST = function (url, payload, ok, timeout) {
+    var errors = this.errors;
+    var exceptions = this.exceptions;
     return HTTP.request(
         'POST', url, {
             'Content-Type': 'application/json; charset=UTF-8', 
-            'Accept': 'application/json'
-            }, JSON.encode (payload, []).join (''),
-        ok, 
+            'Accept': 'text/javascript'
+            }, JSON.encode (payload, []).join (''), ok, 
         function (response) {
             (errors[response.toString()]||pass)(url, payload);
         }, 
@@ -404,7 +394,7 @@ JSON.POST = function (url, payload, ok, errors, timeout) {
         );
 }
 JSON.update = function (id) {
-    if (id==null) {
+    if (!id) {
         return function ok (text) {
             var json = JSON.decode(text);
             for (name in json) {
@@ -412,35 +402,51 @@ JSON.update = function (id) {
                     HTML.update(el, JSON.HTML(json[name], []).join(''));
             }
         }
-    } else {
+    } else
         return function ok (text) {
             HTML.update($(id), JSON.HTML(JSON.decode(text), []).join(''));
         }
-    }
 }
 JSON.replace = function (id) {
-    return function ok (text) {
-        var json = JSON.decode(text);
-        if (!id) for (name in json) {
-            el = $(name);
-            if (el) HTML.replace(el, this.HTML(json[name], []).join(''));
-        } else
-            HTML.replace($(id), this.HTML(json, []).join(''));
-    }
+    if (!id) {
+        return function ok (text) {
+            var json = JSON.decode(text);
+            for (name in json) {
+                el = $(name); if (el) 
+                    HTML.replace(el, this.HTML(json[name], []).join(''));
+            }
+        }
+    } else
+        return function ok (text) {
+            HTML.replace($(id), this.HTML(JSON.decode(text), []).join(''));
+        }
 }
 JSON.insert = function (adjacency, id) {
-    return function ok (text) {
-        var json = JSON.decode(text);
-        if (!id) for (name in json) {
-            el = $(id);
-            if (el) HTML.insert(
-                el, this.HTML(json[name], []).join(''), adjacency
-                );
-        } else HTML.insert(
-            $(id), this.HTML(json, []).join(''), adjacency
-            );
-    }
-} // ... just enough to bootstrap a web user interface from JSON.
+    if (!id) {
+        return function ok (text) {
+            var json = JSON.decode(text);
+            for (name in json) {
+                el = $(name); if (el) HTML.insert(
+                    el, this.HTML(json[name], []).join(''), adjacency
+                    );
+            }
+        }
+    } else
+        return function ok (text) {
+            HTML.insert($(id), this.HTML(
+                JSON.decode(text), []
+                ).join(''), adjacency);
+        }
+}
+JSON.submit = function (element, url, ok, timeout) {
+    var query = HTML.query(element);
+    var url = HTTP.formencode([url||"/"], query).join ('');
+    if (url.length < 2048) // assert URLs under the fatal 2KB limit ...
+        JSON.GET(url, null, ok||JSON.update(), timeout);
+    else // ... or POST it
+        JSON.POST(url||"/", ok||JSON.update(), timeout);
+} 
+// ... just enough to bootstrap a web user interface from JSON.
 
 /* Note about this implementation 
  * 
