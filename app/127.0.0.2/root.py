@@ -17,13 +17,13 @@
 from allegra import prompt, tcp_client, smtp_client, presto
 
 
-def json_inspect (controller, reactor, about, json):
+def json_inspect (control, http, about, json):
         response = {}
         response[u"method"], o = prompt.python_prompt (json.get(
-                u"object", u"controller"
+                u"object", u"control"
                 ), {
-                        'controller': controller, 
-                        'reactor': reactor,
+                        'control': control, 
+                        'http': http,
                         'about': about,
                         'json': json
                         })
@@ -52,26 +52,24 @@ class Root (presto.Control):
         def new_password (self, about): 
                 mailto = smtp_client.Pipeline()
                 if tcp_client.connect (mailto, self.smtp_relay):
-                        def pipeline_close (reactor):
-                                mailto.output_fifo.append ('QUIT\r\n')
+                        def pipeline_close (smtp):
+                                smtp.output_fifo.append ('QUIT\r\n')
                         mailto (
-                                'root@127.0.0.2', 
-                                ['contact@laurentszyster.be'],
-                                self.http_uri + (
-                                        '?root=%s' % self.root_password
-                                        )
+                                'contact@laurentszyster.be', 
+                                ['laurentszyster@gmail.com'],
+                                http.uri + '?root=%s' % self.root_password
                                 ).finalization = pipeline_close
         
-        def irtd2_unauthorized (self, reactor, about, json):
-                if '4:root,' in reactor.irtd2[1]:
+        def irtd2_unauthorized (self, http, about, json):
+                if '4:root,' in http.irtd2[1]:
                         return False # authentic authorization found.
                 
                 # one time password check:
                 if self.root_password == json.get (u"password"):
-                        reactor.irtd2[1] += '4:root,' # add a role, ...
-                        reactor.irtd2[4] = self.irtd2_salts[0] # salt and ...
+                        http.irtd2[1] += '4:root,' # add a role, ...
+                        http.irtd2[4] = self.irtd2_salts[0] # salt and ...
                         presto.irtd2_authorize (
-                                reactor, about, reactor.irtd2
+                                http, about, http.irtd2
                                 ) # ... digest authentic authorizations.
                         # self.new_password (about)
                         return False # Authorized ?-)
@@ -81,28 +79,27 @@ class Root (presto.Control):
         json_actions = {
                 u"inspect": json_inspect,
                 u"load": (
-                        lambda json: 
+                        lambda control, http, about, json: 
                         presto.Listen.presto_root.get(
                                 json.get (u"host", u"127.0.0.2")
-                                ).presto_load (json[u"filename"])
+                                ).presto_load (json.get(u"filename"))
                         ),
                 u"unload": (
-                        lambda json: 
+                        lambda control, http, about, json: 
                         presto.Listen.presto_root.get(
                                 json.get (u"host", u"127.0.0.2")
-                                ).presto_unload (json[u"filename"])
+                                ).presto_unload (json.get(u"filename"))
                         )
                 }
                                 
-        def json_application (self, reactor, about, json):
+        def json_application (self, http, about, json):
                 # check authorizations, maybe grant them ...
-                if self.irtd2_unauthorized (reactor, about, json):
-                        return reactor.http_produce (
-                                401, presto.http_server.CONNECTION_CLOSE
-                                ) # Unauthorized ... is a fatal HTTP error.
+                if self.irtd2_unauthorized (http, about, json):
+                        # Unauthorized ... is a fatal HTTP error.
+                        return http.error (401) 
                                 
                 return presto.Control.json_application (
-                        self, reactor, about, json
+                        self, http, about, json
                         )
                 
 
