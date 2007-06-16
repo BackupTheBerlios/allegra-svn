@@ -114,9 +114,6 @@ class Pipeline (async_chat.Dispatcher, async_client.Pipeline):
                 async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n')
 
-        def __repr__ (self):
-                return 'smtp-client-pipeline id="%x"' % id (self)
-        
         def __call__ (self, *args, **kwargs):
                 req = Reactor (*args, **kwargs)
                 self.pipeline_requests.append (req)

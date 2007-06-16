@@ -17,13 +17,14 @@
 "http://laurentszyster.be/blog/ansqlite/"
 
 import sys, time
-from cPickle import loads, dumps
 
 from allegra import (
         netstring, loginfo, async_loop, finalization, 
         ip_peer, tcp_client, ansqlite
         )
 
+loads = ansqlite.loads
+dumps = ansqlite.dumps
 try:
         statements = netstring.netpipe (
                 lambda r=sys.stdin.read: r (4096)
@@ -35,10 +36,10 @@ except:
         sys.exit (1)
 
 class Dispatcher (ansqlite.Client):
-        
+
         statements_count = 0
-        
-        def test_callback (self, resultset):
+
+        def callback (self, resultset):
                 assert None == loginfo.log ('%r' % resultset)
                 try:
                         stmt, param = loads (statements.next ())
@@ -48,11 +49,11 @@ class Dispatcher (ansqlite.Client):
                         self.loginfo_traceback ()
                 else:
                         Dispatcher.statements_count += 1
-                        self (self.test_callback, stmt, param)
+                        self (self.callback, stmt, param)
         
 try:
-        for sql in (Dispatcher () for i in range (clients)):
-                if tcp_client.connect (sql, addr):
+        for ansql in (Dispatcher () for i in xrange (clients)):
+                if tcp_client.connect (ansql, addr):
                         stmt, param = loads (statements.next ())
                         Dispatcher.stmt_count += 1
                         if Dispatcher.stmt_count < Dispatcher.stmt_limit:

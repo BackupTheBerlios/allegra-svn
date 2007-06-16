@@ -20,7 +20,7 @@
 # CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
-# Copyright (C) 2005 Laurent A.V. Szyster
+# Copyright (C) 2005-2007 Laurent A.V. Szyster
 #
 # This library is free software; you can redistribute it and/or modify
 # it under the terms of version 2 of the GNU General Public License as
@@ -119,9 +119,6 @@ class Dispatcher (async_core.Dispatcher):
                 self.ac_out_buffer = ''
                 self.output_fifo = collections.deque ()
 
-        def __repr__ (self):
-                return 'async-chat id="%x"' % id (self)
-        
         def readable (self):
                 "predicate for inclusion in the poll loop for input"
                 return not (
@@ -256,46 +253,83 @@ class Dispatcher (async_core.Dispatcher):
                 return True # do not pipeline 
         
 
-class Trempoline (Dispatcher):
-        "a practical dispatcher for synchronized protocol generators"
+"http://laurentszyster.be/blog/the_mexican_trempoline/"
 
-        collected = ''
-        protocol = None
-    
-        def collect_incoming_data (self, data):
-                "buffer incoming data"
-                self.collected += data
+class Trempoline (Dispatcher):
+
+        collector = protocol = None
         
-        def jump (self):
-                "iterate once through the protocol generator"
+        def trempoline (self, data=None):
                 try:
-                        next = self.protocol.next (self.collected)
+                        next = self.protocol.send (data)
                         try:
-                                data, terminator = next
+                                data, self.terminator, self.collector = next
                         except:
                                 pass
                         else:
-                                self.async_chat_push (data)
-                                self.set_terminator (terminator)
-                except:
+                                self.output_fifo.append (data)
+                except: 
+                        # stop incoming data collection on protocol error
                         self.loginfo_traceback()
-                        final = True # force to stop incoming data collection.
-                else:
-                        # let the protocol decide to continue or not.
-                        final = (next == True)
-                if final:
-                        self.protocol = None # break any circular reference
-                        self.handle_close () # close the dispatcher too
-                self.collected = ''
-                return final
+                        return True 
+
+                return False
                     
-        handle_connect = found_terminator = jump
+        def handle_connect (self):
+                self.collected = ''
+                self.trempoline ()
+
+        def collect_incoming_data (self, data):
+                try:
+                        self.collector.collect_incoming_data (data)
+                except:
+                        self.collected += data
+                        
+        def found_terminator (self):
+                if self.collector:
+                        if self.collector.found_terminator ():
+                                return self.trempoline ()
+
+                        return False
+                
+                data = self.collected
+                if data:
+                        self.collected = ''
+                        return self.trempoline (data)
+                
+                return self.trempoline ()        
+                
+        def handle_close (self):
+                self.close ()
+                try:
+                        self.protocol.next ()
+                except StopIteration:
+                        pass
+                self.protocol = None # break any circular reference
+
 
 # Note about this implementation
 #
 # This is a refactored version of asynchat.py as found in Python 2.4, and
 # modified as to support stallable producers and collectors, loginfo and 
-# finalization.
+# finalization. I also added a Trempoline, leveraging Python 2.5 coroutines
+# generators to make simple synchronized protocol simpler to implement and
+# infuckingcredibly broken and complicated synchronous protocol possible.
+#
+#
+# Trempoline
+#
+# Many (most?) network peer applications need to talk to some rare 
+# protocols that where synchronously designed (usually because they were
+# implemented with the "obvious" synchronous APIs available). Crafting a 
+# state machine for an asynchronous API is clearly not a trivial task in 
+# such common case.
+#
+# The Trempoline solves that "corner" case of ad-hoc synchronous client
+# implementation with a library that is otherwise designed for high
+# performance asynchronous peers (ie: pipelining clients and servers with
+# decoupled I/O protocols and transports implementations).
+#
 #
 # Stallable Producer and Collector
 #

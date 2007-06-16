@@ -50,9 +50,6 @@ class Trigger (async_core.Dispatcher):
 
         "Thunk back safely from threads into the asynchronous loop"
         
-        def __repr__ (self):
-                return 'trigger id="%x"' % id (self)
-
         def readable (self):
                 "a Trigger is allways readable"
                 return True
@@ -184,9 +181,6 @@ class Select_trigger (loginfo.Loginfo, finalization.Finalization):
 		if self.select_trigger == None:
 			Select_trigger.select_trigger = Trigger ()
 		self.select_trigger.select_triggers += 1
-		
-	def __repr__ (self):
-		return 'select-trigger id="%x"' % id (self)
 		
 	def select_trigger_log (self, data, info=None):
 		"log asynchronously via the select trigger"

@@ -167,9 +167,6 @@ class Thread_loop (threading.Thread, select_trigger.Select_trigger):
 		threading.Thread.__init__ (self)
 		self.setDaemon (1)
 
-	def __repr__ (self):
-		return 'thread-loop id="%x"' % id (self)
-
 	def run (self):
                 """The Thread Loop
                 

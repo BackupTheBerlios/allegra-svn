@@ -87,9 +87,6 @@ class Dispatcher (async_core.Dispatcher_with_fifo):
                 self.ac_out_buffer = ''
                 self.output_fifo = collections.deque ()
 
-        def __repr__ (self):
-                return 'async-net id="%x"' % id (self)
-                
         def readable (self):
                 "predicate for inclusion in the poll loop for input"
                 return not (

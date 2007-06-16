@@ -107,22 +107,22 @@ class Reactor (mime_reactor.MIME_producer):
         collector_lines = ()
         collector_body = None
         
-        http_time = None
-        http_request = ('?', '?', 'HTTP/0.9')
-        http_response = 101 # Continue
+        time = None
+        request = ('?', '?', 'HTTP/0.9')
+        response = 101 # Continue
         
-        def http_cookies (self, start):
-                cookies = self.collector_headers.get ('cookie')
-                if cookies == None:
+        def cookies (self, start):
+                lines = self.collector_headers.get ('cookie')
+                if lines == None:
                         return ().__iter__ ()
                 
                 return (
-                        c[len (start):] for c in cookies.split ('; ')
+                        c[len (start):] for c in lines.split ('; ')
                         if c.startswith (start)
                         ) # this is a generator ;-)
                         
-        def http_error (self, response):
-                return self.http_produce (response, CONNECTION_CLOSE)
+        def error (self, response):
+                return self (response, CONNECTION_CLOSE)
 
         # MIME producer are stalled before call to http_produce!
         #
@@ -133,7 +133,7 @@ class Reactor (mime_reactor.MIME_producer):
         # producer back to the browser that will "produce" as the request
         # progresses, as it thunks data to produce via the select_trigger.
 
-        def http_produce (self, response, headers=(), body=None):
+        def __call__ (self, response, headers=(), body=None):
                 self.http_response = response
                 head = (
                         '%s %d %s\r\n' 
@@ -187,6 +187,9 @@ class Reactor (mime_reactor.MIME_producer):
                 
                 return False # let the http_server.Dispatcher continue ...
         
+        def resume (self):
+                self.dispatcher.http_continue (self)
+
 
 def http_clock (Class):
         now = time ()
@@ -224,9 +227,6 @@ class Dispatcher (
 		async_chat.Dispatcher.__init__ (self)
                 self.set_terminator ('\r\n\r\n')
 
-        def __repr__ (self):
-                return 'http_server.Dispatcher id="%x"' % id (self)
-        
 	def collector_continue (self, lines):
                 self.collector_buffer = ''
 		while (lines and not lines[0]):
@@ -245,25 +245,25 @@ class Dispatcher (
                 # HTTP request and response, and push it stalled in the 
                 # channel's output fifo.
                 #
-                reactor = Reactor ()
-                self.output_fifo.append (reactor)
+                http = Reactor ()
+                self.output_fifo.append (http)
                 try:
                         # split the request in: command, uri and version
 			(method, url, version) = lines.pop (0).split (' ')
 		except:
                         # or return 400 Invalid and close the connection
-                        return reactor.http_produce (400, CONNECTION_CLOSE)
+                        return http (400, CONNECTION_CLOSE)
 
-                reactor.http_request = (
+                http.request = (
                         method.upper (), url, version.upper ()
                         ) # be liberal in what is accepted, strict to produce
-                reactor.dispatcher = self
+                http.dispatcher = self
                 # save and parse the collected lines and headers
-                reactor.collector_lines = lines
-                reactor.collector_headers = mime_headers.map (lines)
+                http.collector_lines = lines
+                http.collector_headers = mime_headers.map (lines)
                 # pass to the server's handlers, expect one of them to
                 # complete the reactor's mime producer headers and body.
-                if self.async_server.http_continue (reactor):
+                if self.async_server.http_continue (http):
                         return True
                         #
                         # A GET controller could very well ask to stall the
@@ -271,23 +271,19 @@ class Dispatcher (
                         # response to the current request and all the ones 
                         # pipelined there-after).
                 
-                return self.http_continue (reactor)
+                return self.http_continue (http)
                 
-        def http_continue (self, reactor):
-                if reactor.collector_body == None:
-                        if not (reactor.http_request[0] in (
+        def http_continue (self, http):
+                if http.collector_body == None:
+                        if not (http.request[0] in (
                                 'GET', 'HEAD', 'DELETE'
                                 )):
-                                return reactor.http_produce (
-                                        500, CONNECTION_CLOSE
-                                        )
+                                return http (500, CONNECTION_CLOSE)
                         
                         return self.closing
                         
                 http_reactor.http_collector (
-                        self,
-                        reactor.collector_body,
-                        reactor.collector_headers
+                        self, http.collector_body, http.collector_headers
                         )
                 return self.closing
         

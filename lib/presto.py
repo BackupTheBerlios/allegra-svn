@@ -145,8 +145,8 @@ IRTD2_ERRORS = (
         '4 Invalid IRTD2 digest' # 4
         )
 
-def irtd2_identified (reactor, about, salts, timeout):
-        cookies = reactor.http_cookies ('IRTD2=')
+def irtd2_identified (http, about, salts, timeout):
+        cookies = http.cookies ('IRTD2=')
         try:
                 value = cookies.next ()
         except StopIteration:
@@ -166,7 +166,7 @@ def irtd2_identified (reactor, about, salts, timeout):
                 if sha1 (' '.join (irtd2)).hexdigest () == digest:
                         irtd2[2] = str (now) # bytes!
                         irtd2[3] = digest
-                        irtd2_identify (reactor, about, irtd2)
+                        irtd2_identify (http, about, irtd2)
                         return 0 # identified
         
         return 4 # 
@@ -177,88 +177,86 @@ def irtd2_identified (reactor, about, salts, timeout):
         # that more cookies don't masquerade/merge the authorizations or 
         # identity they carry.
         
-def irtd2_identify (reactor, about, irtd2):
+def irtd2_identify (http, about, irtd2):
         assert type (irtd2) == list and len (irtd2) == 5
         irtd2[4] = (sha1 (' '.join (irtd2)).hexdigest ())
-        reactor.producer_headers['Set-Cookie'] = (
+        http.producer_headers['Set-Cookie'] = (
                 'IRTD2=%s; '
                 'expires=Sun 17 Jan 2038 19:14:07 GMT; '
                 'path=/%s/; domain=.%s.' % (
                         ' '.join (irtd2), about[1], about[0]
                         )
                 )
-        reactor.irtd2 = irtd2
+        http.irtd2 = irtd2
 
 
-def http_head (control, reactor, about):
-        return control.http_resource (reactor, about, 'HEAD')
+def http_head (control, http, about):
+        return control.http_resource (http, about, 'HEAD')
 
 
-def http_get (control, reactor, about):
+def http_get (control, http, about):
         "default continuation for GET: dispatch resource and calls"
-        querystring = reactor.http_uri[3]
+        querystring = http.uri[3]
         if querystring == None:
-                return control.http_resource (reactor, about, 'GET')
+                return control.http_resource (http, about, 'GET')
 
         return control.json_application (
-                reactor, about, urlform_decode (querystring)
+                http, about, urlform_decode (querystring)
                 ) # Web 1.0 & 2.0
 
-def http_post (control, reactor, about, overrideMIME='application/json'):
+def http_post (control, http, about, overrideMIME='application/json'):
         "default continuation for POST: handle JSON and URL encoded form"
-        ct = reactor.collector_headers.get (
+        ct = http.collector_headers.get (
                 'content-type', overrideMIME
                 ).split (';', 1)[0]
-        if reactor.collector_body == None: # no body collector yet ...
+        if http.collector_body == None: # no body collector yet ...
                 if ct in (
                         'application/json',
                         'www-application/urlencoded-form-data'
                         ): # instanciate one for JSON or URL encoded form 
-                        reactor.collector_body = control.http_collector ()
+                        http.collector_body = control.http_collector ()
                         return False # Web 1.0 & 2.0
                 
-                return control.http_continue (reactor, about) # or continue.
+                return control.http_continue (http, about) # or continue.
                 
         # body collected, decode the posted JSON or form data ...
         if ct == 'application/json':
                 return control.json_application (
-                        reactor, about, json_decode (
-                                reactor.collector_body.data
+                        http, about, json_decode (
+                                http.collector_body.data
                                 )
                         ) # Web 2.0 is JSON
                         
         elif ct == 'www-application/urlencoded-form-data':
                 return control.json_application (
-                        reactor, about, urlform_decode (
-                                reactor.collector_body.data
+                        http, about, urlform_decode (
+                                http.collector_body.data
                                 )
                         ) # Web 1.0 is URL form
                         
-        return reactor.http_produce (500) # Server Error
+        return http (500) # Server Error
 
 
-def http_continue (controller, reactor, about):
+def http_continue (controller, http, about):
         "reply with 405 Not Implemented and close the connection when done"
-        return reactor.http_produce (405, http_server.CONNECTION_CLOSE)
+        return http (405, http_server.CONNECTION_CLOSE)
 
 
-def http_404_close (reactor, about):
+def http_404_close (http, about):
         "reply with 404 Not Found and close the connection when done"
-        return reactor.http_produce (404, http_server.CONNECTION_CLOSE)
+        return http (404, http_server.CONNECTION_CLOSE)
 
 
-def rest_302_redirect (reactor, about):
+def rest_302_redirect (http, about):
         "redirect to the controller's locator in the context of the reactor"
-        uri = reactor.http_uri[:2]
+        uri = http.uri[:2]
         uri.append ('/')
         uri.append ((u"/".join (about)).encode ('UTF-8'))
-        return reactor.http_produce (
-                302, (('Location', ''.join (uri)),)
-                )
+        return http (302, (('Location', ''.join (uri)),))
 
 CONTENT_TYPE_XML = (('Content-Type', 'text/xml; charset=UTF-8'),)
 
-def xml_200_ok (reactor, dom, content_type='text/xml'): 
+def xml_200_ok (http, dom, content_type='text/xml'): 
         "Reply with 200 Ok and an XML body encoded in UTF-8."
         #accept_charsets = mime_headers.preferences (
         #        reactor.collector_headers, 'accept-charset', 'ASCII'
@@ -267,10 +265,9 @@ def xml_200_ok (reactor, dom, content_type='text/xml'):
         #        encoding = 'UTF-8' # prefer UTF-8 over any other encoding!
         #else:
         #        encoding = accept_charsets[-1].upper ()
-        return reactor.http_produce (
-                200, 
-                (('Content-Type', content_type + '; charset=UTF-8'),), 
-                xml_reactor.xml_producer_unicode (
+        return http (200, (
+                ('Content-Type', content_type + '; charset=UTF-8'),
+                ), xml_reactor.xml_producer_unicode (
                         dom.xml_root, dom.xml_prefixes, dom.xml_pi, 'UTF-8'
                         )
                 )
@@ -285,15 +282,13 @@ else:
                 'Content-Type', 'application/json; charset=UTF-8'
                 ),)
                 
-def json_200_ok (reactor, value):
+def json_200_ok (http, value):
         "Reply with 200 Ok and a JSON body, prevent peer to cache it."
-        return reactor.http_produce (
-                200, 
-                CONTENT_TYPE_JSON, 
-                producer.Simple (json_encode (value))
-                )
+        return http (200, CONTENT_TYPE_JSON, producer.Simple (
+                json_encode (value)
+                ))
 
-def json_noop (controller, reactor, about, json):
+def json_noop (controller, http, about, json):
         return 501 # Not Implemented ;-)
 
 class Control (
@@ -316,7 +311,7 @@ class Control (
         def __init__ (self, peer, about):
                 about_utf8 = [s.encode ('UTF-8') for s in about]
                 about_utf8[0] = 'http://' + about_utf8[0]
-                self.http_uri = '/'.join (about_utf8)
+                self.uri = '/'.join (about_utf8)
                 about_utf8[0] = peer.presto_path
                 self.presto_path = '/'.join (about_utf8)
                 self.xml_root = xml_dom.Element (
@@ -352,84 +347,82 @@ class Control (
                                         self.log (filename, 'cached')
                         self.mime_cache_get = self.mime_cache.get
                                         
-        def __call__ (self, reactor, about):
-                if (hasattr (reactor, 'irtd2') or irtd2_identified (
-                        reactor, about, self.irtd2_salts, self.irtd2_timeout
+        def __call__ (self, http, about):
+                if (hasattr (http, 'irtd2') or irtd2_identified (
+                        http, about, self.irtd2_salts, self.irtd2_timeout
                         ) == 0):
                         return self.HTTP.get (
-                                reactor.http_request[0], http_continue
-                                ) (self, reactor, about)
+                                http.request[0], http_continue
+                                ) (self, http, about)
 
-                return self.irtd2_identify (reactor, about)
+                return self.irtd2_identify (http, about)
         
-        def http_resource (self, reactor, about, method):
+        def http_resource (self, http, about, method):
                 u"produce a static MIME response or an dynamic XML string."
-                if len (reactor.uri_about) == 3:
-                        if reactor.uri_about[-1] == u"":
+                if len (http.uri_about) == 3:
+                        if http.uri_about[-1] == u"":
                                 # context/subject/ -> 302 context/subject
-                                about = list (reactor.uri_about)
+                                about = list (http.uri_about)
                                 about[-1] = self.rest_redirect
                                 return rest_302_redirect (
-                                        reactor, about[1:]
+                                        http, about[1:]
                                         )
                         
                         # context/subject/predicate -> 200 Ok | 404 Not Found
-                        teed = self.mime_cache_get (reactor.uri_about[2])
+                        teed = self.mime_cache_get (http.uri_about[2])
                         if teed:
                                 if method == 'GET':
-                                        return reactor.http_produce (
+                                        return http (
                                                 200, 
                                                 teed.mime_headers, 
                                                 producer.Tee (teed)
                                                 ) # Ok
                                                 
                                 elif method == 'HEAD':
-                                        return reactor.http_produce (
+                                        return http (
                                                 200, teed.mime_headers
                                                 )
                                 
-                        return rest_302_redirect (reactor, about[1:])
+                        return rest_302_redirect (http, about[1:])
                                         
                 # context/subject -> 200 Ok XML
                 if method == 'GET':
-                        return xml_200_ok (reactor, self) # what else?
+                        return xml_200_ok (http, self) # what else?
                 
                 elif method == 'HEAD':
-                        return reactor.http_produce (200, CONTENT_TYPE_XML)
+                        return http (200, CONTENT_TYPE_XML)
                         #
                         # if you care to ask for HEAD, expect to accept UTF-8
                         
-                return self.http_continue (reactor, about)
+                return self.http_continue (http, about)
         
         def http_collector (self):
                 return collector.Limited (16384)
                 # sweet sixteen 8-bit kilobytes ;-)
         
-        def json_application (self, reactor, about, json):
+        def json_application (self, http, about, json):
                 u"try to dispatch requests to actions, produce a JSON object"
                 try:
                         status = self.json_actions.get(
-                                reactor.uri_about[-1], json_noop
-                                ) (self, reactor, about, json)
+                                http.uri_about[-1], json_noop
+                                ) (self, http, about, json)
                 except:
                         json[u"exception"] = self.loginfo_traceback ()
                         return json_response (500, json_encode (json))
                 
                 return json_response (status, json_encode (json))
                                 
-        def irtd2_identify (self, reactor, about):
+        def irtd2_identify (self, http, about):
                 u"identify an anonymous user"
-                irtd2_identify (reactor, about, [
+                irtd2_identify (http, about, [
                         password (), '', '%d' % time.time (), '',
                         self.irtd2_salts[0]
                         ])
-                return self (reactor, about) # recurse through __call__ ...
+                return self (http, about) # recurse through __call__ ...
         
-        def http_continue (self, reactor, about):
+        def http_continue (self, http, about):
                 "405 Method Not Allowed"
-                return reactor.http_produce (
-                        405, http_server.CONNECTION_CLOSE
-                        )
+                return http (405, http_server.CONNECTION_CLOSE)
 
 
 HTTP_URI = re.compile (
@@ -503,23 +496,23 @@ class Listen (async_server.Listen):
                 del self.presto_modules[filename]
                 return controllers
         
-        def http_continue (self, reactor):
-                uri = reactor.http_request[1]
+        def http_continue (self, http):
+                uri = http.request[1]
                 try:
                         uri = list (HTTP_URI.match (uri).groups ())
                 except:
-                        uri = ['http://', reactor.collector_headers.get (
+                        uri = ['http://', http.collector_headers.get (
                                 'host', self.presto_path
                                 ), uri, '', '']
                 else:
                         uri[0] = uri[0] or 'http://'
-                        uri[1] = uri[1] or reactor.collector_headers.get (
+                        uri[1] = uri[1] or http.collector_headers.get (
                                 'host', self.presto_path
                                 )
-                reactor.http_uri = uri
+                http.uri = uri
                 about = uri[2].split ('/', 2)
                 about[0] = uri[1]
-                about = reactor.uri_about = tuple ((
+                about = http.uri_about = tuple ((
                         unicode (urldecode (n), 'UTF-8') for n in about
                         ))
                 try:
@@ -538,20 +531,20 @@ class Listen (async_server.Listen):
                                 controller = http_404_close
 
                 try:
-                        stalled = controller (reactor, about)
+                        stalled = controller (http, about)
                 except:
                         self.loginfo_traceback ()
-                        reactor.http_produce (500)
+                        http (500)
                         stalled = False
                 try:
-                        digest = reactor.irtd2[4]
+                        digest = http.irtd2[4]
                 except:
-                        digest = '%x' % id (reactor)
+                        digest = '%x' % id (http)
                 loginfo.log (str (netstring.encode ((
-                        ' '.join (reactor.http_request),
+                        ' '.join (http.request),
                         ''.join (uri[:3]),
                         digest
-                        ))), '%d' % reactor.http_response)
+                        ))), '%d' % http.response)
                 return stalled
         
 """

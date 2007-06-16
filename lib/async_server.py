@@ -54,9 +54,6 @@ class Listen (async_core.Dispatcher):
                 metered (self)             
                 self.log ('listen %r' % (addr,), 'info')
 
-        def __repr__ (self):
-                return 'async-server id="%x"' % id (self)
-
         def readable (self):
                 return self.accepting
 

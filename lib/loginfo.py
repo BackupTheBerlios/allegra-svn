@@ -149,11 +149,6 @@ class Loginfo (object):
 
 	loginfo_logger = logger
 	
-	def __repr__ (self):
-		return '%s id="%x"' % (
-			self.__class__.__name__, id (self)
-			)
-
 	def loginfo_log (self, data, info=None):
 		"""log a message with this instance's __repr__ and an 
 		optional category"""

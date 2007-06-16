@@ -41,40 +41,48 @@ class Client (async_net.Dispatcher):
         """
         def __init__ (self):
                 async_net.Dispatcher.__init__ (self)
-                self.callbacks = collections.deque ()
+                self.pipeline_responses = collections.deque ()
+                pipelined_requests = 0
                 
         def __call__ (self, callback, statement, params=()):
                 s = dumps ((statement, params))
                 self.output_fifo.append ('%d:%s,' % (len (s), s))
-                self.callbacks.append (callback)
+                self.pipeline_responses.append (callback)
+                self.pipelined_requests += 1
                 
-        def json (self, callback, prepared, params=()):
+        def prepared (self, callback, prepared, params=()):
                 s = dumps (params)
                 self.output_fifo.append ('%d:[%s,%s],' % (
                         len (s) + len (prepared) + 3, prepared, s
                         ))
-                self.callbacks.append (callback)
+                self.pipeline_responses.append (callback)
+                self.pipelined_requests += 1
+
+        def encoded (self, callback, encoded):
+                self.output_fifo.append ('%d:%s,' % (len (encoded), encoded))
+                self.pipeline_responses.append (callback)
+                self.pipelined_requests += 1
 
         def async_net_continue (self, data):
                 try:
-                        self.callbacks.popleft () (data)
+                        self.pipeline_responses.popleft () (data)
                 except:
                         self.loginfo_traceback ()
                         
 
 def connect (name, timeout=3.0):
-        sql = Client ()
-        if not tcp_client.connect (sql, name, timeout):
-               return sql
+        ansql = Client ()
+        if not tcp_client.connect (ansql, name, timeout):
+               return ansql
        
         def finalize (dispatcher):
-                while dispatcher.sql_defered:
+                while dispatcher.callbacks:
                         try:
-                                dispatcher.callbacks.popleft () (None)
+                                dispatcher.pipeline_responses.popleft () (None)
                         except:
                                 dispatcher.loginfo_traceback ()
 
-        sql.finalization = finalize
+        ansql.finalization = finalize
 
 
 def open (database, Base=async_net.Dispatcher):

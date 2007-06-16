@@ -14,20 +14,6 @@
 # along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-"""
-from allegra import loginfo, collector, http_client
-
-http = http_client.connect
-Request = http_client.Reactor
-        
-Request ('GET', http ('www.google.com'), '/index.html', {}) (
-        (lambda request: collector.LOGINFO)
-        ).finalization = (
-                lambda request: loginfo.log (request.http_response)
-                )
-"""
-        
-
 import socket
 
 from allegra import (
@@ -41,19 +27,19 @@ class Reactor (finalization.Finalization):
         http_response = collector_headers = collector_body = None
         
         def __init__ (
-                self, method, pipeline, url, headers, produce=None
+                self, pipeline, method, url, headers, produce=None
                 ):
                 headers ['Host'] = pipeline.http_host
-                self.http_pipeline = pipeline
-                self.http_urlpath = url
+                self.dispatcher = pipeline
+                self.http_url = url
                 self.http_method = method
                 self.producer_headers = headers
                 self.producer_body = produce
 
         def __call__ (self, collect=(lambda: None)):
                 self.http_collect = collect
-                self.http_pipeline (self)
-                self.http_pipeline = None
+                self.dispatcher.pipeline (self)
+                self.dispatcher = None
                 return self
                         
 
@@ -67,7 +53,8 @@ class Pipeline (mime_reactor.Pipeline):
 
         pipeline_keep_alive = True
 
-        __call__ = mime_reactor.Pipeline.pipeline
+        def __call__ (self, *args):
+                return Reactor (self, self.http_host, *args)
                 
         def pipeline_wake_up (self):
                 if self.http_version == '1.1':
@@ -180,7 +167,7 @@ class Pipeline (mime_reactor.Pipeline):
                 # push one string and maybe a producer in the output fifo ...
                 http_request = '%s %s HTTP/%s\r\n' % (
                         request.http_method, 
-                        request.http_urlpath, 
+                        request.http_url, 
                         self.http_version
                         )
                 if request.producer_body == None: # GET, HEAD and DELETE
@@ -262,3 +249,33 @@ def Pool (host, port=80, version='1.1', size=2, timeout=3.0, precision=1.0):
                 decorated (host, port, version), 
                 (host, port), size, timeout, precision
                 )
+                
+"""
+from allegra import loginfo, collector, http_client
+
+def collect (request): 
+    return collector.LOGINFO
+
+def terminate (request): 
+    loginfo.log (request.http_response)
+    
+for http in (
+    http_client.connect,
+    http_client.Connections (), 
+    http_client.Cache ()
+    ):
+    for r in range (3):
+        http ('www.google.com') (
+            'GET', '/index.html', {}
+            ) (collect).finalization = terminate
+
+pool = http_client.Pool ('www.google.com', 2) 
+for r in range (3):
+    pool () (
+        'GET', '/index.html', {}
+        ) (collect).finalization = terminate
+
+"""
+        
+
+                

@@ -81,9 +81,6 @@ class File_producer (object):
                         sync_open, (self, filename, mode, bufsize)
                         ))
 
-        def __repr__ (self):
-                return 'synchronized-file-producer id="%x"' % id (self)
-                        
         def more (self):
                 try:
                         return self.async_buffers.popleft ()
@@ -128,9 +125,6 @@ class File_collector (object):
                         sync_open, (self, filename, mode, bufsize)
                         ))
 
-        def __repr__ (self):
-                return 'synchronized-file-collector id="%x"' % id (self)
-                
         def collect_incoming_data (self, data):
                 self.synchronized ((sync_write, (self, data,)))
                 

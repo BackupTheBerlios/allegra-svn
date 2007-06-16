@@ -36,9 +36,6 @@ class Sync_stdio (thread_loop.Thread_loop):
                 logger.loginfo_stderr = self.async_stderr
 		thread_loop.Thread_loop.__init__ (self)
 
-	def __repr__ (self):
-		return 'sync-stdio'
-
 	def async_stdout (self, data):
 		self.thread_loop_queue ((self.sync_stdout, (data,)))
 
@@ -68,9 +65,6 @@ class Sync_stdio (thread_loop.Thread_loop):
                 
 
 class Sync_stdoe (Sync_stdio):
-
-	def __repr__ (self):
-		return 'sync-stdoe'
 
 	def thread_loop_init (self):
                 self.select_trigger_log (
@@ -160,9 +154,6 @@ class Python_prompt (Sync_prompt):
                         sys.version, sys.platform
                         ), info)
 		Sync_prompt.__init__ (self)
-
-	def __repr__ (self):
-		return 'python-prompt id="%x"' % id (self)
 
 	def async_readline (self, line):
 		method, result = prompt.python_prompt (
