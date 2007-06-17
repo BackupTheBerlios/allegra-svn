@@ -16,9 +16,7 @@
 
 "Practical REST objects"
 
-import \
-        types, imp, weakref, time, random, os, stat, socket, glob, \
-        re, mimetypes
+import types, imp, weakref, time, random, os, stat, socket, glob, re, mimetypes
 
 try:
         from hashlib import sha1
@@ -77,8 +75,9 @@ def json_safe (value, walked):
         return repr (value)
 
 try:
-        from cjson import decode as json_decode
         from cjson import encode as json_encode
+        from cjson import decode as _decode
+        json_decode = (lambda s: _decode (s, 1))
 except:
         raise Exception (
                 'install cjson, see: '
