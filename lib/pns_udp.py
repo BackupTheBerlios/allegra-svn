@@ -17,12 +17,15 @@
 
 ""
 
-from allegra import netstring, async_core, timeouts, ip_peer, pns_model
+from allegra import (
+        netstring, async_core, timeouts, ip_peer, public_names, public_rdf
+        )
 
 
 class Circle (async_core.Dispatcher):
                         	
         pns_datagram_size = 1024
+        pns_horizon = 126
                                 
 	def __init__ (self, pns_peer, name, subscribers=None):
 		self.PNS_SP= '%d:%s,0:,' % (len (name), name)
@@ -69,7 +72,7 @@ class Circle (async_core.Dispatcher):
 	# PNS/TCP continuation
 
 	def pns_tcp_continue (self, model, direction):
-		encoded = pns_model.pns_quintet (model, direction)
+		encoded = public_rdf.pns_quintet (model, direction)
 		for subscriber in self.pns_subscribers:
 			subscriber.async_net_push ((encoded,))
 
@@ -145,10 +148,9 @@ class Circle (async_core.Dispatcher):
 
 		# validate question
 		model = list (netstring.decode (datagram))
-		if (
-			len (model) != 2 or 
-			model[0] != pns_model.pns_name (model[0])
-			):
+		if (len (model) != 2 or not public_names.valid_utf8 (
+                        model[0], self.pns_horizon
+                        )):
 			assert None == self.log (
 				datagram, 'invalid-question'
 				)
@@ -246,8 +248,10 @@ class Circle (async_core.Dispatcher):
         	if (
         		(len (model[0]) + len (model[1]) + len (
         			'%d%d' % (len (model[0]), len (model[1]))
-                        	)) > 512 or
-        		model[0] != pns_model.pns_name (model[0])
+                        	)) > 512 
+                        or not public_names.valid_utf8 (
+                                model[0], self.pns_horizon
+                                )
         		):
 			assert None == self.log (
 				datagram, 'invalid-question'
@@ -611,9 +615,9 @@ class Peer (async_core.Dispatcher, timeouts.Timeouts):
 		# out of circle
 		model = list (netstring.decode (datagram))
 		if (
-			len (model) != 2 or
+			len (model) != 2 or # TODO: ? 3 instead ?
 			model[0] == '' or
-			model[0] != pns_model.pns_name (model[0])
+			not public_names.valid_utf8 (model[0])
 			):
 			# log and drop invalid out-of-circle question ...
 			self.log (

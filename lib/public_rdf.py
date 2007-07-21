@@ -48,7 +48,7 @@ def pns_quatuor (encoded, contexts, max=1024):
                 # Validate the context as a public name, but allways check
                 # the supplied cache of valid PNS names first!
                 #
-                if public_names.valid_as (model[3], contexts) != None:
+                if public_names.valid_in_utf8 (model[3], contexts) != None:
                         return None, '2 invalid context'
                         
                 
@@ -63,7 +63,7 @@ def pns_quatuor (encoded, contexts, max=1024):
                         return None, '3 invalid statement length'
 
                 # validate the statement subject as a public name
-                if model[0] != model[3] and public_names.valid_in (
+                if model[0] != model[3] and public_names.valid_in_utf8 (
                         subject, contexts
                         ) == None:
                         return None, '4 invalid subject'
@@ -84,10 +84,12 @@ def pns_quatuor (encoded, contexts, max=1024):
                         # in their validation of PNS statements. simplistic
                         # clients should be tolerated ;-)
         elif model[1]:
-                if public_names.valid_in (command, contexts) == None:
+                if public_names.valid_in_utf8 (command, contexts) == None:
                         return None, '5 invalid command predicate'
                            
-        elif model[2] and public_names.valid_in (model[2], contexts) == None:
+        elif model[2] and public_names.valid_in_utf8 (
+                model[2], contexts
+                ) == None:
                 return None, '6 invalid command object'
                         
         return model, ''

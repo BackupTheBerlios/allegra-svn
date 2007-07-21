@@ -19,7 +19,7 @@
 
 import glob, bsddb
 
-from allegra import netstring, thread_loop, pns_model
+from allegra import netstring, thread_loop, netunicode, public_names
 
 
 NULL_SET = frozenset ()
@@ -111,7 +111,9 @@ class PNS_inference (thread_loop.Thread_loop):
                 encoded = '%d:%s,' % (len (context), context)
                 self.pns_map_context (subject, context, encoded)
                 # recursively index the subject names
-                for name in self.pns_map_names (subject):
+                for n, name in self.pns_map_names (
+                        unicode (subject, 'UTF-8'), subject
+                        ):
                         # and map articulated names to this context too 
                         self.pns_map_context (name, context, encoded)
                         
@@ -137,29 +139,32 @@ class PNS_inference (thread_loop.Thread_loop):
                                 encoded, stored[:-1], chr (horizon + 1)
                                 ))
 
-        def pns_map_names (self, index):
+        def pns_map_names (self, unicoded, encoded):
                 # index a sequence of names to the index
-                names = tuple (netstring.decode (index))
-                for name in names:
-                        stored = self.pns_index.get (name)
+                names = tuple ((
+                        (n, encode (n, 'UTF-8'))
+                        for n in netunicode.decode (unicoded)
+                        ))
+                for n, name in names:
+                        stored = self.pns_index.get (index)
                         if stored == None:
                                 # insert an entry in the index
-                                self.pns_index [name] = index + chr (1)
-                                self.pns_map_names (name)
+                                self.pns_index[name] = encoded + chr (1)
+                                self.pns_map_names (n, name)
                         elif (
                                 ord (stored[-1]) < self.pns_horizon and
-                                stored.find (index) < 0
+                                stored.find (encoded) < 0
                                 ):
                                 # update an entry with a new index
-                                horizon = set ()
-                                stored = pns_model.pns_name (
-                                        index + stored[:-1], horizon
-                                        )
-                                if len (horizon) < self.pns_horizon:
+                                field = set ()
+                                stored = public_names.valid (unicode (
+                                        encoded + stored[:-1], 'UTF-8'
+                                        ),  field, self.pns_horizon)
+                                if len (field) < self.pns_horizon:
                                         # but only below the horizon
-                                        self.pns_index [name] = (
-                                                stored + chr (len (horizon))
-                                                )
+                                        self.pns_index[name] = (encode (
+                                                stored, 'UTF-8'
+                                                ) + chr (len (field)))
                 return names
                 
         # ... Commands 
@@ -177,9 +182,9 @@ class PNS_inference (thread_loop.Thread_loop):
                                 # contexts (and not implement that common walk
                                 # into the client, but rather articulate it).
                                 #
-                                contexts = set (
-                                        netstring.decode (model[2])
-                                        )
+                                contexts = set (netunicode.decode (
+                                        unicode (model[2], 'UTF-8')
+                                        ))
                                 self.thread_loop_queue ((
                                         self.pns_walk_simplest,
                                         (model, contexts)
@@ -243,7 +248,7 @@ class PNS_inference (thread_loop.Thread_loop):
         # >>> The Semantic Walk
                                 
 	def pns_walk_simplest (self, model, contexts):
-                subject = model[0] or model[1]
+                subject = unicode (model[0] or model[1], 'UTF-8')
 		walked = set ((subject, ))
                 if subject in contexts:
                         routes = {subject: set ((subject, ))}
@@ -257,7 +262,7 @@ class PNS_inference (thread_loop.Thread_loop):
                         return
                         
                 names = list (
-                        netstring.decode (subject)
+                        netunicode.decode (subject)
                         ) or [subject]
                 self.thread_loop_queue ((
                         self.pns_walk_simple,
@@ -265,22 +270,22 @@ class PNS_inference (thread_loop.Thread_loop):
                         ))
                         
 	def pns_walk_down (self, name, contexts):
-                stored = self.pns_routes.get (name)
+                stored = self.pns_routes.get (encode (name, 'UTF-8'))
                 if stored and (ord (stored[-1]) < self.pns_horizon):
-		        return contexts & set (
-                                netstring.decode (stored)
-                                )
+		        return contexts & set (netunicode.decode (
+                                unicode (stored[:-1], 'UTF-8')
+                                ))
                 
                 return NULL_SET
                         
         def pns_walk_up (self, names, walked):
                 index = {}
                 for name in names:
-                        stored = self.pns_index.get (name)
+                        stored = self.pns_index.get (encode (name, 'UTF-8'))
                         if stored and (ord (stored[-1]) < self.pns_horizon):
-                                for n in (set (netstring.decode (
-                                        stored[:-1]
-                                        )) - walked):
+                                for n in (set (netunicode.decode (unicode (
+                                        stored[:-1], 'UTF-8'
+                                        ))) - walked):
                                         index.setdefault (
                                                 n, set()
                                                 ).add (name)
@@ -331,9 +336,9 @@ class PNS_inference (thread_loop.Thread_loop):
                         '<![CDATA[%s]]!><![CDATA[%s]]!>' % (
                                 len (routes),
                                 netstring.encode (model),
-                                netstring.encode (
+                                encode (netunicode.encode (
                                         [r[1] for r in routes]
-                                        )
+                                        ), 'UTF-8')
                                 ), ''
                         )
                 self.select_trigger ((
@@ -350,13 +355,13 @@ class PNS_inference (thread_loop.Thread_loop):
                 if model[0] == '':
                         # user command, send response to the PNS/TCP session
                         # as an ordered set of contexts and related names.
-                        model[3] = netstring.encode ([
-                                '%d:%s,%s' % (
+                        model[3] = encode (netunicode.encode ([
+                                u"%d:%s,%s" % (
                                         len (c), c, 
-                                        netstring.encode (n)
+                                        netunicode.encode (n)
                                         )
                                 for w, c, n in routes
-                                ])
+                                ]), 'UTF-8')
                         self.pns_peer.pns_tcp_continue (model, '_')
                         return
                         
@@ -377,14 +382,14 @@ class PNS_inference (thread_loop.Thread_loop):
                         
                 # if any, find the best routes subscribed
                 best = routes[0][0]
-                circles = [
-                        self.pns_peer.pns_subscribed[r]
-                        for w, r, n in routes
-                        if (
-                                w == best and 
-                                self.pns_peer.pns_subscribed.has_key (r)
+                circles = (
+                        self.pns_peer.pns_subscribed[context]
+                        for context in (
+                                encode (r, 'UTF-8') 
+                                for w, r, n in routes if w == best
                                 )
-                        ]
+                        if self.pns_peer.pns_subscribed.has_key (context)
+                        )
                 if not model[1]:
                         # route protocol statement to circles joined only
                          circles = [
@@ -412,13 +417,13 @@ def pns_weight_routes (graph):
         for item in graph.items ():
                 for context in item[1]:
                         mapped.setdefault (context, []).append (item[0])
-        graph = [
+        ordered = [
                 (len (names), context, names) 
                 for context, names in mapped.items ()
                 ]
-        graph.sort ()
-        graph.reverse ()
-        return graph
+        ordered.sort ()
+        ordered.reverse ()
+        return ordered
 
 
 # Note about this implementation

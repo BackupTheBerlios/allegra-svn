@@ -19,7 +19,7 @@
 
 import socket
 
-from allegra import netstring, async_net, async_server, pns_model
+from allegra import netstring, async_net, async_server, public_rdf
 
 
 def pns_statement (self, encoded):
@@ -29,7 +29,7 @@ def pns_statement (self, encoded):
                 self.handle_close ()
                 return
                 
-        model, error = pns_model.pns_quatuor (
+        model, error = public_rdf.pns_quatuor (
                 encoded, self.pns_subscribed
                 )
         if model == None:
@@ -111,7 +111,7 @@ class Dispatcher (async_net.Dispatcher):
 
 	def pns_tcp_continue (self, model, direction):
 		self.async_net_push ((
-			pns_model.pns_quintet (model, direction),
+			public_rdf.pns_quintet (model, direction),
 			))
 
 

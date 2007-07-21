@@ -56,32 +56,42 @@ def valid (encoded, field, horizon):
         return u"" # nothing valid to articulate
 
 
-# two conveniences for testing the validity of byte strings as Public Names
+# three conveniences for testing the validity of byte strings as Public Names
 
+def valid_utf8 (encoded, horizon):
+        u = unicode (encoded, 'UTF-8')
+        field = set ()
+        if u == valid (u, field, horizon):
+                return True
+
+        return False
+        
 def valid_as_utf8 (encoded, contexts, horizon):
         "hit the contexts cache or validate 8bit Public Names and cache"
         try:
-                return contexts[encoded]
+                return (contexts[encoded] != None)
         
         except KeyError:
                 u = unicode (encoded, 'UTF-8')
                 field = set ()
                 if u == valid (u, field, horizon):
                         contexts[encoded] == field
-                        return field
+                        return True
 
+                return False
 
 def valid_in_utf8 (encoded, contexts, horizon):
         "hit the contexts cache or validate 8bit Public Names"
         try:
-                return contexts[encoded]
+                return (contexts[encoded] != None)
         
         except KeyError:
                 u = unicode (encoded, 'UTF-8')
                 field = set ()
-                if u == valids (u, field, horizon):
-                        return field
+                if u == valid (u, field, horizon):
+                        return True
 
+                return False
 
 # Note about this implementation
 #
