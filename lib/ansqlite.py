@@ -70,21 +70,6 @@ class Client (async_net.Dispatcher):
                         self.loginfo_traceback ()
                         
 
-def connect (name, timeout=3.0):
-        ansql = Client ()
-        if not tcp_client.connect (ansql, name, timeout):
-               return ansql
-       
-        def finalize (dispatcher):
-                while dispatcher.callbacks:
-                        try:
-                                dispatcher.pipeline_responses.popleft () (None)
-                        except:
-                                dispatcher.loginfo_traceback ()
-
-        ansql.finalization = finalize
-
-
 def open (database, Base=async_net.Dispatcher):
         """
         from allegra import async_loop, tcp_server, ansqlite
@@ -108,61 +93,54 @@ def open (database, Base=async_net.Dispatcher):
         conn = sqlite.connect (database, check_same_thread=False)
         sql1 = conn.execute 
         sqlM = conn.executemany
+        def execute (statement, parameters):
+                if parameters == None:
+                        return [i[0] for i in (
+                                sql1 (statement).description or ()
+                                )] # eventually list column names
+                        
+                elif len (parameters) > 0 and (
+                        type (parameters[0]) in bindings
+                        ):
+                        return sqlM (statement, parameters).fetchall()
+
+                return sql1 (statement, parameters).fetchall()
+                
         def ansql (statement, parameters):
                 if type (statement) == unicode:
-                        if parameters == None:
-                                return [i[0] for i in (
-                                        sql1 (statement).description or ()
-                                        )] # eventually list column names
-                                
-                        if len (parameters) > 0 and (
-                                type (parameters[0]) in bindings
-                                ):
-                                return sqlM (statement, parameters).fetchall()
-        
-                        else:
-                                return sql1 (statement, parameters).fetchall()
-                else: 
-                        # ODBC/JDBC batches, done asynchronously ACID!
-                        results = []
-                        push = results.append 
-                        try:
-                                # push all results ...
-                                for s, p in zip (statement, parameters):
-                                        if p == None:
-                                                push ([meta[0] for meta in (
-                                                        sql1 (s).description 
-                                                        or ())])
-                                        elif len (p) > 0 and (
-                                                type (p[0]) in bindings
-                                                ):
-                                                push (sqlM (s, p).fetchall())
-                                        else:
-                                                push (sql1 (s, p).fetchall())
-                        except: # stop on exception and rollback
-                                sql1 ('ROLLBACK')
-                                push (False)
-                        else: #  commit transaction without error
-                                sql1 ('COMMIT')
-                                push (True)
-                        return results # ... results[-1] == success | failure
+                        return execute (statement, parameters)
+
+                results = []
+                push = results.append
+                sql1 (u"BEGIN")
+                try:
+                        for s, p in zip (statement, parameters):
+                                push (execute (s, p))
+                except sqlite.Error, e:
+                        sql1 (u"ROLLBACK")
+                        push (str (e.args[0]))
+                except:
+                        sql1 (u"ROLLBACK")
+                        push (u"ansqlite protocol error")
+                else:
+                        sql1 (u"COMMIT")
+                return results
 
         class Dispatcher (Base):
                 def async_net_continue (self, data):
                         try:
                                 statement, params = loads (data)
                                 s = dumps (self.ansql (statement, params)) 
-                        except self.SQLiteError, e:
+                        except sqlite.Error, e:
                                 self.loginfo_traceback ()
                                 s = dumps (e.args[0])
                         except:
                                 self.loginfo_traceback ()
-                                s = dumps ("ansqlite exception")
+                                s = dumps (u"ansqlite protocol error")
                         else:
                                 if statement[:6].upper() != 'SELECT':
                                         loginfo.log (data)
                         self.output_fifo.append ('%d:%s,' % (len (s), s))
         
-        Dispatcher.SQLiteError = sqlite.Error
         Dispatcher.ansql = staticmethod (ansql)
         return conn, Dispatcher
