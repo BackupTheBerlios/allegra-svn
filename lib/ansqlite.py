@@ -74,7 +74,7 @@ def open (database, Base=async_net.Dispatcher):
         """
         from allegra import async_loop, tcp_server, ansqlite
 
-        conn, Dispatcher = ansqlite.open (":memory:")
+        conn, Dispatcher = ansqlite.open (':memory:')
         try:
             async_loop.catch (tcp_server.Listen (
                 ansqlite.Dispatcher, ('127.0.0.2', 3999), 1.0
@@ -99,7 +99,7 @@ def open (database, Base=async_net.Dispatcher):
                                 sql1 (statement).description or ()
                                 )] # eventually list column names
                         
-                elif len (parameters) > 0 and (
+                if len (parameters) > 0 and (
                         type (parameters[0]) in bindings
                         ):
                         return sqlM (statement, parameters).fetchall()
@@ -108,7 +108,10 @@ def open (database, Base=async_net.Dispatcher):
                 
         def ansql (statement, parameters):
                 if type (statement) == unicode:
-                        return execute (statement, parameters)
+                        return (
+                                execute (statement, parameters),
+                                statement[:6].upper() != u"SELECT"
+                                ) 
 
                 results = []
                 push = results.append
@@ -119,27 +122,27 @@ def open (database, Base=async_net.Dispatcher):
                 except sqlite.Error, e:
                         sql1 (u"ROLLBACK")
                         push (str (e.args[0]))
+                        return (results, False)
                 except:
                         sql1 (u"ROLLBACK")
                         push (u"ansqlite protocol error")
+                        return (results, False)
                 else:
                         sql1 (u"COMMIT")
-                return results
+                        return (results, True)
 
         class Dispatcher (Base):
                 def async_net_continue (self, data):
                         try:
                                 statement, params = loads (data)
-                                s = dumps (self.ansql (statement, params)) 
-                        except sqlite.Error, e:
-                                self.loginfo_traceback ()
-                                s = dumps (e.args[0])
-                        except:
-                                self.loginfo_traceback ()
-                                s = dumps (u"ansqlite protocol error")
-                        else:
-                                if statement[:6].upper() != 'SELECT':
+                                r, u = self.ansql (statement, params)
+                                if u:
                                         loginfo.log (data)
+                        except sqlite.Error, e:
+                                r = e.args[0]
+                        except:
+                                r = u"ansqlite protocol error"
+                        s = dumps (r)
                         self.output_fifo.append ('%d:%s,' % (len (s), s))
         
         Dispatcher.ansql = staticmethod (ansql)
